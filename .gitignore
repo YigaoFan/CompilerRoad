@@ -30,3 +30,6 @@
 *.exe
 *.out
 *.app
+/.vs/CompilerRoad
+/Lexer/x64/Debug
+/x64/Debug
