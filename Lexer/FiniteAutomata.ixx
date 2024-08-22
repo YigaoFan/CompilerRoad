@@ -11,13 +11,13 @@ using std::string_view;
 using std::vector;
 using std::isdigit;
 using std::isalpha;
+using std::move;
 
-template <size_t StatesCount>
 class FiniteAutomata
 {
 private:
     Graph transitionTable;
-    array<bool, StatesCount> tokenType;
+    vector<bool> tokenType;
     //map<char, int> classificationTable;
 
 public:
@@ -26,20 +26,17 @@ public:
 };
 
 // follow priority order to run FiniteAutomata combination, parentheses, closure, concatenation and alternation
-template <size_t SizeA, size_t SizeB>
-auto Or(FiniteAutomata<SizeA> a, FiniteAutomata<SizeB> b) -> FiniteAutomata<SizeA + SizeB + 2>
+auto Or(FiniteAutomata a, FiniteAutomata b) -> FiniteAutomata
 {
 
 }
 
-template <size_t Size>
-auto ZeroOrMore(FiniteAutomata<Size> a) -> FiniteAutomata<Size + 2>
+auto ZeroOrMore(FiniteAutomata a) -> FiniteAutomata
 {
 
 }
 
-template <size_t SizeA, size_t SizeB>
-auto Concat(FiniteAutomata<SizeA> a, FiniteAutomata<SizeB> b) -> FiniteAutomata<SizeA + SizeB>
+auto Concat(FiniteAutomata a, FiniteAutomata b) -> FiniteAutomata
 {
 
 }
@@ -65,7 +62,7 @@ consteval auto Convert2PostfixForm(string_view regExp) -> vector<char>
         {
             if (!operators.empty())
             {
-                if (auto lastOp = operators[operators.size() - 1]; priority(op) <= priority(lastOp))
+                if (auto lastOp = operators.back(); priority(op) <= priority(lastOp))
                 {
                     output.push_back(lastOp);
                     operators.pop_back();
@@ -108,9 +105,9 @@ consteval auto Convert2PostfixForm(string_view regExp) -> vector<char>
 /*
   assume regExp is valid regular expression
 */
-template <size_t Size>
-consteval auto ConsFAFrom(string_view regExp) -> FiniteAutomata<Size>
+consteval auto ConsFAFrom(string_view regExp) -> FiniteAutomata
 {
+    // support [0-9] [a-z] (specific times closure)
     if (regExp.starts_with("(") && regExp.ends_with(")"))
     {
         regExp = regExp.substr(1, regExp.length() - 2);
@@ -118,24 +115,47 @@ consteval auto ConsFAFrom(string_view regExp) -> FiniteAutomata<Size>
 
     if (regExp.length() == 1)
     {
-        return FiniteAutomata<2>(); // todo complete
+        return FiniteAutomata(); // todo complete
     }
     auto postfixRegExp = Convert2PostfixForm(regExp);
-    auto faStack = vector<FiniteAutomata<2>>();
-    for (size_t l = postfixRegExp.length(), i = 0; i < l; i++)
+    auto faStack = vector<FiniteAutomata>();
+    for (size_t l = postfixRegExp.size(), i = 0; i < l; i++)
     {
-        auto c = regExp[i];
+        auto c = postfixRegExp[i];
         // how to get out the highest operator from regExp
         switch (c)
         {
+        case '+':
+        {
+            auto a = move(faStack.back());
+            faStack.pop_back();
+            auto b = move(faStack.back());
+            faStack.pop_back();
+            faStack.push_back(Concat(move(a), move(b)));
+        }
         case '*':
+        {
+            auto a = move(faStack.back());
+            faStack.pop_back();
             // maybe exist parens in previous part, so not only length 1
-            return ZeroOrMore(ConsFAFrom(regExp.substr(i - 1, 1));
+            faStack.push_back(ZeroOrMore(move(a)));
+        }
         case '|':
-            return Or(ConsFAFrom(regExp.substr(0, i)), ConsFAFrom(regExp.substr(i + 1)));
+        {
+            auto a = move(faStack.back());
+            faStack.pop_back();
+            auto b = move(faStack.back());
+            faStack.pop_back();
+            faStack.push_back(Or(move(a), move(b)));
+        }
         default:
-            // concat
+            // number or alphabet
             break;
         }
     }
+    if (faStack.size() != 1)
+    {
+        throw std::logic_error("Not have one finite automata as final result");
+    }
+    return move(faStack.front());
 }

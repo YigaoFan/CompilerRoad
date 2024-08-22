@@ -24,5 +24,8 @@
     <ClCompile Include="Graph.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="FiniteAutomata.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

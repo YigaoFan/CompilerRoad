@@ -7,7 +7,7 @@ using std::pair;
 class Graph
 {
 private:
-    vector<pair<char, vector<pair<char, char>>>> relations;
+    vector<pair<int, vector<pair<char, int>>>> relations;
 };
 
 export
