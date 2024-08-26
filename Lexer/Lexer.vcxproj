@@ -134,6 +134,9 @@
     <ClCompile Include="Lexer.cpp" />
     <ClCompile Include="Lexer.ixx" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Util.h" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

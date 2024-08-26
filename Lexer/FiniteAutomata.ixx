@@ -1,45 +1,89 @@
 export module FiniteAutomata;
 
+#include "Util.h"
 import std;
 import Graph;
 
 using std::array;
 using std::size_t;
-using std::map;
 using std::string;
 using std::string_view;
 using std::vector;
+using std::pair;
 using std::isdigit;
 using std::isalpha;
 using std::move;
+using std::format;
 
 class FiniteAutomata
 {
 private:
     Graph transitionTable;
     vector<bool> tokenType;
-    //map<char, int> classificationTable;
+    vector<pair<char, int>> classificationTable;
 
 public:
-    constexpr FiniteAutomata()
+    static auto NewFrom(char c) -> FiniteAutomata
+    {
+        auto tokenType = vector<bool>();
+        tokenType.push_back(false);
+        tokenType.push_back(true);
+
+        auto classificationTable = vector<pair<char, int>>();
+        constexpr auto charKind = 1;
+        classificationTable.push_back({ c, charKind });
+
+        auto transitionTable = Graph();
+        auto s0 = transitionTable.AllocateState();
+        auto s1 = transitionTable.AllocateState();
+        transitionTable.AddTransition(s0, charKind, s1);
+
+        return FiniteAutomata(move(transitionTable), move(tokenType), move(classificationTable));
+    }
+
+
+    // follow priority order to run FiniteAutomata combination, parentheses, closure, concatenation and alternation
+    static auto Or(FiniteAutomata a, FiniteAutomata const& b) -> FiniteAutomata
+    {
+        auto c = a.classificationTable + b.classificationTable;
+    }
+
+    static auto ZeroOrMore(FiniteAutomata a) -> FiniteAutomata
+    {
+
+    }
+
+    static auto Concat(FiniteAutomata a, FiniteAutomata b) -> FiniteAutomata
+    {
+
+    }
+
+    static auto Range(FiniteAutomata a, FiniteAutomata b) -> FiniteAutomata
+    {
+
+    }
+
+    // the below constexpr is must? TODO compile check
+    constexpr FiniteAutomata(Graph transitionTable, vector<bool> tokenType, vector<pair<char, int>> classificationTable)
+        : transitionTable(move(transitionTable)), tokenType(move(tokenType)), classificationTable(move(classificationTable))
     { }
+
+
+
+
+private:
+    auto GetColumnIndex(char c) const -> int
+    {
+        for (auto const& x : classificationTable)
+        {
+            if (c == x.first)
+            {
+                return x.second;
+            }
+        }
+        throw std::out_of_range(format("not found {} in" nameof(classificationTable), c));
+    }
 };
-
-// follow priority order to run FiniteAutomata combination, parentheses, closure, concatenation and alternation
-auto Or(FiniteAutomata a, FiniteAutomata b) -> FiniteAutomata
-{
-
-}
-
-auto ZeroOrMore(FiniteAutomata a) -> FiniteAutomata
-{
-
-}
-
-auto Concat(FiniteAutomata a, FiniteAutomata b) -> FiniteAutomata
-{
-
-}
 
 consteval auto Convert2PostfixForm(string_view regExp) -> vector<char>
 {
@@ -105,7 +149,7 @@ consteval auto Convert2PostfixForm(string_view regExp) -> vector<char>
 /*
   assume regExp is valid regular expression
 */
-consteval auto ConsFAFrom(string_view regExp) -> FiniteAutomata
+consteval auto ConstructFAFrom(string_view regExp) -> FiniteAutomata
 {
     // support [0-9] [a-z] (specific times closure)
     if (regExp.starts_with("(") && regExp.ends_with(")"))
@@ -115,14 +159,13 @@ consteval auto ConsFAFrom(string_view regExp) -> FiniteAutomata
 
     if (regExp.length() == 1)
     {
-        return FiniteAutomata(); // todo complete
+        return FiniteAutomata::NewFrom(regExp[0]);
     }
     auto postfixRegExp = Convert2PostfixForm(regExp);
     auto faStack = vector<FiniteAutomata>();
     for (size_t l = postfixRegExp.size(), i = 0; i < l; i++)
     {
         auto c = postfixRegExp[i];
-        // how to get out the highest operator from regExp
         switch (c)
         {
         case '+':
@@ -131,14 +174,21 @@ consteval auto ConsFAFrom(string_view regExp) -> FiniteAutomata
             faStack.pop_back();
             auto b = move(faStack.back());
             faStack.pop_back();
-            faStack.push_back(Concat(move(a), move(b)));
+            faStack.push_back(FiniteAutomata::Concat(move(a), move(b)));
+        }
+        case '-':
+        {
+            auto a = move(faStack.back());
+            faStack.pop_back();
+            auto b = move(faStack.back());
+            faStack.pop_back();
+            faStack.push_back(FiniteAutomata::Range(move(a), move(b)));
         }
         case '*':
         {
             auto a = move(faStack.back());
             faStack.pop_back();
-            // maybe exist parens in previous part, so not only length 1
-            faStack.push_back(ZeroOrMore(move(a)));
+            faStack.push_back(FiniteAutomata::ZeroOrMore(move(a)));
         }
         case '|':
         {
@@ -146,16 +196,17 @@ consteval auto ConsFAFrom(string_view regExp) -> FiniteAutomata
             faStack.pop_back();
             auto b = move(faStack.back());
             faStack.pop_back();
-            faStack.push_back(Or(move(a), move(b)));
+            faStack.push_back(FiniteAutomata::Or(move(a), move(b)));
         }
         default:
             // number or alphabet
+            faStack.push_back(FiniteAutomata::NewFrom(c));
             break;
         }
     }
     if (faStack.size() != 1)
     {
-        throw std::logic_error("Not have one finite automata as final result");
+        throw std::logic_error(nameof(faStack)" doesn't have one finite automata as final result");
     }
     return move(faStack.front());
 }
