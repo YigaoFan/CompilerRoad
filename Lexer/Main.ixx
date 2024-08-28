@@ -20,4 +20,6 @@ int main()
     //auto postfixExp = Convert2PostfixForm("[a-b]*d|c");
     auto postfixExp = Convert2PostfixForm("e[ab]*d|c"); // support this
     std::cout << std::format("{}", string(postfixExp.begin(), postfixExp.end()));
+    auto fa = ConstructNFAFrom("e[ab]*d|c");
+    std::cout << "OK";
 }

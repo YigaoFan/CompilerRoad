@@ -10,22 +10,6 @@ using std::vector;
 using std::size_t;
 using std::move;
 
-//auto RegExp2NFA(string regExp) -> Graph<char>
-//{
-//    throw;
-//}
-//
-//auto NFA2DFA(Graph<char> nfa) -> Graph<char>
-//{
-//    throw;
-//}
-//
-//auto Minimize(Graph<char> dfa) -> Graph<char>
-//{
-//    throw;
-//}
-
-
 template <typename T, size_t Size>
 class Lexer
 {
