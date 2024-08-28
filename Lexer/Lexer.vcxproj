@@ -131,7 +131,7 @@
   <ItemGroup>
     <ClCompile Include="FiniteAutomata.ixx" />
     <ClCompile Include="Graph.ixx" />
-    <ClCompile Include="Lexer.cpp" />
+    <ClCompile Include="Main.ixx" />
     <ClCompile Include="Lexer.ixx" />
   </ItemGroup>
   <ItemGroup>
