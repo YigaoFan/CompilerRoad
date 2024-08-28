@@ -12,6 +12,9 @@ using std::vector;
 using std::pair;
 using std::map;
 using std::variant;
+using std::set;
+using std::queue;
+using std::optional;
 using std::isdigit;
 using std::isalpha;
 using std::move;
@@ -121,6 +124,11 @@ public:
     constexpr FiniteAutomata(State startState, vector<State> acceptingStates, Graph<char> transitionTable)
         : startState(startState), acceptingStates(move(acceptingStates)), transitionTable(move(transitionTable))
     { }
+
+    auto Run(State from, char input) const -> optional<State>
+    {
+        
+    }
 private:
     //auto GetColumnIndex(char c) const -> int
     //{
@@ -240,9 +248,9 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
     return output;
 }
 
-/*
-  assume regExp is valid regular expression
-*/
+/// <summary>
+/// assume regExp is valid regular expression
+/// </summary>
 auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata
 {
     // support [0-9a-z]
@@ -316,9 +324,70 @@ auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata
 
 auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
 {
+    auto FollowEpsilon = [&nfa](set<State> todos) -> set<State>
+    {
+        set<State> fullRecord = todos;
+        auto Iter = [&nfa, &fullRecord](this auto&& self, set<State> todos) -> set<State>
+        {
+            auto nextTodos = set<State>();
+            for (auto s : todos)
+            {
+                auto next = nfa.Run(s, FiniteAutomata::epsilon);
+                if (not next.has_value())
+                {
+                    continue;
+                }
+                else if (not fullRecord.contains(next.value()))
+                {
+                    nextTodos.insert(next);
+                }
+            }
+            if (nextTodos.empty())
+            {
+                return move(fullRecord);
+            }
+            fullRecord.insert_range(nextTodos);
+            return self(move(nextTodos));
+        };
+        return Iter(move(todos));
+    };
+    auto transitionTable = Graph<char>();
+    auto subset2DFAState = map<set<State>, State>();
+    auto worklist = queue<set<State>>();
+    auto q0 = FollowEpsilon({ nfa.startState });
+    subset2DFAState.insert({ q0, transitionTable.AllocateState() });
+    worklist.push(move(q0));
+    auto chars = nfa.transitionTable.AllPossibleInputs();
 
-    //auto q0 = FollowEpsilon({ nfa.startState });
-    throw;
+    for (; not worklist.empty();)
+    {
+        auto q = move(worklist.front());
+        worklist.pop();
+        for (auto c : chars)
+        {
+            auto nexts = set<State>();
+            for (auto s : q)
+            {
+                if (auto next = nfa.Run(s, c); next.has_value())
+                {
+                    nexts.insert(next.value());
+                }
+            }
+            auto temp = FollowEpsilon(move(nexts));
+            if (not temp.empty())
+            {
+                if (not subset2DFAState.contains(temp))
+                {
+                    auto s = transitionTable.AllocateState();
+                    subset2DFAState.insert({ temp, s });
+                    worklist.push(temp);
+                }
+                // add transition q + c -> temp
+                transitionTable.AddTransition(subset2DFAState[q], c, subset2DFAState[temp]); // will it have duplicate?
+            }
+        }
+    }
+    // construct DFA
 }
 
 auto Minimize(FiniteAutomata dfa) -> FiniteAutomata

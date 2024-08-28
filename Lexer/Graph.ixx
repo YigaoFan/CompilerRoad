@@ -5,6 +5,7 @@ using std::vector;
 using std::pair;
 using std::size_t;
 using std::move;
+using std::set;
 
 using State = size_t;
 
@@ -43,6 +44,19 @@ public:
         transitions.append_range(move(b.transitions));
         //move(b.transitions.begin(), b.transitions.end(), std::back_inserter(transitions));
         return offset;
+    }
+
+    auto AllPossibleInputs() const -> set<InputItem>
+    {
+        auto inputs = set<InputItem>();
+        for (auto& x : transitions)
+        {
+            for (auto& y : x.second)
+            {
+                inputs.insert(y.first);
+            }
+        }
+        return inputs;
     }
 
 private:
