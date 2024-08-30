@@ -23,6 +23,8 @@ using std::format;
 class FiniteAutomata
 {
 private:
+    template <typename T, typename Char>
+    friend struct std::formatter;
     friend auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata;
     constexpr static int epsilon = 0;
     State startState;
@@ -120,14 +122,13 @@ public:
         return FiniteAutomata(start, { accept }, move(transitionTable));
     }
 
-    // the below constexpr is must? TODO compile check
-    constexpr FiniteAutomata(State startState, vector<State> acceptingStates, Graph<char> transitionTable)
+    FiniteAutomata(State startState, vector<State> acceptingStates, Graph<char> transitionTable)
         : startState(startState), acceptingStates(move(acceptingStates)), transitionTable(move(transitionTable))
     { }
 
     auto Run(State from, char input) const -> optional<State>
     {
-        
+        return transitionTable.Run(from, input);
     }
 private:
     //auto GetColumnIndex(char c) const -> int
@@ -153,6 +154,7 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
         case '+': return 2;
         case '-': return 2;
         case '|': return 1;
+        default: throw std::out_of_range(format("out of operate range: {}", op));
         }
     };
     auto isOperatorOrEndScope = [](char c) { return string_view("*+|-])").contains(c); };
@@ -324,6 +326,8 @@ auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata
 
 auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
 {
+    using std::print;
+
     auto FollowEpsilon = [&nfa](set<State> todos) -> set<State>
     {
         set<State> fullRecord = todos;
@@ -332,32 +336,40 @@ auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
             auto nextTodos = set<State>();
             for (auto s : todos)
             {
-                auto next = nfa.Run(s, FiniteAutomata::epsilon);
+                auto next = self.nfa.Run(s, FiniteAutomata::epsilon);
                 if (not next.has_value())
                 {
                     continue;
                 }
-                else if (not fullRecord.contains(next.value()))
+                else if (not self.fullRecord.contains(next.value()))
                 {
-                    nextTodos.insert(next);
+                    nextTodos.insert(next.value());
                 }
             }
             if (nextTodos.empty())
             {
-                return move(fullRecord);
+                return move(self.fullRecord);
             }
-            fullRecord.insert_range(nextTodos);
+            self.fullRecord.insert_range(nextTodos);
             return self(move(nextTodos));
         };
         return Iter(move(todos));
     };
     auto transitionTable = Graph<char>();
     auto subset2DFAState = map<set<State>, State>();
+    auto AddSubset = [&transitionTable, &subset2DFAState](set<State> subset) -> State
+    {
+        auto s = transitionTable.AllocateState();
+        subset2DFAState.insert({ move(subset), s });
+        return s;
+    };
+
     auto worklist = queue<set<State>>();
     auto q0 = FollowEpsilon({ nfa.startState });
-    subset2DFAState.insert({ q0, transitionTable.AllocateState() });
+    auto start = AddSubset(q0);
+    auto accepts = vector<State>();
     worklist.push(move(q0));
-    auto chars = nfa.transitionTable.AllPossibleInputs();
+    auto chars = nfa.transitionTable.AllPossibleInputs() | std::ranges::views::filter([](char c) { return c != FiniteAutomata::epsilon; });
 
     for (; not worklist.empty();)
     {
@@ -378,8 +390,11 @@ auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
             {
                 if (not subset2DFAState.contains(temp))
                 {
-                    auto s = transitionTable.AllocateState();
-                    subset2DFAState.insert({ temp, s });
+                    auto s = AddSubset(temp);
+                    if (std::any_of(nfa.acceptingStates.cbegin(), nfa.acceptingStates.cend(), [&temp](State accept) { return temp.contains(accept); }))
+                    {
+                        accepts.push_back(s); // possible duplicate?
+                    }
                     worklist.push(temp);
                 }
                 // add transition q + c -> temp
@@ -387,7 +402,7 @@ auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
             }
         }
     }
-    // construct DFA
+    return FiniteAutomata(start, move(accepts), move(transitionTable));
 }
 
 auto Minimize(FiniteAutomata dfa) -> FiniteAutomata
@@ -395,10 +410,45 @@ auto Minimize(FiniteAutomata dfa) -> FiniteAutomata
     throw;
 }
 
+template<>
+struct std::formatter<FiniteAutomata, char>// : std::formatter<Graph<char>, char> // change Char to char, and inherit to use base format
+{
+    constexpr auto parse(std::format_parse_context& ctx)
+    {
+        auto it = ctx.begin();
+        if (it == ctx.end())
+            return it;
+
+        if (it != ctx.end() && *it != '}')
+            throw std::format_error("Invalid format args for QuotableString.");
+
+        return it;
+    }
+
+    template<class FormatContext>
+    constexpr auto format(FiniteAutomata& t, FormatContext& fc) const
+    {
+        using std::back_inserter;
+        using std::format_to;
+        std::string out;
+        format_to(back_inserter(out), "startState: {}\n", t.startState);
+        format_to(back_inserter(out), "acceptingStates: ");
+        for (auto s : t.acceptingStates)
+        {
+            format_to(back_inserter(out), "{} ", s);
+        }
+
+        format_to(back_inserter(out), "\ntransitions: \n{}", t.transitionTable);
+        return format_to(fc.out(), "{}", out);
+    }
+};
+
 export
 {
     auto Convert2PostfixForm(string_view regExp) -> vector<char>;
     auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata;
     auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata;
     auto Minimize(FiniteAutomata dfa) -> FiniteAutomata;
+    template<>
+    struct std::formatter<FiniteAutomata, char>;
 }

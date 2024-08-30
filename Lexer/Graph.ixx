@@ -4,8 +4,10 @@ import std;
 using std::vector;
 using std::pair;
 using std::size_t;
-using std::move;
 using std::set;
+using std::string;
+using std::optional;
+using std::move;
 
 using State = size_t;
 
@@ -13,6 +15,8 @@ template <typename InputItem>
 class Graph
 {
 private:
+    template <typename T, typename Char>
+    friend struct std::formatter;
     vector<pair<State, vector<pair<InputItem, State>>>> transitions;
 
 public:
@@ -59,6 +63,18 @@ public:
         return inputs;
     }
 
+    auto Run(State from, InputItem input) const -> optional<State>
+    {
+        for (auto& t : transitions[from].second)
+        {
+            if (t.first == input)
+            {
+                return t.second;
+            }
+        }
+        return {};
+    }
+
 private:
     auto OffsetStates(size_t offset) -> void
     {
@@ -78,9 +94,46 @@ private:
     }
 };
 
+
+template<>
+struct std::formatter<Graph<char>, char> // TODO after VS 17.12 it will support partial specification in other module
+{
+    template<class ParseContext>
+    constexpr ParseContext::iterator parse(ParseContext& ctx)
+    {
+        auto it = ctx.begin();
+        if (it == ctx.end())
+            return it;
+
+        if (it != ctx.end() && *it != '}')
+            throw std::format_error("Invalid format args for QuotableString.");
+
+        return it;
+    }
+
+    template<class FormatContext>
+    constexpr auto format(Graph<char>& t, FormatContext& fc) const
+    {
+        using std::back_inserter;
+        using std::format_to;
+        std::string out;
+        for (auto& t : t.transitions)
+        {
+            format_to(back_inserter(out), "{}:\n", t.first);
+            for (auto i = 0; auto & rule : t.second)
+            {
+                format_to(back_inserter(out), "-{}-> {};\n", rule.first, rule.second);
+            }
+        }
+        return format_to(fc.out(), "{}", out);
+    }
+};
+
 export
 {
     template <typename InputItem>
     class Graph;
     using State = size_t;
+    template<>
+    struct std::formatter<Graph<char>>;
 }

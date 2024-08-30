@@ -5,6 +5,7 @@ import FiniteAutomata;
 using std::string;
 using std::pair;
 using std::vector;
+using std::string_view;
 
 enum class Token
 {
@@ -19,7 +20,10 @@ int main()
     //auto l = Lexer{ rules };
     //auto postfixExp = Convert2PostfixForm("[a-b]*d|c");
     auto postfixExp = Convert2PostfixForm("e[ab]*d|c"); // support this
-    std::cout << std::format("{}", string(postfixExp.begin(), postfixExp.end()));
-    auto fa = ConstructNFAFrom("e[ab]*d|c");
+    std::print("{}", string_view(postfixExp.begin(), postfixExp.end()));
+    auto nfa = ConstructNFAFrom("e[ab]*d|c");
+    std::print("{}", nfa);
+    auto dfa = NFA2DFA(nfa);
+    std::print("{}", dfa);
     std::cout << "OK";
 }
