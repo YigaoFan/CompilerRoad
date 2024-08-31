@@ -6,6 +6,8 @@ using std::string;
 using std::pair;
 using std::vector;
 using std::string_view;
+using std::print;
+using std::println;
 
 enum class Token
 {
@@ -20,10 +22,12 @@ int main()
     //auto l = Lexer{ rules };
     //auto postfixExp = Convert2PostfixForm("[a-b]*d|c");
     auto postfixExp = Convert2PostfixForm("e[ab]*d|c"); // support this
-    std::print("{}", string_view(postfixExp.begin(), postfixExp.end()));
+    println("{}", string_view(postfixExp.begin(), postfixExp.end()));
     auto nfa = ConstructNFAFrom("e[ab]*d|c");
-    std::print("{}", nfa);
+    print("{}", nfa);
     auto dfa = NFA2DFA(nfa);
-    std::print("{}", dfa);
+    print("{}", dfa);
+    auto mdfa = Minimize(dfa);
+    print("{}", mdfa);
     std::cout << "OK";
 }

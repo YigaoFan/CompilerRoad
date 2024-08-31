@@ -14,11 +14,17 @@ using std::map;
 using std::variant;
 using std::set;
 using std::queue;
+using std::deque;
+using std::map;
 using std::optional;
+using std::back_inserter;
 using std::isdigit;
 using std::isalpha;
 using std::move;
 using std::format;
+using std::any_of;
+using std::print;
+using std::println;
 
 class FiniteAutomata
 {
@@ -26,6 +32,7 @@ private:
     template <typename T, typename Char>
     friend struct std::formatter;
     friend auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata;
+    friend auto Minimize(FiniteAutomata dfa) -> FiniteAutomata;
     constexpr static int epsilon = 0;
     State startState;
     vector<State> acceptingStates;
@@ -126,7 +133,7 @@ public:
         : startState(startState), acceptingStates(move(acceptingStates)), transitionTable(move(transitionTable))
     { }
 
-    auto Run(State from, char input) const -> optional<State>
+    auto Run(State from, char input) const -> vector<State>
     {
         return transitionTable.Run(from, input);
     }
@@ -230,7 +237,7 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
         addPossibleRelationWithNextChar:
             if (i != len - 1 && not isOperatorOrEndScope(regExp[i + 1]))
             {
-                if (std::any_of(operators.cbegin(), operators.cend(), [](char ch) { return '[' == ch; }))
+                if (any_of(operators.cbegin(), operators.cend(), [](char ch) { return '[' == ch; }))
                 {
                     AddOperator('|');
                 }
@@ -283,7 +290,7 @@ auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata
             operandStack.pop_back();
             auto b = move(operandStack.back());
             operandStack.pop_back();
-            operandStack.push_back(FiniteAutomata::Concat(std::visit(converter, move(a)), std::visit(converter, move(b))));
+            operandStack.push_back(FiniteAutomata::Concat(std::visit(converter, move(b)), std::visit(converter, move(a))));
             break;
         }
         case '-':
@@ -292,7 +299,7 @@ auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata
             operandStack.pop_back();
             auto b = move(operandStack.back());
             operandStack.pop_back();
-            operandStack.push_back(FiniteAutomata::Range(std::get<char>(a), std::get<char>(b)));
+            operandStack.push_back(FiniteAutomata::Range(std::get<char>(b), std::get<char>(a)));
             break;
         }
         case '*':
@@ -308,7 +315,7 @@ auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata
             operandStack.pop_back();
             auto b = move(operandStack.back());
             operandStack.pop_back();
-            operandStack.push_back(FiniteAutomata::Or(std::visit(converter, move(a)), std::visit(converter, move(b))));
+            operandStack.push_back(FiniteAutomata::Or(std::visit(converter, move(b)), std::visit(converter, move(a))));
             break;
         }
         default:
@@ -324,10 +331,89 @@ auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata
     return move(std::get<FiniteAutomata>(operandStack.front()));
 }
 
+template<> // before using format<set<size_t>>
+struct std::formatter<std::set<std::size_t>, char>
+{
+    constexpr auto parse(std::format_parse_context& ctx)
+    {
+        auto it = ctx.begin();
+        if (it == ctx.end())
+            return it;
+
+        if (it != ctx.end() && *it != '}')
+            throw std::format_error("Invalid format args for QuotableString.");
+
+        return it;
+    }
+
+    template<class FormatContext>
+    constexpr auto format(std::set<std::size_t>& t, FormatContext& fc) const
+    {
+        using std::back_inserter;
+        using std::format_to;
+        std::string out;
+        format_to(back_inserter(out), "{{");
+
+        for (auto first = true; auto x : t)
+        {
+            if (first)
+            {
+                first = false;
+                format_to(back_inserter(out), "{}", x);
+            }
+            else
+            {
+                format_to(back_inserter(out), ", {}", x);
+            }
+        }
+        format_to(back_inserter(out), "}}");
+
+        return format_to(fc.out(), "{}", out);
+    }
+};
+template<> // before using format<set<size_t>>
+struct std::formatter<std::vector<std::size_t>, char>
+{
+    constexpr auto parse(std::format_parse_context& ctx)
+    {
+        auto it = ctx.begin();
+        if (it == ctx.end())
+            return it;
+
+        if (it != ctx.end() && *it != '}')
+            throw std::format_error("Invalid format args for QuotableString.");
+
+        return it;
+    }
+
+    template<class FormatContext>
+    constexpr auto format(std::vector<std::size_t>& t, FormatContext& fc) const
+    {
+        using std::back_inserter;
+        using std::format_to;
+        std::string out;
+        format_to(back_inserter(out), "[");
+
+        for (auto first = true; auto x : t)
+        {
+            if (first)
+            {
+                first = false;
+                format_to(back_inserter(out), "{}", x);
+            }
+            else
+            {
+                format_to(back_inserter(out), ", {}", x);
+            }
+        }
+        format_to(back_inserter(out), "]");
+
+        return format_to(fc.out(), "{}", out);
+    }
+};
+
 auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
 {
-    using std::print;
-
     auto FollowEpsilon = [&nfa](set<State> todos) -> set<State>
     {
         set<State> fullRecord = todos;
@@ -336,21 +422,20 @@ auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
             auto nextTodos = set<State>();
             for (auto s : todos)
             {
-                auto next = self.nfa.Run(s, FiniteAutomata::epsilon);
-                if (not next.has_value())
+                auto nexts = self.nfa.Run(s, FiniteAutomata::epsilon);
+                for (auto next : nexts)
                 {
-                    continue;
-                }
-                else if (not self.fullRecord.contains(next.value()))
-                {
-                    nextTodos.insert(next.value());
+                    if (not self.fullRecord.contains(next))
+                    {
+                        self.fullRecord.insert(next);
+                        nextTodos.insert(next);
+                    }
                 }
             }
             if (nextTodos.empty())
             {
                 return move(self.fullRecord);
             }
-            self.fullRecord.insert_range(nextTodos);
             return self(move(nextTodos));
         };
         return Iter(move(todos));
@@ -374,24 +459,25 @@ auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
     for (; not worklist.empty();)
     {
         auto q = move(worklist.front());
+        //println("checking {}", q);
         worklist.pop();
         for (auto c : chars)
         {
+            //println("run {}", c);
             auto nexts = set<State>();
             for (auto s : q)
             {
-                if (auto next = nfa.Run(s, c); next.has_value())
-                {
-                    nexts.insert(next.value());
-                }
+                nexts.insert_range(nfa.Run(s, c));
             }
             auto temp = FollowEpsilon(move(nexts));
+            //println("got {}", temp);
             if (not temp.empty())
             {
                 if (not subset2DFAState.contains(temp))
                 {
+                    //println("not in all subsets");
                     auto s = AddSubset(temp);
-                    if (std::any_of(nfa.acceptingStates.cbegin(), nfa.acceptingStates.cend(), [&temp](State accept) { return temp.contains(accept); }))
+                    if (any_of(nfa.acceptingStates.cbegin(), nfa.acceptingStates.cend(), [&temp](State accept) { return temp.contains(accept); }))
                     {
                         accepts.push_back(s); // possible duplicate?
                     }
@@ -407,7 +493,195 @@ auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
 
 auto Minimize(FiniteAutomata dfa) -> FiniteAutomata
 {
-    throw;
+    using std::ranges::to;
+    using std::ranges::views::filter;
+    using std::ranges::set_intersection;
+    using std::ranges::set_difference;
+
+    // no need to partion when each partion has only one item
+    auto accepts = set<State>(dfa.acceptingStates.begin(), dfa.acceptingStates.end());
+    auto nonaccepts = dfa.transitionTable.AllStates() | filter([&](auto s) { return not accepts.contains(s); }) | to<set<State>>();
+    
+    auto partition = set<set<State>>
+    {
+        accepts,
+        nonaccepts,
+    };
+    auto transitionRecord = map<set<State>, vector<pair<set<State>, char>>>();
+    auto worklist = deque<set<State>>
+    {
+        move(accepts),
+        move(nonaccepts),
+    };
+    auto chars = dfa.transitionTable.AllPossibleInputs() | filter([](char c) { return c != FiniteAutomata::epsilon; });
+
+    for (; not worklist.empty();)
+    {
+        auto s = move(worklist.front());
+        println("checking {}", s);
+        worklist.pop_front();
+        for (auto c : chars)
+        {
+            auto image = set<State>();
+            for (auto state : s)
+            {
+                image.insert_range(dfa.transitionTable.ReverseRun(state, c));
+            }
+            println("for {} found image: {}", c, image);
+
+            for (auto& q : partition | to<vector<set<State>>>())
+            {
+                auto q1 = vector<State>();
+                set_intersection(q, image, back_inserter(q1));
+                if (not q1.empty())
+                {
+                    auto q2 = vector<State>();
+                    set_difference(q, q1, back_inserter(q2));
+                    println("related partition: {}, divide to {} and {}", q, q1, q2);
+                    if (not q2.empty())
+                    {
+                        partition.erase(q);
+                        auto q1Set = set(q1.begin(), q1.end());
+                        partition.insert(q1Set);
+                        partition.insert(set(q2.begin(), q2.end()));
+                        transitionRecord[move(q1Set)].push_back({ s, c });
+                        
+                        if (auto i = std::find(worklist.begin(), worklist.end(), q); i != worklist.end())
+                        {
+                            worklist.erase(i);
+                            worklist.push_back(set(q1.begin(), q1.end()));
+                            worklist.push_back(set(q2.begin(), q2.end()));
+                        }
+                        else if (q1.size() <= q2.size())
+                        {
+                            worklist.push_back(set(q1.begin(), q1.end()));
+                        }
+                        else
+                        {
+                            worklist.push_back(set(q2.begin(), q2.end()));
+                        }
+                        if (s == q)
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    auto start_mdfa = optional<State>();
+    auto accepts_mdfa = vector<State>();
+    auto transitionTable_mdfa = Graph<char>();
+    //auto partition2State = map<set<State>, State>();
+    auto partitionState = partition | std::ranges::views::transform([&](auto const& p)
+    {
+        return transitionTable_mdfa.AllocateState();
+    }) | to<vector<State>>();
+    auto State2NewState = [&partition, &partitionState](State s) -> State
+    {
+        for (auto i = 0; auto& p : partition) // maybe convert into a set
+        {
+            if (p.contains(s))
+            {
+                return partitionState[i];
+            }
+            ++i;
+        }
+        throw std::out_of_range(format("not found {} in partition", s));
+    };
+    set<std::tuple<State, State, char>> records;
+    for (auto i = 0; auto const& p : partition)
+    {
+        auto from = partitionState[i];
+
+        if (any_of(dfa.acceptingStates.begin(), dfa.acceptingStates.end(), [&p](auto s) { return p.contains(s); }))
+        {
+            accepts_mdfa.push_back(from);
+        }
+        if (p.contains(dfa.startState))
+        {
+            if (not start_mdfa.has_value())
+            {
+                start_mdfa = from;
+            }
+            else
+            {
+                throw std::logic_error(format("multiple start states({}, {}) in minimize DFA", from, start_mdfa.value()));
+            }
+        }
+        for (auto s : p)
+        {
+            auto& t = dfa.transitionTable[s];
+            for (auto& item : t)
+            {
+                auto to = State2NewState(item.second);
+                auto input = item.first;
+                if (records.contains({ from, to, input }))
+                {
+                    continue;
+                }
+                transitionTable_mdfa.AddTransition(from, input, to);
+                records.insert({ from, to, input });
+            }
+        }
+        ++i;
+    }
+    //auto GetStateOfPartition = [&partition2State, &transitionTable_mdfa](auto const& p) -> State
+    //{
+    //    if (partition2State.contains(p))
+    //    {
+    //        return partition2State[p];
+    //    }
+    //    else
+    //    {
+    //        auto s = transitionTable_mdfa.AllocateState();
+    //        partition2State.insert({ p, s });
+    //        return s;
+    //    }
+    //};
+
+    //for (auto& p : partition)
+    //{
+    //    auto from = GetStateOfPartition(p);
+    //    if (any_of(dfa.acceptingStates.begin(), dfa.acceptingStates.end(), [&p](auto s) { return p.contains(s); }))
+    //    {
+    //        accepts_mdfa.push_back(from);
+    //    }
+    //    if (p.contains(dfa.startState))
+    //    {
+    //        if (not start_mdfa.has_value())
+    //        {
+    //            start_mdfa = from;
+    //        }
+    //        else
+    //        {
+    //            throw std::logic_error(format("multiple start states({}, {}) in minimize DFA", from, start_mdfa.value()));
+    //        }
+    //    }
+    //    
+    //    if (transitionRecord.contains(p))
+    //    {
+    //        for (auto& t : transitionRecord[p])
+    //        {
+    //            auto to = GetStateOfPartition(t.first);
+    //            transitionTable_mdfa.AddTransition(from, t.second, to);
+    //        }
+    //    }
+    //    else // why need else?
+    //    {
+
+    //    }
+    //}
+    if (not start_mdfa.has_value())
+    {
+        throw std::logic_error("don't find start state in partition");
+    }
+    if (accepts_mdfa.empty())
+    {
+        throw std::logic_error("don't find accept states in partition");
+    }
+    return FiniteAutomata(start_mdfa.value(), move(accepts_mdfa), move(transitionTable_mdfa));
 }
 
 template<>
@@ -428,7 +702,6 @@ struct std::formatter<FiniteAutomata, char>// : std::formatter<Graph<char>, char
     template<class FormatContext>
     constexpr auto format(FiniteAutomata& t, FormatContext& fc) const
     {
-        using std::back_inserter;
         using std::format_to;
         std::string out;
         format_to(back_inserter(out), "startState: {}\n", t.startState);

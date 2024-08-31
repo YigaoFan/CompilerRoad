@@ -6,7 +6,6 @@ using std::pair;
 using std::size_t;
 using std::set;
 using std::string;
-using std::optional;
 using std::move;
 
 using State = size_t;
@@ -24,6 +23,10 @@ public:
     Graph(vector<pair<int, vector<pair<InputItem, int>>>> transitions) : transitions(move(transitions))
     { }
 
+    auto operator[](State from) const -> vector<pair<InputItem, State>> const&
+    {
+        return transitions[from].second;
+    }
     /// <summary>
     /// state should keep [0..n] continuously
     /// </summary>
@@ -63,18 +66,51 @@ public:
         return inputs;
     }
 
-    auto Run(State from, InputItem input) const -> optional<State>
+    auto AllStates() const -> set<State>
     {
+        auto states = set<State>();
+        for (auto& x : transitions)
+        {
+            states.insert(x.first);
+        }
+        return states;
+    }
+
+    /// <summary>
+    /// for NFA, identical from and input may goto multiple states
+    /// </summary>
+    auto Run(State from, InputItem input) const -> vector<State>
+    {
+        vector<State> nexts;
         for (auto& t : transitions[from].second)
         {
             if (t.first == input)
             {
-                return t.second;
+                nexts.push_back(t.second);
             }
         }
-        return {};
+        return nexts;
     }
 
+    /// <summary>
+    /// Only for DFA
+    /// </summary>
+    auto ReverseRun(State to, InputItem input) const -> vector<State>
+    {
+        vector<State> pres;
+        for (auto& x : transitions)
+        {
+            for (auto& y : x.second)
+            {
+                if (y.first == input && y.second == to)
+                {
+                    pres.push_back(x.first);
+                    break;
+                }
+            }
+        }
+        return pres;
+    }
 private:
     auto OffsetStates(size_t offset) -> void
     {
