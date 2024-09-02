@@ -1,7 +1,7 @@
 export module Lexer;
 
 import std;
-import Graph;
+import FiniteAutomata;
 
 using std::array;
 using std::pair;
@@ -10,20 +10,37 @@ using std::vector;
 using std::size_t;
 using std::move;
 
-template <typename T, size_t Size>
+template <typename T>
 class Lexer
 {
-private:
-    array<pair<string, T>, Size> idGroup;
 public:
-    Lexer(array<pair<string, T>, Size> identifyGroup) : idGroup(move(identifyGroup))
+    FiniteAutomata dfa;
+public:
+    template <size_t Size>
+    static auto New(array<pair<string, T>, Size> const& identifyGroup) -> Lexer
+    {
+        vector<FiniteAutomata> nfas{};
+        for (auto& i : identifyGroup)
+        {
+            nfas.push_back(ConstructNFAFrom(i.first));
+        }
+
+        auto fullNfa = FiniteAutomata::OrWithoutMergeAcceptState(move(nfas));
+        auto dfa = NFA2DFA(move(fullNfa));
+        auto mdfa = Minimize<true>(move(dfa));
+        return Lexer(move(mdfa));
+    }
+
+    Lexer(FiniteAutomata dfa) : dfa(move(dfa))
     { }
     auto Lex(string code) -> vector<pair<string, T>> const
-    { }
+    {
+
+    }
 };
 
 export
 {
-    template <typename T, size_t Size>
+    template <typename T>
     class Lexer;
 }

@@ -25,6 +25,90 @@ using std::format;
 using std::any_of;
 using std::print;
 using std::println;
+using std::ranges::to;
+using std::ranges::views::transform;
+
+// formatter should be in a file
+template<> // before using format<set<size_t>>
+struct std::formatter<std::set<std::size_t>, char>
+{
+    constexpr auto parse(std::format_parse_context& ctx)
+    {
+        auto it = ctx.begin();
+        if (it == ctx.end())
+            return it;
+
+        if (it != ctx.end() && *it != '}')
+            throw std::format_error("Invalid format args for QuotableString.");
+
+        return it;
+    }
+
+    template<class FormatContext>
+    constexpr auto format(std::set<std::size_t>& t, FormatContext& fc) const
+    {
+        using std::back_inserter;
+        using std::format_to;
+        std::string out;
+        format_to(back_inserter(out), "{{");
+
+        for (auto first = true; auto x : t)
+        {
+            if (first)
+            {
+                first = false;
+                format_to(back_inserter(out), "{}", x);
+            }
+            else
+            {
+                format_to(back_inserter(out), ", {}", x);
+            }
+        }
+        format_to(back_inserter(out), "}}");
+
+        return format_to(fc.out(), "{}", out);
+    }
+};
+template<> // before using format<set<size_t>>
+struct std::formatter<std::vector<std::size_t>, char>
+{
+    constexpr auto parse(std::format_parse_context& ctx)
+    {
+        auto it = ctx.begin();
+        if (it == ctx.end())
+            return it;
+
+        if (it != ctx.end() && *it != '}')
+            throw std::format_error("Invalid format args for QuotableString.");
+
+        return it;
+    }
+
+    template<class FormatContext>
+    constexpr auto format(std::vector<std::size_t>& t, FormatContext& fc) const
+    {
+        using std::back_inserter;
+        using std::format_to;
+        std::string out;
+        format_to(back_inserter(out), "[");
+
+        for (auto first = true; auto x : t)
+        {
+            if (first)
+            {
+                first = false;
+                format_to(back_inserter(out), "{}", x);
+            }
+            else
+            {
+                format_to(back_inserter(out), ", {}", x);
+            }
+        }
+        format_to(back_inserter(out), "]");
+
+        return format_to(fc.out(), "{}", out);
+    }
+};
 
 class FiniteAutomata
 {
@@ -32,6 +116,7 @@ private:
     template <typename T, typename Char>
     friend struct std::formatter;
     friend auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata;
+    template <bool DivideAccepts>
     friend auto Minimize(FiniteAutomata dfa) -> FiniteAutomata;
     constexpr static int epsilon = 0;
     State startState;
@@ -109,6 +194,24 @@ public:
         return a;
     }
 
+    static auto OrWithoutMergeAcceptState(vector<FiniteAutomata> fas) -> FiniteAutomata
+    {
+        auto transitionTable = Graph<char>();
+        auto start = transitionTable.AllocateState();
+        auto accepts = vector<State>();
+        for (auto& fa : fas)
+        {
+            auto offset = transitionTable.Merge(move(fa.transitionTable));
+            transitionTable.AddTransition(start, epsilon, fa.startState + offset);
+            for (auto& accept : fa.acceptingStates)
+            {
+                accepts.push_back(accept + offset);
+            }
+        }
+
+        return FiniteAutomata(start, move(accepts), move(transitionTable));
+    }
+
     static auto Range(char a, char b) -> FiniteAutomata
     {
         auto transitionTable = Graph<char>();
@@ -133,7 +236,7 @@ public:
         : startState(startState), acceptingStates(move(acceptingStates)), transitionTable(move(transitionTable))
     { }
 
-    auto Run(State from, char input) const -> vector<State>
+    auto Run(State from, char input) const -> set<State>
     {
         return transitionTable.Run(from, input);
     }
@@ -149,6 +252,103 @@ private:
     //    }
     //    throw std::out_of_range(format("not found {} in" nameof(classificationTable), c));
     //}
+};
+
+template<> // before using format<set<size_t>>
+struct std::formatter<std::map<std::size_t, std::size_t>, char>
+{
+    constexpr auto parse(std::format_parse_context& ctx)
+    {
+        auto it = ctx.begin();
+        if (it == ctx.end())
+            return it;
+
+        if (it != ctx.end() && *it != '}')
+            throw std::format_error("Invalid format args for QuotableString.");
+
+        return it;
+    }
+
+    template<class FormatContext>
+    constexpr auto format(std::map<std::size_t, std::size_t>& t, FormatContext& fc) const
+    {
+        using std::back_inserter;
+        using std::format_to;
+        std::string out;
+        format_to(back_inserter(out), "{{");
+
+        for (auto first = true; auto x : t)
+        {
+            if (first)
+            {
+                first = false;
+                format_to(back_inserter(out), "{}", x);
+            }
+            else
+            {
+                format_to(back_inserter(out), ", {}", x);
+            }
+        }
+        format_to(back_inserter(out), "}}");
+
+        return format_to(fc.out(), "{}", out);
+    }
+};
+
+class RefineFiniteAutomata
+{
+public:
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="transitionTable">dfa </param>
+    /// <returns></returns>
+    static auto CompressInput(Graph<char> const& transitionTable) -> void//pair<map<char, int>, Graph<int>>
+    {
+        // dfa not include epsilon? TODO check
+        auto chars = transitionTable.AllPossibleInputs() | to<vector<char>>();
+        auto states = transitionTable.AllStates() | to<vector<State>>(); // ensure order from 0 to n TODO
+        map<size_t, size_t> mapTo{};
+        auto colCount = chars.size();
+        for (size_t i = 0; i < colCount; i++)
+        {
+            mapTo.insert({ i, i });
+        }
+
+        for (size_t i = 0; i < colCount - 1; i++)
+        {
+            if (mapTo[i] == i)
+            {
+                for (size_t j = i + 1; j < colCount; j++)
+                {
+                    if (mapTo[j] == j)
+                    {
+                        auto same = true;
+                        for (size_t k = 0; k < states.size(); k++)
+                        {
+                            auto from = states[k];
+                            auto r0 = transitionTable.Run(from, chars[i]);
+                            auto r1 = transitionTable.Run(from, chars[j]);
+                            auto b = r0 != r1;
+                            println("compare result between {} and {}: {}", r0, r1, b);
+                            if (b)
+                            {
+                                same = false;
+                            }
+                        }
+                        if (same)
+                        {
+                            // combine those are same
+                            mapTo[j] = i;
+                        }
+                    }
+                }
+            }
+        }
+
+        auto newCharIndexes = mapTo | transform([](auto& i) { return i.second; }) | to<set<State>>();
+        print("Compress from {} to {}", chars.size(), newCharIndexes.size());
+    }
 };
 
 auto Convert2PostfixForm(string_view regExp) -> vector<char>
@@ -331,87 +531,6 @@ auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata
     return move(std::get<FiniteAutomata>(operandStack.front()));
 }
 
-template<> // before using format<set<size_t>>
-struct std::formatter<std::set<std::size_t>, char>
-{
-    constexpr auto parse(std::format_parse_context& ctx)
-    {
-        auto it = ctx.begin();
-        if (it == ctx.end())
-            return it;
-
-        if (it != ctx.end() && *it != '}')
-            throw std::format_error("Invalid format args for QuotableString.");
-
-        return it;
-    }
-
-    template<class FormatContext>
-    constexpr auto format(std::set<std::size_t>& t, FormatContext& fc) const
-    {
-        using std::back_inserter;
-        using std::format_to;
-        std::string out;
-        format_to(back_inserter(out), "{{");
-
-        for (auto first = true; auto x : t)
-        {
-            if (first)
-            {
-                first = false;
-                format_to(back_inserter(out), "{}", x);
-            }
-            else
-            {
-                format_to(back_inserter(out), ", {}", x);
-            }
-        }
-        format_to(back_inserter(out), "}}");
-
-        return format_to(fc.out(), "{}", out);
-    }
-};
-template<> // before using format<set<size_t>>
-struct std::formatter<std::vector<std::size_t>, char>
-{
-    constexpr auto parse(std::format_parse_context& ctx)
-    {
-        auto it = ctx.begin();
-        if (it == ctx.end())
-            return it;
-
-        if (it != ctx.end() && *it != '}')
-            throw std::format_error("Invalid format args for QuotableString.");
-
-        return it;
-    }
-
-    template<class FormatContext>
-    constexpr auto format(std::vector<std::size_t>& t, FormatContext& fc) const
-    {
-        using std::back_inserter;
-        using std::format_to;
-        std::string out;
-        format_to(back_inserter(out), "[");
-
-        for (auto first = true; auto x : t)
-        {
-            if (first)
-            {
-                first = false;
-                format_to(back_inserter(out), "{}", x);
-            }
-            else
-            {
-                format_to(back_inserter(out), ", {}", x);
-            }
-        }
-        format_to(back_inserter(out), "]");
-
-        return format_to(fc.out(), "{}", out);
-    }
-};
-
 auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
 {
     auto FollowEpsilon = [&nfa](set<State> todos) -> set<State>
@@ -491,9 +610,9 @@ auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
     return FiniteAutomata(start, move(accepts), move(transitionTable));
 }
 
+template <bool DivideAccepts>
 auto Minimize(FiniteAutomata dfa) -> FiniteAutomata
 {
-    using std::ranges::to;
     using std::ranges::views::filter;
     using std::ranges::set_intersection;
     using std::ranges::set_difference;
@@ -504,10 +623,20 @@ auto Minimize(FiniteAutomata dfa) -> FiniteAutomata
     
     auto partition = set<set<State>>
     {
-        accepts,
         nonaccepts,
     };
-    auto transitionRecord = map<set<State>, vector<pair<set<State>, char>>>();
+    if constexpr (DivideAccepts)
+    {
+        for (auto s : accepts)
+        {
+            partition.insert(set{ s });
+        }
+    }
+    else
+    {
+        partition.insert(accepts);
+    }
+    //auto transitionRecord = map<set<State>, vector<pair<set<State>, char>>>();
     auto worklist = deque<set<State>>
     {
         move(accepts),
@@ -518,7 +647,7 @@ auto Minimize(FiniteAutomata dfa) -> FiniteAutomata
     for (; not worklist.empty();)
     {
         auto s = move(worklist.front());
-        println("checking {}", s);
+        //println("checking {}", s);
         worklist.pop_front();
         for (auto c : chars)
         {
@@ -527,7 +656,7 @@ auto Minimize(FiniteAutomata dfa) -> FiniteAutomata
             {
                 image.insert_range(dfa.transitionTable.ReverseRun(state, c));
             }
-            println("for {} found image: {}", c, image);
+            //println("for {} found image: {}", c, image);
 
             for (auto& q : partition | to<vector<set<State>>>())
             {
@@ -537,14 +666,14 @@ auto Minimize(FiniteAutomata dfa) -> FiniteAutomata
                 {
                     auto q2 = vector<State>();
                     set_difference(q, q1, back_inserter(q2));
-                    println("related partition: {}, divide to {} and {}", q, q1, q2);
+                    //println("related partition: {}, divide to {} and {}", q, q1, q2);
                     if (not q2.empty())
                     {
                         partition.erase(q);
                         auto q1Set = set(q1.begin(), q1.end());
                         partition.insert(q1Set);
                         partition.insert(set(q2.begin(), q2.end()));
-                        transitionRecord[move(q1Set)].push_back({ s, c });
+                        //transitionRecord[move(q1Set)].push_back({ s, c });
                         
                         if (auto i = std::find(worklist.begin(), worklist.end(), q); i != worklist.end())
                         {
@@ -574,7 +703,7 @@ auto Minimize(FiniteAutomata dfa) -> FiniteAutomata
     auto accepts_mdfa = vector<State>();
     auto transitionTable_mdfa = Graph<char>();
     //auto partition2State = map<set<State>, State>();
-    auto partitionState = partition | std::ranges::views::transform([&](auto const& p)
+    auto partitionState = partition | transform([&](auto const& p)
     {
         return transitionTable_mdfa.AllocateState();
     }) | to<vector<State>>();
@@ -681,6 +810,7 @@ auto Minimize(FiniteAutomata dfa) -> FiniteAutomata
     {
         throw std::logic_error("don't find accept states in partition");
     }
+    RefineFiniteAutomata::CompressInput(transitionTable_mdfa);
     return FiniteAutomata(start_mdfa.value(), move(accepts_mdfa), move(transitionTable_mdfa));
 }
 
@@ -721,7 +851,9 @@ export
     auto Convert2PostfixForm(string_view regExp) -> vector<char>;
     auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata;
     auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata;
+    template <bool DivideAccepts>
     auto Minimize(FiniteAutomata dfa) -> FiniteAutomata;
     template<>
     struct std::formatter<FiniteAutomata, char>;
+    class FiniteAutomata;
 }

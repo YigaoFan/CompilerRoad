@@ -79,14 +79,14 @@ public:
     /// <summary>
     /// for NFA, identical from and input may goto multiple states
     /// </summary>
-    auto Run(State from, InputItem input) const -> vector<State>
+    auto Run(State from, InputItem input) const -> set<State>
     {
-        vector<State> nexts;
+        set<State> nexts;
         for (auto& t : transitions[from].second)
         {
             if (t.first == input)
             {
-                nexts.push_back(t.second);
+                nexts.insert(t.second);
             }
         }
         return nexts;
