@@ -513,33 +513,33 @@ auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata
 
 auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
 {
-    auto FollowEpsilon = [&nfa](set<State> todos) -> set<State>
+    auto FollowEpsilon = [&nfa](set<State> initTodos) -> set<State>
     {
-        auto Iter = [&nfa, fullRecord=todos, todos=vector(todos.begin(), todos.end())](this auto&& self) -> set<State>
+        auto fullRecord = initTodos;
+        auto todos = vector(initTodos.begin(), initTodos.end());
+        auto nextTodos = vector<State>();
+        for (;;)
         {
-            auto nextTodos = vector<State>();
-            for (auto s : self.todos)
+            for (auto s : todos)
             {
-                auto nexts = self.nfa.Run(s, FiniteAutomata::epsilon);
+                auto nexts = nfa.Run(s, FiniteAutomata::epsilon);
                 for (auto next : nexts)
                 {
-                    if (not self.fullRecord.contains(next))
+                    if (not fullRecord.contains(next))
                     {
-                        self.fullRecord.insert(next);
+                        fullRecord.insert(next);
                         nextTodos.push_back(next);
                     }
                 }
             }
             if (nextTodos.empty())
             {
-                return move(self.fullRecord);
+                return move(fullRecord);
             }
             std::sort(nextTodos.begin(), nextTodos.end());
             nextTodos.erase(std::unique(nextTodos.begin(), nextTodos.end()), nextTodos.end());
-            self.todos = move(nextTodos);// has duplicate? // I remember lambda's field cannot be change, why here is OK?
-            return self();
-        };
-        return Iter();
+            todos = move(nextTodos);
+        }
     };
     auto transitionTable = Graph<char>();
     auto subset2DFAState = map<set<State>, State>();
