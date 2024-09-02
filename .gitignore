@@ -33,3 +33,5 @@
 /.vs/CompilerRoad
 /Lexer/x64/Debug
 /x64/Debug
+/Lexer/x64/Release
+/x64/Release
