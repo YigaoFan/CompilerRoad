@@ -305,49 +305,29 @@ public:
     /// <returns></returns>
     static auto CompressInput(Graph<char> const& transitionTable) -> void//pair<map<char, int>, Graph<int>>
     {
-        // dfa not include epsilon? TODO check
-        auto chars = transitionTable.AllPossibleInputs() | to<vector<char>>();
+        //auto chars = transitionTable.AllPossibleInputs() | to<vector<char>>();
         auto states = transitionTable.AllStates() | to<vector<State>>(); // ensure order from 0 to n TODO
-        map<size_t, size_t> mapTo{};
-        auto colCount = chars.size();
-        for (size_t i = 0; i < colCount; i++)
+        for (auto s : states)
         {
-            mapTo.insert({ i, i });
-        }
-
-        for (size_t i = 0; i < colCount - 1; i++)
-        {
-            if (mapTo[i] == i)
+            auto& ts = transitionTable[s]; // first level compress, second level compress
+            map<State, vector<char>> counter;
+            for (auto& t : ts)
             {
-                for (size_t j = i + 1; j < colCount; j++)
+                counter[t.second].push_back(t.first);
+            }
+            for (auto& i : counter)
+            {
+                if (i.second.size() > 1)
                 {
-                    if (mapTo[j] == j)
+                    println("{} to {} can be compress, {} to 1", s, i.first, i.second.size());
+                    for (auto c : i.second)
                     {
-                        auto same = true;
-                        for (size_t k = 0; k < states.size(); k++)
-                        {
-                            auto from = states[k];
-                            auto r0 = transitionTable.Run(from, chars[i]);
-                            auto r1 = transitionTable.Run(from, chars[j]);
-                            auto b = r0 != r1;
-                            println("compare result between {} and {}: {}", r0, r1, b);
-                            if (b)
-                            {
-                                same = false;
-                            }
-                        }
-                        if (same)
-                        {
-                            // combine those are same
-                            mapTo[j] = i;
-                        }
+                        print("{} ", c);
                     }
                 }
             }
         }
-
-        auto newCharIndexes = mapTo | transform([](auto& i) { return i.second; }) | to<set<State>>();
-        print("Compress from {} to {}", chars.size(), newCharIndexes.size());
+        //print("Compress from {} to {}", chars.size(), newCharIndexes.size());
     }
 };
 
@@ -535,11 +515,10 @@ auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
 {
     auto FollowEpsilon = [&nfa](set<State> todos) -> set<State>
     {
-        set<State> fullRecord = todos;
-        auto Iter = [&nfa, &fullRecord](this auto&& self, set<State> todos) -> set<State>
+        auto Iter = [&nfa, fullRecord=todos, todos=vector(todos.begin(), todos.end())](this auto&& self) -> set<State>
         {
-            auto nextTodos = set<State>();
-            for (auto s : todos)
+            auto nextTodos = vector<State>();
+            for (auto s : self.todos)
             {
                 auto nexts = self.nfa.Run(s, FiniteAutomata::epsilon);
                 for (auto next : nexts)
@@ -547,7 +526,7 @@ auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
                     if (not self.fullRecord.contains(next))
                     {
                         self.fullRecord.insert(next);
-                        nextTodos.insert(next);
+                        nextTodos.push_back(next);
                     }
                 }
             }
@@ -555,9 +534,12 @@ auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
             {
                 return move(self.fullRecord);
             }
-            return self(move(nextTodos));
+            std::sort(nextTodos.begin(), nextTodos.end());
+            nextTodos.erase(std::unique(nextTodos.begin(), nextTodos.end()), nextTodos.end());
+            self.todos = move(nextTodos);// has duplicate? // I remember lambda's field cannot be change, why here is OK?
+            return self();
         };
-        return Iter(move(todos));
+        return Iter();
     };
     auto transitionTable = Graph<char>();
     auto subset2DFAState = map<set<State>, State>();
@@ -588,7 +570,7 @@ auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
             {
                 nexts.insert_range(nfa.Run(s, c));
             }
-            auto temp = FollowEpsilon(move(nexts));
+            auto temp = FollowEpsilon(move(nexts)); // performance point
             //println("got {}", temp);
             if (not temp.empty())
             {
@@ -810,7 +792,7 @@ auto Minimize(FiniteAutomata dfa) -> FiniteAutomata
     {
         throw std::logic_error("don't find accept states in partition");
     }
-    RefineFiniteAutomata::CompressInput(transitionTable_mdfa);
+    //RefineFiniteAutomata::CompressInput(transitionTable_mdfa);
     return FiniteAutomata(start_mdfa.value(), move(accepts_mdfa), move(transitionTable_mdfa));
 }
 
