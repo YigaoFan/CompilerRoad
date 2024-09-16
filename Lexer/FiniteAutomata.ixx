@@ -17,6 +17,7 @@ using std::queue;
 using std::deque;
 using std::map;
 using std::optional;
+using std::out_of_range;
 using std::back_inserter;
 using std::isdigit;
 using std::isalpha;
@@ -27,6 +28,7 @@ using std::print;
 using std::println;
 using std::ranges::to;
 using std::ranges::views::transform;
+using std::ranges::views::filter;
 
 // formatter should be in a file
 template<> // before using format<set<size_t>>
@@ -110,34 +112,37 @@ struct std::formatter<std::vector<std::size_t>, char>
     }
 };
 
+template <typename Input>
 class FiniteAutomata
 {
 private:
     template <typename T, typename Char>
     friend struct std::formatter;
-    friend auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata;
-    template <bool DivideAccepts>
-    friend auto Minimize(FiniteAutomata dfa) -> FiniteAutomata;
+    template <typename Input>
+    friend auto NFA2DFA(FiniteAutomata<Input> nfa) -> FiniteAutomata<Input>;
+    template <bool DivideAccepts, typename Input>
+    friend auto Minimize(FiniteAutomata<Input> dfa) -> FiniteAutomata<Input>;
+    template <typename Input>
+    friend auto OrWithoutMergeAcceptState(vector<FiniteAutomata<Input>> fas) -> FiniteAutomata<Input>;
+
     constexpr static int epsilon = 0;
     State startState;
     vector<State> acceptingStates;
-    Graph<char> transitionTable;
-    //vector<pair<State, bool>> tokenType; // need it?
-    //vector<pair<char, int>> classificationTable; // use it when refine
+    Graph<Input> transitionTable;
 
 public:
-    static auto From(char c) -> FiniteAutomata
+    static auto From(Input c) -> FiniteAutomata<Input>
     {
-        auto transitionTable = Graph<char>();
+        auto transitionTable = Graph<Input>();
         auto s0 = transitionTable.AllocateState();
         auto s1 = transitionTable.AllocateState();
         transitionTable.AddTransition(s0, c, s1);
 
-        return FiniteAutomata(s0, { s1 }, move(transitionTable));
+        return FiniteAutomata<Input>(s0, { s1 }, move(transitionTable));
     }
 
-    // follow priority order to run FiniteAutomata combination, parentheses, closure, concatenation and alternation
-    static auto Or(FiniteAutomata a, FiniteAutomata b) -> FiniteAutomata
+    // follow priority order to run FiniteAutomata<char> combination, parentheses, closure, concatenation and alternation
+    static auto Or(FiniteAutomata<Input> a, FiniteAutomata<Input> b) -> FiniteAutomata<Input>
     {
         auto newStart = a.transitionTable.AllocateState();
         auto newAccept = a.transitionTable.AllocateState();
@@ -160,7 +165,7 @@ public:
         return a;
     }
 
-    static auto ZeroOrMore(FiniteAutomata a) -> FiniteAutomata
+    static auto ZeroOrMore(FiniteAutomata<Input> a) -> FiniteAutomata<Input>
     {
         auto newStart = a.transitionTable.AllocateState();
         auto newAccept = a.transitionTable.AllocateState();
@@ -178,7 +183,7 @@ public:
         return a;
     }
 
-    static auto Concat(FiniteAutomata a, FiniteAutomata b) -> FiniteAutomata
+    static auto Concat(FiniteAutomata<Input> a, FiniteAutomata<Input> b) -> FiniteAutomata<Input>
     {
         auto offset = a.transitionTable.Merge(move(b.transitionTable));
         for (auto accept : a.acceptingStates)
@@ -194,31 +199,16 @@ public:
         return a;
     }
 
-    static auto OrWithoutMergeAcceptState(vector<FiniteAutomata> fas) -> FiniteAutomata
+    static auto Range(char a, char b) -> FiniteAutomata<char>
     {
-        auto transitionTable = Graph<char>();
-        auto start = transitionTable.AllocateState();
-        auto accepts = vector<State>();
-        for (auto& fa : fas)
+        if (not (std::isalnum(a) and std::isalnum(b) and a < b))
         {
-            auto offset = transitionTable.Merge(move(fa.transitionTable));
-            transitionTable.AddTransition(start, epsilon, fa.startState + offset);
-            for (auto& accept : fa.acceptingStates)
-            {
-                accepts.push_back(accept + offset);
-            }
+            throw std::out_of_range(format("{} and {} should be number or alphabet", a, b));
         }
-
-        return FiniteAutomata(start, move(accepts), move(transitionTable));
-    }
-
-    static auto Range(char a, char b) -> FiniteAutomata
-    {
         auto transitionTable = Graph<char>();
         auto start = transitionTable.AllocateState();
         auto accept = transitionTable.AllocateState();
 
-        // TODO check a and b if it's continuous
         for (auto i = a; i <= b; i++)
         {
             auto n0 = transitionTable.AllocateState();
@@ -229,29 +219,17 @@ public:
             transitionTable.AddTransition(n1, epsilon, accept);
         }
 
-        return FiniteAutomata(start, { accept }, move(transitionTable));
+        return FiniteAutomata<char>(start, { accept }, move(transitionTable));
     }
 
-    FiniteAutomata(State startState, vector<State> acceptingStates, Graph<char> transitionTable)
+    FiniteAutomata(State startState, vector<State> acceptingStates, Graph<Input> transitionTable)
         : startState(startState), acceptingStates(move(acceptingStates)), transitionTable(move(transitionTable))
     { }
 
-    auto Run(State from, char input) const -> set<State>
+    auto Run(State from, Input input) const -> set<State>
     {
         return transitionTable.Run(from, input);
     }
-private:
-    //auto GetColumnIndex(char c) const -> int
-    //{
-    //    for (auto const& x : classificationTable)
-    //    {
-    //        if (c == x.first)
-    //        {
-    //            return x.second;
-    //        }
-    //    }
-    //    throw std::out_of_range(format("not found {} in" nameof(classificationTable), c));
-    //}
 };
 
 template<> // before using format<set<size_t>>
@@ -297,20 +275,28 @@ struct std::formatter<std::map<std::size_t, std::size_t>, char>
 
 class RefineFiniteAutomata
 {
+private:
+    FiniteAutomata<size_t> fa;
+    map<pair<char, char>, size_t> classification;
 public:
+    RefineFiniteAutomata(FiniteAutomata<size_t> fa, map<pair<char, char>, size_t> classification)
+        : fa(move(fa)), classification(move(classification))
+    { }
+
     /// <summary>
     /// 
     /// </summary>
     /// <param name="transitionTable">dfa </param>
     /// <returns></returns>
-    static auto CompressInput(Graph<char> const& transitionTable) -> void//pair<map<char, int>, Graph<int>>
+    template <typename Input>
+    static auto CompressInput(Graph<Input> const& transitionTable) -> void//pair<map<char, int>, Graph<int>>
     {
         //auto chars = transitionTable.AllPossibleInputs() | to<vector<char>>();
         auto states = transitionTable.AllStates() | to<vector<State>>(); // ensure order from 0 to n TODO
         for (auto s : states)
         {
             auto& ts = transitionTable[s]; // first level compress, second level compress
-            map<State, vector<char>> counter;
+            map<State, vector<Input>> counter;
             for (auto& t : ts)
             {
                 counter[t.second].push_back(t.first);
@@ -328,6 +314,18 @@ public:
             }
         }
         //print("Compress from {} to {}", chars.size(), newCharIndexes.size());
+    }
+
+    auto Run(State from, char input) const -> set<State>
+    {
+        for (auto& x : classification)
+        {
+            if (input >= x.first.first and input <= x.first.second)
+            {
+                return fa.Run(from, x.second);
+            }
+        }
+        return fa.Run(from, static_cast<size_t>(input));
     }
 };
 
@@ -440,7 +438,7 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
 /// <summary>
 /// assume regExp is valid regular expression
 /// </summary>
-auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata
+auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata<char>
 {
     // support [0-9a-z]
     if (regExp.starts_with("(") && regExp.ends_with(")"))
@@ -450,14 +448,14 @@ auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata
 
     if (regExp.length() == 1)
     {
-        return FiniteAutomata::From(regExp[0]);
+        return FiniteAutomata<char>::From(regExp[0]);
     }
     auto postfixRegExp = Convert2PostfixForm(regExp);
-    auto operandStack = vector<variant<char, FiniteAutomata>>();
+    auto operandStack = vector<variant<char, FiniteAutomata<char>>>();
     struct
     {
-        auto operator()(char c) -> FiniteAutomata { return FiniteAutomata::From(c); }
-        auto operator()(FiniteAutomata&& fa) -> FiniteAutomata { return move(fa); }
+        auto operator()(char c) -> FiniteAutomata<char> { return FiniteAutomata<char>::From(c); }
+        auto operator()(FiniteAutomata<char>&& fa) -> FiniteAutomata<char> { return move(fa); }
     } converter;
     for (size_t l = postfixRegExp.size(), i = 0; i < l; i++)
     {
@@ -470,7 +468,7 @@ auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata
             operandStack.pop_back();
             auto b = move(operandStack.back());
             operandStack.pop_back();
-            operandStack.push_back(FiniteAutomata::Concat(std::visit(converter, move(b)), std::visit(converter, move(a))));
+            operandStack.push_back(FiniteAutomata<char>::Concat(std::visit(converter, move(b)), std::visit(converter, move(a))));
             break;
         }
         case '-':
@@ -479,14 +477,14 @@ auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata
             operandStack.pop_back();
             auto b = move(operandStack.back());
             operandStack.pop_back();
-            operandStack.push_back(FiniteAutomata::Range(std::get<char>(b), std::get<char>(a)));
+            operandStack.push_back(FiniteAutomata<char>::Range(std::get<char>(b), std::get<char>(a)));
             break;
         }
         case '*':
         {
             auto a = move(operandStack.back());
             operandStack.pop_back();
-            operandStack.push_back(FiniteAutomata::ZeroOrMore(std::visit(converter, move(a))));
+            operandStack.push_back(FiniteAutomata<char>::ZeroOrMore(std::visit(converter, move(a))));
             break;
         }
         case '|':
@@ -495,7 +493,7 @@ auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata
             operandStack.pop_back();
             auto b = move(operandStack.back());
             operandStack.pop_back();
-            operandStack.push_back(FiniteAutomata::Or(std::visit(converter, move(b)), std::visit(converter, move(a))));
+            operandStack.push_back(FiniteAutomata<char>::Or(std::visit(converter, move(b)), std::visit(converter, move(a))));
             break;
         }
         default:
@@ -508,10 +506,96 @@ auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata
     {
         throw std::logic_error(nameof(operandStack)" doesn't have one finite automata as final result");
     }
-    return move(std::get<FiniteAutomata>(operandStack.front()));
+    return move(std::get<FiniteAutomata<char>>(operandStack.front()));
 }
 
-auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
+/// <summary>
+/// assume regExp is valid regular expression
+/// </summary>
+auto ConstructNFAFrom(string_view regExp, map<pair<char, char>, size_t>& classification) -> FiniteAutomata<size_t>
+{
+    // support [0-9a-z]
+    if (regExp.starts_with("(") && regExp.ends_with(")"))
+    {
+        regExp = regExp.substr(1, regExp.length() - 2);
+    }
+
+    if (regExp.length() == 1)
+    {
+        return FiniteAutomata<size_t>::From(static_cast<size_t>(regExp[0]));
+    }
+    auto postfixRegExp = Convert2PostfixForm(regExp);
+    auto operandStack = vector<variant<char, FiniteAutomata<size_t>>>();
+    struct
+    {
+        auto operator()(char c) -> FiniteAutomata<size_t> { return FiniteAutomata<size_t>::From(static_cast<size_t>(c)); }
+        auto operator()(FiniteAutomata<size_t>&& fa) -> FiniteAutomata<size_t> { return move(fa); }
+    } converter;
+    for (size_t l = postfixRegExp.size(), i = 0; i < l; i++)
+    {
+        auto c = postfixRegExp[i];
+        switch (c)
+        {
+        case '+':
+        {
+            auto a = move(operandStack.back());
+            operandStack.pop_back();
+            auto b = move(operandStack.back());
+            operandStack.pop_back();
+            operandStack.push_back(FiniteAutomata<size_t>::Concat(std::visit(converter, move(b)), std::visit(converter, move(a))));
+            break;
+        }
+        case '-':
+        {
+            auto a = move(operandStack.back());
+            operandStack.pop_back();
+            auto b = move(operandStack.back());
+            operandStack.pop_back();
+            char left = std::get<char>(b);
+            char right = std::get<char>(a);
+            // should all content in [] be a item in classification?
+            // when item bigger than 128, it will use classification
+            // should template FiniteAutomata<char>?
+            auto p = pair{ left, right };
+            if (not classification.contains(p))
+            {
+                size_t c = classification.size() + 128;
+                classification.insert({ p, c });
+            }
+            operandStack.push_back(FiniteAutomata<size_t>::From(classification[p]));
+            break;
+        }
+        case '*':
+        {
+            auto a = move(operandStack.back());
+            operandStack.pop_back();
+            operandStack.push_back(FiniteAutomata<size_t>::ZeroOrMore(std::visit(converter, move(a))));
+            break;
+        }
+        case '|':
+        {
+            auto a = move(operandStack.back());
+            operandStack.pop_back();
+            auto b = move(operandStack.back());
+            operandStack.pop_back();
+            operandStack.push_back(FiniteAutomata<size_t>::Or(std::visit(converter, move(b)), std::visit(converter, move(a))));
+            break;
+        }
+        default:
+            // number or alphabet
+            operandStack.push_back(c);
+            break;
+        }
+    }
+    if (operandStack.size() != 1)
+    {
+        throw std::logic_error(nameof(operandStack)" doesn't have one finite automata as final result");
+    }
+    return move(std::get<FiniteAutomata<size_t>>(operandStack.front()));
+}
+
+template <typename Input>
+auto NFA2DFA(FiniteAutomata<Input> nfa) -> FiniteAutomata<Input>
 {
     auto FollowEpsilon = [&nfa](set<State> initTodos) -> set<State>
     {
@@ -522,7 +606,7 @@ auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
         {
             for (auto s : todos)
             {
-                auto nexts = nfa.Run(s, FiniteAutomata::epsilon);
+                auto nexts = nfa.Run(s, FiniteAutomata<Input>::epsilon);
                 for (auto next : nexts)
                 {
                     if (not fullRecord.contains(next))
@@ -541,7 +625,7 @@ auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
             todos = move(nextTodos);
         }
     };
-    auto transitionTable = Graph<char>();
+    auto transitionTable = Graph<Input>();
     auto subset2DFAState = map<set<State>, State>();
     auto AddSubset = [&transitionTable, &subset2DFAState](set<State> subset) -> State
     {
@@ -555,7 +639,7 @@ auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
     auto start = AddSubset(q0);
     auto accepts = vector<State>();
     worklist.push(move(q0));
-    auto chars = nfa.transitionTable.AllPossibleInputs() | std::ranges::views::filter([](char c) { return c != FiniteAutomata::epsilon; });
+    auto chars = nfa.transitionTable.AllPossibleInputs() | filter([](Input c) { return c != FiniteAutomata<Input>::epsilon; });
 
     for (; not worklist.empty();)
     {
@@ -589,13 +673,13 @@ auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata
             }
         }
     }
-    return FiniteAutomata(start, move(accepts), move(transitionTable));
+
+    return FiniteAutomata<Input>(start, move(accepts), move(transitionTable));
 }
 
-template <bool DivideAccepts>
-auto Minimize(FiniteAutomata dfa) -> FiniteAutomata
+template <bool DivideAccepts, typename Input>
+auto Minimize(FiniteAutomata<Input> dfa) -> FiniteAutomata<Input>
 {
-    using std::ranges::views::filter;
     using std::ranges::set_intersection;
     using std::ranges::set_difference;
 
@@ -618,13 +702,12 @@ auto Minimize(FiniteAutomata dfa) -> FiniteAutomata
     {
         partition.insert(accepts);
     }
-    //auto transitionRecord = map<set<State>, vector<pair<set<State>, char>>>();
     auto worklist = deque<set<State>>
     {
         move(accepts),
         move(nonaccepts),
     };
-    auto chars = dfa.transitionTable.AllPossibleInputs() | filter([](char c) { return c != FiniteAutomata::epsilon; });
+    auto chars = dfa.transitionTable.AllPossibleInputs() | filter([](Input c) { return c != FiniteAutomata<Input>::epsilon; });
 
     for (; not worklist.empty();)
     {
@@ -683,8 +766,7 @@ auto Minimize(FiniteAutomata dfa) -> FiniteAutomata
 
     auto start_mdfa = optional<State>();
     auto accepts_mdfa = vector<State>();
-    auto transitionTable_mdfa = Graph<char>();
-    //auto partition2State = map<set<State>, State>();
+    auto transitionTable_mdfa = Graph<Input>();
     auto partitionState = partition | transform([&](auto const& p)
     {
         return transitionTable_mdfa.AllocateState();
@@ -701,7 +783,7 @@ auto Minimize(FiniteAutomata dfa) -> FiniteAutomata
         }
         throw std::out_of_range(format("not found {} in partition", s));
     };
-    set<std::tuple<State, State, char>> records;
+    set<std::tuple<State, State, Input>> records;
     for (auto i = 0; auto const& p : partition)
     {
         auto from = partitionState[i];
@@ -738,52 +820,6 @@ auto Minimize(FiniteAutomata dfa) -> FiniteAutomata
         }
         ++i;
     }
-    //auto GetStateOfPartition = [&partition2State, &transitionTable_mdfa](auto const& p) -> State
-    //{
-    //    if (partition2State.contains(p))
-    //    {
-    //        return partition2State[p];
-    //    }
-    //    else
-    //    {
-    //        auto s = transitionTable_mdfa.AllocateState();
-    //        partition2State.insert({ p, s });
-    //        return s;
-    //    }
-    //};
-
-    //for (auto& p : partition)
-    //{
-    //    auto from = GetStateOfPartition(p);
-    //    if (any_of(dfa.acceptingStates.begin(), dfa.acceptingStates.end(), [&p](auto s) { return p.contains(s); }))
-    //    {
-    //        accepts_mdfa.push_back(from);
-    //    }
-    //    if (p.contains(dfa.startState))
-    //    {
-    //        if (not start_mdfa.has_value())
-    //        {
-    //            start_mdfa = from;
-    //        }
-    //        else
-    //        {
-    //            throw std::logic_error(format("multiple start states({}, {}) in minimize DFA", from, start_mdfa.value()));
-    //        }
-    //    }
-    //    
-    //    if (transitionRecord.contains(p))
-    //    {
-    //        for (auto& t : transitionRecord[p])
-    //        {
-    //            auto to = GetStateOfPartition(t.first);
-    //            transitionTable_mdfa.AddTransition(from, t.second, to);
-    //        }
-    //    }
-    //    else // why need else?
-    //    {
-
-    //    }
-    //}
     if (not start_mdfa.has_value())
     {
         throw std::logic_error("don't find start state in partition");
@@ -792,12 +828,31 @@ auto Minimize(FiniteAutomata dfa) -> FiniteAutomata
     {
         throw std::logic_error("don't find accept states in partition");
     }
-    //RefineFiniteAutomata::CompressInput(transitionTable_mdfa);
-    return FiniteAutomata(start_mdfa.value(), move(accepts_mdfa), move(transitionTable_mdfa));
+    RefineFiniteAutomata::CompressInput(transitionTable_mdfa);
+    return FiniteAutomata<Input>(start_mdfa.value(), move(accepts_mdfa), move(transitionTable_mdfa));
+}
+
+template <typename Input>
+auto OrWithoutMergeAcceptState(vector<FiniteAutomata<Input>> fas) -> FiniteAutomata<Input>
+{
+    auto transitionTable = Graph<Input>();
+    auto start = transitionTable.AllocateState();
+    auto accepts = vector<State>();
+    for (auto& fa : fas)
+    {
+        auto offset = transitionTable.Merge(move(fa.transitionTable));
+        transitionTable.AddTransition(start, FiniteAutomata<Input>::epsilon, fa.startState + offset);
+        for (auto& accept : fa.acceptingStates)
+        {
+            accepts.push_back(accept + offset);
+        }
+    }
+
+    return FiniteAutomata<Input>(start, move(accepts), move(transitionTable));
 }
 
 template<>
-struct std::formatter<FiniteAutomata, char>// : std::formatter<Graph<char>, char> // change Char to char, and inherit to use base format
+struct std::formatter<FiniteAutomata<char>, char>// : std::formatter<Graph<char>, char> // change Char to char, and inherit to use base format
 {
     constexpr auto parse(std::format_parse_context& ctx)
     {
@@ -812,7 +867,7 @@ struct std::formatter<FiniteAutomata, char>// : std::formatter<Graph<char>, char
     }
 
     template<class FormatContext>
-    constexpr auto format(FiniteAutomata& t, FormatContext& fc) const
+    constexpr auto format(FiniteAutomata<char>& t, FormatContext& fc) const
     {
         using std::format_to;
         std::string out;
@@ -831,11 +886,17 @@ struct std::formatter<FiniteAutomata, char>// : std::formatter<Graph<char>, char
 export
 {
     auto Convert2PostfixForm(string_view regExp) -> vector<char>;
-    auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata;
-    auto NFA2DFA(FiniteAutomata nfa) -> FiniteAutomata;
-    template <bool DivideAccepts>
-    auto Minimize(FiniteAutomata dfa) -> FiniteAutomata;
+    auto ConstructNFAFrom(string_view regExp) -> FiniteAutomata<char>;
+    auto ConstructNFAFrom(string_view regExp, map<pair<char, char>, size_t>& classification) -> FiniteAutomata<size_t>;
+    template <typename Input>
+    auto NFA2DFA(FiniteAutomata<Input> nfa) -> FiniteAutomata<Input>;
+    template <bool DivideAccepts, typename Input>
+    auto Minimize(FiniteAutomata<Input> dfa) -> FiniteAutomata<Input>;
+    template <typename Input>
+    auto OrWithoutMergeAcceptState(vector<FiniteAutomata<Input>> fas) -> FiniteAutomata<Input>;
     template<>
-    struct std::formatter<FiniteAutomata, char>;
+    struct std::formatter<FiniteAutomata<char>, char>;
+    template <typename Input>
     class FiniteAutomata;
+    class RefineFiniteAutomata;
 }

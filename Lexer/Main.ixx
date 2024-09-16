@@ -29,8 +29,9 @@ int main()
     //auto mdfa = Minimize<false>(dfa);
     //print("{}", mdfa);
     //std::cout << "OK";
-    //std::array rules = { pair<string, Token>{ "[a-zA-Z][a-zA-Z0-9_]*", Token::Id } };
-    std::array rules = { pair<string, Token>{ "[a-zA-Z][0-9_]*", Token::Id } };
+    std::array rules = { pair<string, Token>{ "[a-zA-Z][a-zA-Z0-9_]*", Token::Id } };
+    //std::array rules = { pair<string, Token>{ "[a-bA-B][a-bA-B0-1_]*", Token::Id } }; // for get simple relation of above graph
+    //std::array rules = { pair<string, Token>{ "[a-zA-Z][0-9_]*", Token::Id } };
     auto l = Lexer<Token>::New(rules);
     //print("{}", l.dfa);
 }
