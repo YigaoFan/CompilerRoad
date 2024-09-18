@@ -31,8 +31,8 @@ using std::ranges::views::transform;
 using std::ranges::views::filter;
 
 // formatter should be in a file
-template<> // before using format<set<size_t>>
-struct std::formatter<std::set<std::size_t>, char>
+template<typename T> // before using format<set<size_t>>
+struct std::formatter<std::set<T>, char>
 {
     constexpr auto parse(std::format_parse_context& ctx)
     {
@@ -71,8 +71,8 @@ struct std::formatter<std::set<std::size_t>, char>
         return format_to(fc.out(), "{}", out);
     }
 };
-template<> // before using format<set<size_t>>
-struct std::formatter<std::vector<std::size_t>, char>
+template<typename T> // before using format<set<size_t>>
+struct std::formatter<std::vector<T>, char>
 {
     constexpr auto parse(std::format_parse_context& ctx)
     {
@@ -87,7 +87,7 @@ struct std::formatter<std::vector<std::size_t>, char>
     }
 
     template<class FormatContext>
-    constexpr auto format(std::vector<std::size_t>& t, FormatContext& fc) const
+    constexpr auto format(std::vector<T>& t, FormatContext& fc) const
     {
         using std::back_inserter;
         using std::format_to;
@@ -232,8 +232,8 @@ public:
     }
 };
 
-template<> // before using format<set<size_t>>
-struct std::formatter<std::map<std::size_t, std::size_t>, char>
+template<typename Key, typename Value>
+struct std::formatter<std::map<Key, Value>, char>
 {
     constexpr auto parse(std::format_parse_context& ctx)
     {
@@ -248,7 +248,7 @@ struct std::formatter<std::map<std::size_t, std::size_t>, char>
     }
 
     template<class FormatContext>
-    constexpr auto format(std::map<std::size_t, std::size_t>& t, FormatContext& fc) const
+    constexpr auto format(std::map<Key, Value>& t, FormatContext& fc) const
     {
         using std::back_inserter;
         using std::format_to;
@@ -851,8 +851,8 @@ auto OrWithoutMergeAcceptState(vector<FiniteAutomata<Input>> fas) -> FiniteAutom
     return FiniteAutomata<Input>(start, move(accepts), move(transitionTable));
 }
 
-template<>
-struct std::formatter<FiniteAutomata<char>, char>// : std::formatter<Graph<char>, char> // change Char to char, and inherit to use base format
+template<typename Input>
+struct std::formatter<FiniteAutomata<Input>, char>
 {
     constexpr auto parse(std::format_parse_context& ctx)
     {
@@ -867,7 +867,7 @@ struct std::formatter<FiniteAutomata<char>, char>// : std::formatter<Graph<char>
     }
 
     template<class FormatContext>
-    constexpr auto format(FiniteAutomata<char>& t, FormatContext& fc) const
+    constexpr auto format(FiniteAutomata<Input>& t, FormatContext& fc) const
     {
         using std::format_to;
         std::string out;
@@ -894,8 +894,8 @@ export
     auto Minimize(FiniteAutomata<Input> dfa) -> FiniteAutomata<Input>;
     template <typename Input>
     auto OrWithoutMergeAcceptState(vector<FiniteAutomata<Input>> fas) -> FiniteAutomata<Input>;
-    template<>
-    struct std::formatter<FiniteAutomata<char>, char>;
+    template<typename Input>
+    struct std::formatter<FiniteAutomata<Input>, char>;
     template <typename Input>
     class FiniteAutomata;
     class RefineFiniteAutomata;

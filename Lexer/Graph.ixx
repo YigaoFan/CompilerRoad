@@ -131,8 +131,8 @@ private:
 };
 
 
-template<>
-struct std::formatter<Graph<char>, char> // TODO after VS 17.12 it will support partial specification in other module
+template<typename T>
+struct std::formatter<Graph<T>, char> // TODO after VS 17.12 it will support partial specification in other module
 {
     template<class ParseContext>
     constexpr ParseContext::iterator parse(ParseContext& ctx)
@@ -148,7 +148,7 @@ struct std::formatter<Graph<char>, char> // TODO after VS 17.12 it will support 
     }
 
     template<class FormatContext>
-    constexpr auto format(Graph<char>& t, FormatContext& fc) const
+    constexpr auto format(Graph<T>& t, FormatContext& fc) const
     {
         using std::back_inserter;
         using std::format_to;
