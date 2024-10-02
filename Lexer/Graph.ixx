@@ -16,7 +16,7 @@ class Graph
 private:
     template <typename T, typename Char>
     friend struct std::formatter;
-    vector<pair<State, vector<pair<InputItem, State>>>> transitions;
+    vector<pair<State, vector<pair<InputItem, State>>>> transitions; // TODO to map, or add a function to freeze to map
 
 public:
     Graph() = default;
