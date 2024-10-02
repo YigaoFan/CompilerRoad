@@ -26,10 +26,6 @@ struct Token
     string Content;
 };
 
-enum class A
-{
-    B
-};
 template <typename T>
 concept IToken = requires (T t)
 {
