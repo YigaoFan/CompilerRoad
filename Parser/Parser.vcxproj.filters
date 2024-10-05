@@ -24,5 +24,8 @@
     <ClCompile Include="ParserBase.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="String.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

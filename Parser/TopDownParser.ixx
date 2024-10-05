@@ -10,6 +10,8 @@ using std::size_t;
 using std::map;
 using std::set;
 using std::move;
+using std::ranges::views::filter;
+using std::ranges::views::drop;
 
 using LeftSide = string;
 using RightSide = vector<string>;
@@ -30,8 +32,8 @@ public:
     }
 };
 
-
-auto DirectLeftRecur2RightRecur(Grammar grammar) -> vector<Grammar>
+/// <returns>.first is original noterminal, .second is new nonterminal</returns>
+auto DirectLeftRecur2RightRecur(Grammar grammar) -> pair<Grammar, Grammar>
 {
     auto const& left = grammar.first;
     vector<RightSide> leftRecurs;
@@ -61,23 +63,20 @@ auto DirectLeftRecur2RightRecur(Grammar grammar) -> vector<Grammar>
     };
 }
 
-// develop a shared const string?
-
 auto RemoveIndirectLeftRecur(vector<Grammar> grammars) -> vector<Grammar>
 {
     using std::ranges::views::transform;
-    using std::ranges::views::filter;
     using std::ranges::views::join;
     using std::ranges::to;
 
     auto nontermins = grammars | transform([](auto& e) { return e.first; });
     for (size_t i = 0; i < nontermins.size(); ++i)
     {
+        auto& focus = grammars[i];
         auto firsts = 
-            grammars[i].second 
+            focus.second 
             | filter([](auto& i) { return not i.empty(); }) // filter affect the below index
             | transform([](auto& i) -> string { return i.front(); });
-        // find grammars[i].first -> grammars[s].first form
         map<string, set<size_t>> first2Indexes;
         for (size_t j = 0; auto&& f : firsts)
         {
@@ -88,43 +87,80 @@ auto RemoveIndirectLeftRecur(vector<Grammar> grammars) -> vector<Grammar>
             ++j;
         }
 
-        // can we check if need to setup a new Grammar? or we can jump over below
-        Grammar newGrammar{ grammars[i].first, {} }; // move grammars[i].first here is OK? no, grammar[s] will use it! but the latter one how to use this processed one
-        for (size_t s = 0; s < i; ++s) // this means the ith grammar will be changed not only once
+        for (size_t s = 0; s < i; ++s) // grammar[i] will be changed multiple times
         {
             auto&& destFirst = grammars[s].first;
+            // find grammars[i].first -> grammars[s].first form
             if (first2Indexes.contains(destFirst))
             {
-                // mark delete? check with book
-                // do replace
-                auto&& indexes = first2Indexes[destFirst];
-                for (size_t j = 0; j < grammars[i].second.size(); ++j)
+                auto&& destIndexes = first2Indexes[destFirst];
+                for (size_t j = 0; j < focus.second.size(); ++j)
                 {
-                    auto&& rs = grammars[i].second[j];
-                    if (indexes.contains(j))
+                    auto& rs = focus.second[j];
+                    if (destIndexes.contains(j))
                     {
                         rs.erase(rs.begin());
-                        for (auto rs1 : grammars[s].second)
+
+                        if (not grammars[s].second.empty())
                         {
-                            rs1.append_range(rs);
-                            newGrammar.second.push_back(rs1);
+                            for (auto replace : grammars[s].second | drop(1))
+                            {
+                                replace.append_range(rs);
+                                focus.second.push_back(replace);
+                            }
+                            // delay the 1st item operation, because it will change rs itself which is used in above
+                            rs.insert_range(rs.begin(), grammars[s].second[0]);
                         }
-                    }
-                    else
-                    {
-                        newGrammar.second.push_back(move(rs));
                     }
                 }
             }
         }
+        auto [original, newNontermin] = DirectLeftRecur2RightRecur(move(focus));
+        focus = move(original);
+        grammars.push_back(move(newNontermin));
     }
     
-    return move(grammars) // not trigger copy or copy?
-        | transform([](auto&& i) { return DirectLeftRecur2RightRecur(move(i)); }) 
-        | join | to<vector<Grammar>>();
+    return grammars;
 }
 
-auto LeftFactor()
+/// <returns>.first is original noterminal, .second is new nonterminal</returns>
+auto LeftFactor(Grammar grammar) -> pair<Grammar, vector<Grammar>>
 {
+    using std::format;
+    using std::make_move_iterator;
 
+    map<string, vector<size_t>> prefix2Indexes;
+    for (size_t i = 0; i < grammar.second.size(); ++i)
+    {
+        // should get max common prefix TODO
+        auto& rs = grammar.second[i];
+        if (not rs.empty())
+        {
+            prefix2Indexes[rs.front()].push_back(i);
+        }
+    }
+
+    vector<Grammar> newGrammars;
+    for (auto& [prefix, ids] : prefix2Indexes | filter([](auto& i) { return i.second.size() > 1; }))
+    {
+        auto newNonterminName = format("{}_lf_{}", grammar.first, prefix);
+        Grammar g{ newNonterminName, {} };
+        // keep the first item of ids in grammar.second
+        // drop the remain items
+        auto& rs = grammar.second[ids[0]];
+        g.second.push_back(RightSide { make_move_iterator(rs.begin() + 1), make_move_iterator(rs.end()) });
+        rs.erase(rs.begin() + 1, rs.end());
+        rs.push_back(newNonterminName);
+
+        for (auto i : ids | drop(1))
+        {
+            auto& rs = grammar.second[i];
+            rs.erase(rs.begin());
+            g.second.push_back(move(rs));
+            grammar.second.erase(grammar.second.begin() + i);
+        }
+        newGrammars.push_back(move(g));
+    }
+
+    return { move(grammar), move(newGrammars) };
 }
