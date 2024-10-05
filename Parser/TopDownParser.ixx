@@ -148,9 +148,9 @@ auto LeftFactor(Grammar grammar) -> pair<Grammar, vector<Grammar>>
         // keep the first item of ids in grammar.second
         // drop the remain items
         auto& rs = grammar.second[ids[0]];
-        g.second.push_back(RightSide { make_move_iterator(rs.begin() + 1), make_move_iterator(rs.end()) });
+        g.second.push_back(RightSide{ make_move_iterator(rs.begin() + 1), make_move_iterator(rs.end()) });
         rs.erase(rs.begin() + 1, rs.end());
-        rs.push_back(newNonterminName);
+        rs.push_back(move(newNonterminName));
 
         for (auto i : ids | drop(1))
         {
