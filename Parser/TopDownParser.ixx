@@ -10,12 +10,22 @@ using std::size_t;
 using std::map;
 using std::set;
 using std::move;
+using std::ranges::views::transform;
 using std::ranges::views::filter;
 using std::ranges::views::drop;
 
 using LeftSide = string;
 using RightSide = vector<string>;
 using Grammar = pair<LeftSide, vector<RightSide>>;
+
+template <template <typename> class Container>
+auto Nontermins(vector<Grammar> const& grammars) -> Container<LeftSide>
+{
+    using std::ranges::to;
+
+    auto nontermins = grammars | transform([](auto& e) { return e.first; });
+    return nontermins | to<Container<LeftSide>>();
+}
 
 class TableDrivenParser
 {
@@ -65,11 +75,10 @@ auto DirectLeftRecur2RightRecur(Grammar grammar) -> pair<Grammar, Grammar>
 
 auto RemoveIndirectLeftRecur(vector<Grammar> grammars) -> vector<Grammar>
 {
-    using std::ranges::views::transform;
     using std::ranges::views::join;
     using std::ranges::to;
 
-    auto nontermins = grammars | transform([](auto& e) { return e.first; });
+    auto nontermins = Nontermins<vector>(grammars);
     for (size_t i = 0; i < nontermins.size(); ++i)
     {
         auto& focus = grammars[i];
@@ -133,6 +142,7 @@ auto LeftFactor(Grammar grammar) -> pair<Grammar, vector<Grammar>>
     for (size_t i = 0; i < grammar.second.size(); ++i)
     {
         // should get max common prefix TODO
+        // abc, abd, aed how to process max common prefix
         auto& rs = grammar.second[i];
         if (not rs.empty())
         {
@@ -160,7 +170,94 @@ auto LeftFactor(Grammar grammar) -> pair<Grammar, vector<Grammar>>
             grammar.second.erase(grammar.second.begin() + i);
         }
         newGrammars.push_back(move(g));
+        // TODO recursive process the new grammar
     }
 
     return { move(grammar), move(newGrammars) };
+}
+
+template <template <typename...> class Container, typename Value>
+auto SetDifference(Container<Value> const& set1, Container<Value> const& set2) -> Container<Value>
+{
+    using std::ranges::set_difference;
+    Container<Value> diff;
+    set_difference(set1, set2, std::inserter(diff, diff.begin()));
+    return diff;
+}
+
+template <template <typename...> class Container, typename Value>
+auto SetUnion(Container<Value> const& set1, Container<Value> const& set2) -> Container<Value>
+{
+    using std::ranges::set_union;
+    Container<Value> un;
+    set_union(set1, set2, std::inserter(un, un.begin()));
+    return un;
+}
+
+auto FirstSets(vector<Grammar> const& grammars) -> map<string, set<string>>
+{
+    map<string, set<string>> firstSets;
+
+    auto nontermins = Nontermins<set>(grammars);
+    for (auto const& nt : nontermins)
+    {
+        firstSets.insert({ nt, {} });
+    }
+
+    /// if it's possible terminal symbol, use this to read
+    auto ReadFirsts = [&](string const& symbol) -> set<string>
+    {
+        if (nontermins.contains(symbol))
+        {
+            return firstSets[symbol];
+        }
+        return { symbol }; // not sure here temp memory allocation is big or small
+    };
+
+    for (auto changing = false; changing; changing = false)
+    {
+        for (auto const& g : grammars)
+        {
+            for (auto const& rule : g.second)
+            {
+                if (rule.empty())
+                {
+                    continue;
+                }
+                set<string> epsilon{ "" };
+                auto rhs = SetDifference(ReadFirsts(rule[0]), epsilon);
+                auto trailing = true;
+                for (size_t i = 0; i < rule.size() - 1; ++i)
+                {
+                    if (ReadFirsts(rule[i]).contains(""))
+                    {
+                        rhs = SetUnion(rhs, SetDifference(ReadFirsts(rule[i + 1]), epsilon));
+                    }
+                    else
+                    {
+                        trailing = false;
+                        break;
+                    }
+                }
+                if (trailing and ReadFirsts(rule.back()).contains(""))
+                {
+                    rhs.insert("");
+                }
+
+                // how to remove below copy caused by union operation
+                if (auto newFirsts = SetUnion(firstSets[g.first], rhs); newFirsts.size() > firstSets[g.first].size())
+                {
+                    firstSets[g.first] = move(newFirsts);
+                    changing = true;
+                }
+            }
+        }
+    }
+
+    return firstSets;
+}
+
+auto FollowSets(vector<Grammar> const& grammars) -> map<string, set<string>>
+{
+    throw;
 }

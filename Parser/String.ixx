@@ -19,6 +19,11 @@ private:
     size_t end; // not included
 
 public:
+    static auto EmptyString() -> String
+    {
+        return String("");
+    }
+
     template <size_t N>
     String(char const(&literal)[N])
         : share(new Share{ .Str = literal, .RefCount = 1, .Releasable = false }),
@@ -38,7 +43,7 @@ public:
         that.share = nullptr;
     }
 
-    String& operator= (String const& that) noexcept
+    auto operator= (String const& that) noexcept -> String&
     {
         --share->RefCount;
         share = that.share;
@@ -49,7 +54,7 @@ public:
         return *this;
     }
 
-    String& operator= (String&& that) noexcept
+    auto operator= (String&& that) noexcept -> String&
     {
         --share->RefCount;
         share = that.share;
@@ -60,12 +65,12 @@ public:
         return *this;
     }
 
-    String Substring(size_t start) const
+    auto Substring(size_t start) const -> String
     {
         return Substring(start, end);
     }
 
-    String Substring(size_t start, size_t end) const
+    auto Substring(size_t start, size_t end) const -> String
     {
         auto s{ *this };
         s.start = start;
@@ -73,7 +78,7 @@ public:
         return s;
     }
 
-    bool Contains(char c) const
+    auto Contains(char c) const -> bool
     {
         for (size_t i = start; i < end; ++i)
         {
@@ -84,9 +89,35 @@ public:
         }
     }
 
-    size_t Length() const
+    auto Empty() const -> bool
+    {
+        return share == nullptr or start == end;
+    }
+
+    auto Length() const -> size_t
     {
         return end - start;
+    }
+
+    auto operator== (String const& that) const -> bool
+    {
+        if (share == that.share and start == that.start and end == that.end)
+        {
+            return true;
+        }
+        if (Length() == that.Length())
+        {
+            for (auto i = start, j = that.start; i < end; ++i, ++j)
+            {
+                if (share->Str[i] != that.share->Str[j])
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        return false;
     }
     
     ~String()
