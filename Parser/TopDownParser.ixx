@@ -5,6 +5,7 @@ import ParserBase;
 
 using std::vector;
 using std::string;
+using std::string_view;
 using std::pair;
 using std::size_t;
 using std::map;
@@ -13,18 +14,16 @@ using std::move;
 using std::ranges::views::transform;
 using std::ranges::views::filter;
 using std::ranges::views::drop;
+using std::ranges::to;
 
 using LeftSide = string;
 using RightSide = vector<string>;
 using Grammar = pair<LeftSide, vector<RightSide>>;
 
-template <template <typename> class Container>
-auto Nontermins(vector<Grammar> const& grammars) -> Container<LeftSide>
+auto Nontermins(vector<Grammar> const& grammars)
 {
-    using std::ranges::to;
-
     auto nontermins = grammars | transform([](auto& e) { return e.first; });
-    return nontermins | to<Container<LeftSide>>();
+    return nontermins;
 }
 
 class TableDrivenParser
@@ -76,9 +75,8 @@ auto DirectLeftRecur2RightRecur(Grammar grammar) -> pair<Grammar, Grammar>
 auto RemoveIndirectLeftRecur(vector<Grammar> grammars) -> vector<Grammar>
 {
     using std::ranges::views::join;
-    using std::ranges::to;
 
-    auto nontermins = Nontermins<vector>(grammars);
+    auto nontermins = Nontermins(grammars);
     for (size_t i = 0; i < nontermins.size(); ++i)
     {
         auto& focus = grammars[i];
@@ -194,18 +192,20 @@ auto SetUnion(Container<Value> const& set1, Container<Value> const& set2) -> Con
     return un;
 }
 
-auto FirstSets(vector<Grammar> const& grammars) -> map<string, set<string>>
+/// <returns>because of using string_view which is constructed from the string in grammars, 
+/// so the return value should only be used while grammars is alive</returns>
+auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_view>>
 {
-    map<string, set<string>> firstSets;
+    map<string_view, set<string_view>> firstSets;
 
-    auto nontermins = Nontermins<set>(grammars);
+    auto nontermins = Nontermins(grammars) | to<set<string_view>>();
     for (auto const& nt : nontermins)
     {
         firstSets.insert({ nt, {} });
     }
 
     /// if it's possible terminal symbol, use this to read
-    auto ReadFirsts = [&](string const& symbol) -> set<string>
+    auto ReadFirsts = [&](string const& symbol) -> set<string_view>
     {
         if (nontermins.contains(symbol))
         {
@@ -224,7 +224,7 @@ auto FirstSets(vector<Grammar> const& grammars) -> map<string, set<string>>
                 {
                     continue;
                 }
-                set<string> epsilon{ "" };
+                set<string_view> epsilon{ "" };
                 auto rhs = SetDifference(ReadFirsts(rule[0]), epsilon);
                 auto trailing = true;
                 for (size_t i = 0; i < rule.size() - 1; ++i)
