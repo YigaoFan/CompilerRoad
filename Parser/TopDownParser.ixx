@@ -167,8 +167,12 @@ auto LeftFactor(Grammar grammar) -> pair<Grammar, vector<Grammar>>
             g.second.push_back(move(rs));
             grammar.second.erase(grammar.second.begin() + i);
         }
-        newGrammars.push_back(move(g));
-        // TODO recursive process the new grammar
+        auto [newG, subNewGrammars] = LeftFactor(move(g));
+        newGrammars.push_back(move(newG));
+        if (not subNewGrammars.empty())
+        {
+            newGrammars.append_range(move(subNewGrammars));
+        }
     }
 
     return { move(grammar), move(newGrammars) };
@@ -205,7 +209,7 @@ auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_v
     }
 
     /// if it's possible terminal symbol, use this to read
-    auto ReadFirsts = [&](string const& symbol) -> set<string_view>
+    auto ReadFirstsOfSymbol = [&](string const& symbol) -> set<string_view>
     {
         if (nontermins.contains(symbol))
         {
@@ -225,13 +229,13 @@ auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_v
                     continue;
                 }
                 set<string_view> epsilon{ "" };
-                auto rhs = SetDifference(ReadFirsts(rule[0]), epsilon);
+                auto rhs = SetDifference(ReadFirstsOfSymbol(rule[0]), epsilon);
                 auto trailing = true;
                 for (size_t i = 0; i < rule.size() - 1; ++i)
                 {
-                    if (ReadFirsts(rule[i]).contains(""))
+                    if (ReadFirstsOfSymbol(rule[i]).contains(""))
                     {
-                        rhs = SetUnion(rhs, SetDifference(ReadFirsts(rule[i + 1]), epsilon));
+                        rhs = SetUnion(rhs, SetDifference(ReadFirstsOfSymbol(rule[i + 1]), epsilon));
                     }
                     else
                     {
@@ -239,7 +243,7 @@ auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_v
                         break;
                     }
                 }
-                if (trailing and ReadFirsts(rule.back()).contains(""))
+                if (trailing and ReadFirstsOfSymbol(rule.back()).contains(""))
                 {
                     rhs.insert("");
                 }
@@ -257,7 +261,70 @@ auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_v
     return firstSets;
 }
 
-auto FollowSets(vector<Grammar> const& grammars) -> map<string, set<string>>
+auto FollowSets(string_view startSymbol, vector<Grammar> const& grammars, map<string_view, set<string_view>> firstSets) -> map<string_view, set<string_view>>
 {
-    throw;
+    map<string_view, set<string_view>> followSets;
+    auto nontermins = Nontermins(grammars) | to<set<string_view>>();
+    for (auto const& nt : nontermins)
+    {
+        followSets.insert({ nt, {} });
+    }
+    followSets[startSymbol] = { "\0" }; // \0 in string means eof, note only work in grammar representation
+    /// if it's possible terminal symbol, use this to read
+    auto ReadFirstsOfSymbol = [&](string const& symbol) -> set<string_view>
+    {
+        if (nontermins.contains(symbol))
+        {
+            return firstSets[symbol];
+        }
+        return { symbol }; // not sure here temp memory allocation is big or small
+    };
+
+    for (auto changing = false; changing; changing = false)
+    {
+        for (auto const& g : grammars)
+        {
+            auto trailer = followSets[g.first];
+            for (auto const& rule : g.second)
+            {
+                if (rule.empty())
+                {
+                    continue;
+                }
+                for (auto i = rule.size() - 1; i >= 0; --i)
+                {
+                    auto& b = rule[i];
+                    if (nontermins.contains(b))
+                    {
+                        // how to remove below copy caused by union operation
+                        if (auto newFollows = SetUnion(followSets[b], trailer); newFollows.size() > followSets[b].size())
+                        {
+                            followSets[b] = move(newFollows);
+                            changing = true;
+                        }
+                        if (auto fs = ReadFirstsOfSymbol(b); fs.contains(""))
+                        {
+                            fs.erase("");
+                            trailer = SetUnion(trailer, fs);
+                        }
+                        else
+                        {
+                            trailer = firstSets[b];
+                        }
+                    }
+                    else
+                    {
+                        trailer = { b };
+                    }
+                }
+            }
+        }
+    }
+
+    return followSets;
+}
+
+auto StartSets()
+{
+    // how to use this sets
 }
