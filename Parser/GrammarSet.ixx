@@ -1,4 +1,4 @@
-export module TopDownParser;
+export module GrammarSet;
 
 import std;
 import ParserBase;
@@ -16,30 +16,11 @@ using std::ranges::views::filter;
 using std::ranges::views::drop;
 using std::ranges::to;
 
-using LeftSide = string;
-using RightSide = vector<string>;
-using Grammar = pair<LeftSide, vector<RightSide>>;
-
 auto Nontermins(vector<Grammar> const& grammars)
 {
     auto nontermins = grammars | transform([](auto& e) { return e.first; });
     return nontermins;
 }
-
-class TableDrivenParser
-{
-public:
-    // how to distinguish nonterminal and terminal(which has enum type) in grammar
-    auto ConstructFrom(vector<Grammar> grammars) -> TableDrivenParser
-    {
-
-    }
-
-    auto Parse() -> ParserResult<int>
-    {
-
-    }
-};
 
 /// <returns>.first is original noterminal, .second is new nonterminal</returns>
 auto DirectLeftRecur2RightRecur(Grammar grammar) -> pair<Grammar, Grammar>
@@ -178,6 +159,7 @@ auto LeftFactor(Grammar grammar) -> pair<Grammar, vector<Grammar>>
     return { move(grammar), move(newGrammars) };
 }
 
+// TODO refine below two function's type to make it support move value from rvalue arg
 template <template <typename...> class Container, typename Value>
 auto SetDifference(Container<Value> const& set1, Container<Value> const& set2) -> Container<Value>
 {
@@ -196,6 +178,19 @@ auto SetUnion(Container<Value> const& set1, Container<Value> const& set2) -> Con
     return un;
 }
 
+auto GenAllSymbolFirstSetGetter(map<string_view, set<string_view>> const& nonterminFirstSets)
+{
+    return [&nonterminFirstSets](string const& symbol) -> set<string_view>
+    {
+        if (nonterminFirstSets.contains(symbol))
+        {
+            return nonterminFirstSets.at(symbol);
+        }
+        return { symbol };
+        // not sure here temp memory allocation is big or small
+    };
+}
+
 /// <returns>because of using string_view which is constructed from the string in grammars, 
 /// so the return value should only be used while grammars is alive</returns>
 auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_view>>
@@ -209,14 +204,7 @@ auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_v
     }
 
     /// if it's possible terminal symbol, use this to read
-    auto ReadFirstsOfSymbol = [&](string const& symbol) -> set<string_view>
-    {
-        if (nontermins.contains(symbol))
-        {
-            return firstSets[symbol];
-        }
-        return { symbol }; // not sure here temp memory allocation is big or small
-    };
+    auto FirstsOf = GenAllSymbolFirstSetGetter(firstSets);
 
     for (auto changing = false; changing; changing = false)
     {
@@ -229,13 +217,13 @@ auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_v
                     continue;
                 }
                 set<string_view> epsilon{ "" };
-                auto rhs = SetDifference(ReadFirstsOfSymbol(rule[0]), epsilon);
+                auto rhs = SetDifference(FirstsOf(rule[0]), epsilon);
                 auto trailing = true;
                 for (size_t i = 0; i < rule.size() - 1; ++i)
                 {
-                    if (ReadFirstsOfSymbol(rule[i]).contains(""))
+                    if (FirstsOf(rule[i]).contains(""))
                     {
-                        rhs = SetUnion(rhs, SetDifference(ReadFirstsOfSymbol(rule[i + 1]), epsilon));
+                        rhs = SetUnion(rhs, SetDifference(FirstsOf(rule[i + 1]), epsilon));
                     }
                     else
                     {
@@ -243,7 +231,7 @@ auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_v
                         break;
                     }
                 }
-                if (trailing and ReadFirstsOfSymbol(rule.back()).contains(""))
+                if (trailing and FirstsOf(rule.back()).contains(""))
                 {
                     rhs.insert("");
                 }
@@ -261,7 +249,7 @@ auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_v
     return firstSets;
 }
 
-auto FollowSets(string_view startSymbol, vector<Grammar> const& grammars, map<string_view, set<string_view>> firstSets) -> map<string_view, set<string_view>>
+auto FollowSets(string_view startSymbol, vector<Grammar> const& grammars, map<string_view, set<string_view>> const& firstSets) -> map<string_view, set<string_view>>
 {
     map<string_view, set<string_view>> followSets;
     auto nontermins = Nontermins(grammars) | to<set<string_view>>();
@@ -271,14 +259,7 @@ auto FollowSets(string_view startSymbol, vector<Grammar> const& grammars, map<st
     }
     followSets[startSymbol] = { "\0" }; // \0 in string means eof, note only work in grammar representation
     /// if it's possible terminal symbol, use this to read
-    auto ReadFirstsOfSymbol = [&](string const& symbol) -> set<string_view>
-    {
-        if (nontermins.contains(symbol))
-        {
-            return firstSets[symbol];
-        }
-        return { symbol }; // not sure here temp memory allocation is big or small
-    };
+    auto FirstsOf = GenAllSymbolFirstSetGetter(firstSets);
 
     for (auto changing = false; changing; changing = false)
     {
@@ -302,14 +283,14 @@ auto FollowSets(string_view startSymbol, vector<Grammar> const& grammars, map<st
                             followSets[b] = move(newFollows);
                             changing = true;
                         }
-                        if (auto fs = ReadFirstsOfSymbol(b); fs.contains(""))
+                        if (auto fs = FirstsOf(b); fs.contains(""))
                         {
                             fs.erase("");
                             trailer = SetUnion(trailer, fs);
                         }
                         else
                         {
-                            trailer = firstSets[b];
+                            trailer = firstSets.at(b);
                         }
                     }
                     else
@@ -324,7 +305,56 @@ auto FollowSets(string_view startSymbol, vector<Grammar> const& grammars, map<st
     return followSets;
 }
 
-auto StartSets()
+/// <summary>
+/// start is for rule, first and follow are for terminal/nonterminal symbol
+/// </summary>
+auto StartSet(Grammar const& grammar, map<string_view, set<string_view>> const& firstSets, map<string_view, set<string_view>> const& followSets) -> vector<set<string_view>>
 {
-    // how to use this sets
+    vector<set<string_view>> starts;
+    auto FirstsOf = GenAllSymbolFirstSetGetter(firstSets);
+    for (auto const& rule : grammar.second)
+    {
+        starts.push_back({});
+        if (not rule.empty())
+        {
+            for (auto const& sym : rule)
+            {
+                if (auto f = FirstsOf(sym); f.contains(""))
+                {
+                    f.erase("");
+                    starts.back() = SetUnion(f, starts.back());
+                }
+                else
+                {
+                    starts.back() = SetUnion(f, starts.back());
+                    goto NextRule;
+                }
+            }
+            starts.back() = SetUnion(starts.back(), followSets.at(grammar.first));
+        }
+    NextRule:
+        continue;
+    }
+    return starts;
+}
+
+// TODO actual need startSymbol?
+/// <returns>match the hierarchy of grammars, can use same index to access it</returns>
+auto Starts(string_view startSymbol, vector<Grammar> const& grammars) -> vector<vector<set<string_view>>>
+{
+    auto firsts = FirstSets(grammars);
+    auto follows = FollowSets(startSymbol, grammars, firsts);
+    vector<vector<set<string_view>>> starts;
+    starts.reserve(grammars.size());
+
+    for (auto const& g : grammars)
+    {
+        starts.push_back(StartSet(g, firsts, follows));
+    }
+    return starts;
+}
+
+export
+{
+    auto Starts(string_view startSymbol, vector<Grammar> const& grammars) -> vector<vector<set<string_view>>>;
 }

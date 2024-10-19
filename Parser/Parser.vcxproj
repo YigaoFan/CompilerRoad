@@ -130,10 +130,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="GrammarSetTest.ixx" />
     <ClCompile Include="Main.ixx" />
     <ClCompile Include="ParserBase.ixx" />
+    <ClCompile Include="ParserGenerator.ixx" />
     <ClCompile Include="String.ixx" />
-    <ClCompile Include="TopDownParser.ixx" />
+    <ClCompile Include="GrammarSet.ixx" />
+    <ClCompile Include="TableDrivenParser.ixx" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

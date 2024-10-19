@@ -4,6 +4,8 @@ import std;
 
 using std::string;
 using std::expected;
+using std::vector;
+using std::pair;
 using Input = string; // TODO change
 
 template <typename T>
@@ -33,12 +35,6 @@ concept IToken = requires (T t)
     { t.Content } -> std::convertible_to<string>;
 };
 
-template <typename T>
-concept ITokenStream = requires (T t)
-{
-    { t.NextToken() } -> IToken;
-    { t.Copy() } -> std::convertible_to<T>;
-};
 
 export
 {
@@ -47,4 +43,13 @@ export
     struct ParseFailResult;
     template <typename T>
     using ParserResult = expected<ParseSuccessResult<T>, ParseFailResult>;
+    using LeftSide = string;
+    using RightSide = vector<string>;
+    using Grammar = pair<LeftSide, vector<RightSide>>;
+    template <typename T>
+    concept ITokenStream = requires (T t)
+    {
+        { t.NextToken() } -> IToken;
+        { t.Copy() } -> std::convertible_to<T>;
+    };
 }
