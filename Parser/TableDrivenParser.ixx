@@ -38,7 +38,7 @@ public:
                 {
                     if (parseTable.contains({ nontermin, termin }))
                     {
-                        throw logic_error(format("grammar isn't LL(1), {{{}, {}}} point to multiple grammar: {}, {}", nontermin, termin, parseTable[{ nontermin, termin }], j)); // not LL(1)
+                        throw logic_error(format("grammar isn't LL(1), {{{}, {}}} point to multiple grammar: {}, {}", nontermin, termin, parseTable[{ nontermin, termin }], j));
                     }
                     parseTable.insert({ { nontermin, termin }, j });
                 }
