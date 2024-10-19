@@ -59,6 +59,7 @@ public:
     {
         grammars = move(that.grammars);
         parseTable = move(that.parseTable);
+        return *this;
     }
 
     auto Parse(ITokenStream auto stream) -> ParserResult<int>
