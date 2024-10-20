@@ -39,5 +39,8 @@
     <ClCompile Include="TableDrivenParser.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="InputStream.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

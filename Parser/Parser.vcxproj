@@ -131,6 +131,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="GrammarSetTest.ixx" />
+    <ClCompile Include="InputStream.ixx" />
     <ClCompile Include="Main.ixx" />
     <ClCompile Include="ParserBase.ixx" />
     <ClCompile Include="ParserGenerator.ixx" />

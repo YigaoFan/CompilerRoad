@@ -3,6 +3,8 @@ export module String;
 import std;
 
 using std::size_t;
+using std::string_view;
+using std::string;
 
 class String
 {
@@ -43,6 +45,17 @@ public:
         that.share = nullptr;
     }
 
+    operator string_view() const
+    {
+        return string_view(share->Str + start, end - start);
+    }
+
+    explicit operator string() const
+    {
+        // test if it will copy, make sure it will copy
+        return string(share->Str + start, end - start);
+    }
+
     auto operator= (String const& that) noexcept -> String&
     {
         --share->RefCount;
@@ -63,6 +76,27 @@ public:
 
         that.share = nullptr;
         return *this;
+    }
+
+    auto operator== (String const& that) const -> bool
+    {
+        if (share == that.share and start == that.start and end == that.end)
+        {
+            return true;
+        }
+        if (Length() == that.Length())
+        {
+            for (auto i = start, j = that.start; i < end; ++i, ++j)
+            {
+                if (share->Str[i] != that.share->Str[j])
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        return false;
     }
 
     auto Substring(size_t start) const -> String
@@ -97,27 +131,6 @@ public:
     auto Length() const -> size_t
     {
         return end - start;
-    }
-
-    auto operator== (String const& that) const -> bool
-    {
-        if (share == that.share and start == that.start and end == that.end)
-        {
-            return true;
-        }
-        if (Length() == that.Length())
-        {
-            for (auto i = start, j = that.start; i < end; ++i, ++j)
-            {
-                if (share->Str[i] != that.share->Str[j])
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        return false;
     }
     
     ~String()

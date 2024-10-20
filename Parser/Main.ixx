@@ -1,6 +1,10 @@
 import std;
+import TableDrivenParser;
 
 int main()
 {
-    std::cout << "Hello World!\n";
+    auto l = "Lexer";
+    auto p = TableDrivenParser::ConstructFrom("program", { });
+    auto s = "Stream";
+    //s | l | p;
 }

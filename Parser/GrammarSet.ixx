@@ -178,6 +178,12 @@ auto SetUnion(Container<Value> const& set1, Container<Value> const& set2) -> Con
     return un;
 }
 
+auto RemoveEpsilon(set<string_view> s) -> set<string_view>
+{
+    s.erase(epsilon);
+    return s;
+}
+
 auto GenAllSymbolFirstSetGetter(map<string_view, set<string_view>> const& nonterminFirstSets)
 {
     return [&nonterminFirstSets](string const& symbol) -> set<string_view>
@@ -216,14 +222,13 @@ auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_v
                 {
                     continue;
                 }
-                set<string_view> epsilon{ "" };
-                auto rhs = SetDifference(FirstsOf(rule[0]), epsilon);
+                auto rhs = RemoveEpsilon(FirstsOf(rule[0]));
                 auto trailing = true;
                 for (size_t i = 0; i < rule.size() - 1; ++i)
                 {
-                    if (FirstsOf(rule[i]).contains(""))
+                    if (FirstsOf(rule[i]).contains(epsilon))
                     {
-                        rhs = SetUnion(rhs, SetDifference(FirstsOf(rule[i + 1]), epsilon));
+                        rhs = SetUnion(rhs, RemoveEpsilon(FirstsOf(rule[i + 1])));
                     }
                     else
                     {
@@ -231,9 +236,9 @@ auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_v
                         break;
                     }
                 }
-                if (trailing and FirstsOf(rule.back()).contains(""))
+                if (trailing and FirstsOf(rule.back()).contains(epsilon))
                 {
-                    rhs.insert("");
+                    rhs.insert(epsilon);
                 }
 
                 // how to remove below copy caused by union operation
@@ -257,7 +262,7 @@ auto FollowSets(string_view startSymbol, vector<Grammar> const& grammars, map<st
     {
         followSets.insert({ nt, {} });
     }
-    followSets[startSymbol] = { "\0" }; // \0 in string means eof, note only work in grammar representation
+    followSets[startSymbol] = { eof };
     /// if it's possible terminal symbol, use this to read
     auto FirstsOf = GenAllSymbolFirstSetGetter(firstSets);
 
@@ -283,9 +288,9 @@ auto FollowSets(string_view startSymbol, vector<Grammar> const& grammars, map<st
                             followSets[b] = move(newFollows);
                             changing = true;
                         }
-                        if (auto fs = FirstsOf(b); fs.contains(""))
+                        if (auto fs = FirstsOf(b); fs.contains(epsilon))
                         {
-                            fs.erase("");
+                            fs = RemoveEpsilon(move(fs));
                             trailer = SetUnion(trailer, fs);
                         }
                         else
@@ -319,9 +324,9 @@ auto StartSet(Grammar const& grammar, map<string_view, set<string_view>> const& 
         {
             for (auto const& sym : rule)
             {
-                if (auto f = FirstsOf(sym); f.contains(""))
+                if (auto f = FirstsOf(sym); f.contains(epsilon))
                 {
-                    f.erase("");
+                    f = RemoveEpsilon(move(f));
                     starts.back() = SetUnion(f, starts.back());
                 }
                 else
@@ -356,5 +361,6 @@ auto Starts(string_view startSymbol, vector<Grammar> const& grammars) -> vector<
 
 export
 {
+    auto Nontermins(vector<Grammar> const& grammars);
     auto Starts(string_view startSymbol, vector<Grammar> const& grammars) -> vector<vector<set<string_view>>>;
 }

@@ -3,6 +3,7 @@ export module TableDrivenParser;
 import std;
 import ParserBase;
 import GrammarSet;
+import InputStream;
 
 using std::vector;
 using std::map;
@@ -10,20 +11,24 @@ using std::string_view;
 using std::size_t;
 using std::pair;
 using std::logic_error;
+using std::string;
+using std::stack;
+using std::set;
 using std::move;
 using std::format;
 
 class TableDrivenParser
 {
 private:
+    string startSymbol;
     vector<Grammar> grammars;
-    map<pair<string_view, string_view>, int> parseTable;
+    map<pair<string_view, string_view>, pair<int, int>> parseTable;
 public:
     // how to distinguish nonterminal and terminal(which has enum type) in grammar
     // do we need convert nonterminal and terminal to int to make program litter faster
-    auto ConstructFrom(string_view startSymbol, vector<Grammar> grammars) -> TableDrivenParser
+    static auto ConstructFrom(string startSymbol, vector<Grammar> grammars) -> TableDrivenParser
     {
-        map<pair<string_view, string_view>, int> parseTable;
+        map<pair<string_view, string_view>, pair<int, int>> parseTable;
 
         auto starts = Starts(startSymbol, grammars);
 
@@ -40,16 +45,16 @@ public:
                     {
                         throw logic_error(format("grammar isn't LL(1), {{{}, {}}} point to multiple grammar: {}, {}", nontermin, termin, parseTable[{ nontermin, termin }], j));
                     }
-                    parseTable.insert({ { nontermin, termin }, j });
+                    parseTable.insert({ { nontermin, termin }, { i, j } });
                 }
             }
 
         }
-        return TableDrivenParser(move(grammars), move(parseTable));
+        return TableDrivenParser(move(startSymbol), move(grammars), move(parseTable));
     }
 
-    TableDrivenParser(vector<Grammar> grammars, map<pair<string_view, string_view>, int> parseTable)
-        : grammars(move(grammars)), parseTable(move(parseTable))
+    TableDrivenParser(string startSymbol, vector<Grammar> grammars, map<pair<string_view, string_view>, pair<int, int>> parseTable)
+        : startSymbol(move(startSymbol)), grammars(move(grammars)), parseTable(move(parseTable))
     { }
 
     TableDrivenParser(TableDrivenParser const&) = delete;
@@ -57,13 +62,72 @@ public:
     TableDrivenParser(TableDrivenParser&&) = default;
     auto operator= (TableDrivenParser&& that) -> TableDrivenParser&
     {
+        startSymbol = move(that.startSymbol);
         grammars = move(that.grammars);
         parseTable = move(that.parseTable);
         return *this;
     }
 
-    auto Parse(ITokenStream auto stream) -> ParserResult<int>
+    // how to cooperate with the type from lexer
+    template <typename Str, IToken Tok>
+    requires Stream<Str, Tok>
+    auto Parse(Str stream) -> ParserResult<AstNode>
     {
-        throw;
+        using std::ranges::to;
+
+        auto nontermins = Nontermins(grammars) | to<set<string_view>>();
+        auto word = stream.NextToken();
+        stack<string> stack;
+        stack.push(eof);
+        stack.push(startSymbol);
+
+        while (true)
+        {
+            auto const& focus = stack.top();
+            if (focus == eof and word == eof) // TODO word should not compare with eof directly
+            {
+                return ParseSuccessResult<AstNode>{};
+            }
+            else if ((not nontermins.contains(focus)) or focus == eof)
+            {
+                // TODO compare
+                if (focus == word)
+                {
+                    stack.pop();
+                    word = stream.NextItem();
+                }
+                else
+                {
+                    return ParseFailResult{ .Message = format("cannot found token for terminal({}) when parse", focus) };
+                }
+            }
+            else
+            {
+                // how to construct AST
+                if (parseTable.contains({ focus, word }))
+                {
+                    stack.pop();
+                    auto [i, j] = parseTable[{ focus, word }];
+                    auto const& rule = grammars[i].second[j];
+                    for (auto const& b : rule)
+                    {
+                        if (b != epsilon)
+                        {
+                            stack.push(b);
+                        }
+                    }
+                }
+                else
+                {
+                    return ParseFailResult{ .Message = format("cannot expand (nonterminal: {}, word: {}) when parse", focus, word) };
+                }
+            }
+        }
+
     }
 };
+
+export
+{
+    class TableDrivenParser;
+}
