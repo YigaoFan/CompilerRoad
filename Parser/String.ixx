@@ -12,7 +12,7 @@ class String
 private:
     struct Share
     {
-        char const* const Str;
+        char const* const Str; // not null termination
         size_t RefCount;
         bool const Releasable = true;
     };
@@ -31,6 +31,12 @@ public:
         : share(new Share{ .Str = literal, .RefCount = 1, .Releasable = false }),
         start(0), end(N - 1)
     {
+    }
+
+    explicit String(string const& s)
+        : share(new Share{ .Str = new char[s.size()], .RefCount = 1, .Releasable = true}), start(0), end(s.size())
+    {
+        s.copy(const_cast<char *const>(share->Str), s.size());
     }
 
     String(String const& that)
@@ -52,7 +58,7 @@ public:
 
     explicit operator string() const
     {
-        // test if it will copy, make sure it will copy
+        // test if it will copy, make sure it will copy to make string use safely
         return string(share->Str + start, end - start);
     }
 
@@ -137,7 +143,7 @@ public:
     {
         if (share->Releasable and share->RefCount == 0)
         {
-            delete share->Str;
+            delete[] share->Str;
             delete share;
             share = nullptr;
         }
