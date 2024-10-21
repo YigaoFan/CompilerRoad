@@ -4,13 +4,6 @@ import std;
 
 using std::string_view;
 
-template <typename T, typename Item>
-concept Stream = requires (T t)
-{
-    { t.NextItem() } -> std::same_as<Item>;
-    { t.Copy() } -> std::same_as<T>;
-};
-
 class StringViewStream
 {
 private:
@@ -31,3 +24,13 @@ public:
         //return { this->mStr, this->currentPos, };
     }
 };
+
+export
+{
+    template <typename T, typename Item>
+    concept Stream = requires (T t)
+    {
+        { t.NextItem() } -> std::same_as<Item>;
+        { t.Copy() } -> std::same_as<T>;
+    };
+}

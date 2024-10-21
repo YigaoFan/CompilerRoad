@@ -69,9 +69,8 @@ public:
     }
 
     // how to cooperate with the type from lexer
-    template <typename Str, IToken Tok>
-    requires Stream<Str, Tok>
-    auto Parse(Str stream) -> ParserResult<AstNode>
+    template <IToken Tok>
+    auto Parse(Stream<Tok> auto stream) -> ParserResult<AstNode>
     {
         using std::ranges::to;
 
