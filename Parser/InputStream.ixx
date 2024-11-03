@@ -3,6 +3,11 @@ export module InputStream;
 import std;
 
 using std::string_view;
+using std::ifstream;
+using std::string;
+using std::move;
+
+using Char = char;
 
 class StringViewStream
 {
@@ -14,14 +19,38 @@ public:
     {
     }
 
-    auto Next() -> char
+    auto NextItem() -> Char
     {
-        //return { .Value = str[this->currentPos++], };
+        return str[this->currentPos++];
     }
 
-    auto Copy() -> StringViewStream
+    auto Copy() -> StringViewStream const
     {
-        //return { this->mStr, this->currentPos, };
+        return { this->str, this->currentPos, };
+    }
+};
+
+class FileStream
+{
+private:
+    ifstream instream;
+public:
+    static auto New(string_view filename) -> FileStream
+    {
+        ifstream istrm(filename.data(), std::ios::binary);
+    }
+
+    FileStream(ifstream instream) : instream(move(instream))
+    { }
+
+    auto NextItem() -> Char
+    {
+        return instream.get();
+    }
+
+    auto Copy() -> FileStream const
+    {
+        throw; // not implement
     }
 };
 
@@ -32,5 +61,6 @@ export
     {
         { t.NextItem() } -> std::same_as<Item>;
         { t.Copy() } -> std::same_as<T>;
+        { t.Eof() } -> std::same_as<bool>;
     };
 }

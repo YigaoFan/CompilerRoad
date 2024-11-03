@@ -73,26 +73,50 @@ public:
     auto Parse(Stream<Tok> auto stream) -> ParserResult<AstNode>
     {
         using std::ranges::to;
+        using std::ranges::views::reverse;
 
+        struct Symbol
+        {
+            string Value;
+            Symbol(string symbol) : Value(move(symbol))
+            { }
+            
+            operator string const& () const
+            {
+                return Value;
+            }
+
+            auto Match(Tok token) const -> bool
+            {
+                // TODO
+            }
+
+            auto IsEof() const -> bool
+            {
+                return Value == eof;
+            }
+        };
         auto nontermins = Nontermins(grammars) | to<set<string_view>>();
-        auto word = stream.NextToken();
-        stack<string> stack;
+        stack<Symbol> stack;
         stack.push(eof);
         stack.push(startSymbol);
+        auto word = stream.NextItem();
+        AstNode workingNode;
 
         while (true)
         {
             auto const& focus = stack.top();
-            if (focus == eof and word == eof) // TODO word should not compare with eof directly
+
+            if (focus.IsEof() and focus.Match(word)) // TODO word should not compare with eof directly
             {
                 return ParseSuccessResult<AstNode>{};
             }
-            else if ((not nontermins.contains(focus)) or focus == eof)
+            else if ((not nontermins.contains(focus)) or focus.IsEof())
             {
-                // TODO compare
-                if (focus == word)
+                if (focus.Match(word))
                 {
                     stack.pop();
+                    // pop means match here
                     word = stream.NextItem();
                 }
                 else
@@ -103,14 +127,14 @@ public:
             else
             {
                 // how to construct AST
-                if (parseTable.contains({ focus, word }))
+                if (parseTable.contains({ focus, word })) // word here actually is word.Type
                 {
-                    stack.pop();
                     auto [i, j] = parseTable[{ focus, word }];
+                    stack.pop(); // note: pop will change focus value, so it's after above step
                     auto const& rule = grammars[i].second[j];
-                    for (auto const& b : rule)
+                    for (auto const& b : reverse(rule))
                     {
-                        if (b != epsilon)
+                        if (b != epsilon) // should we jump over the first item in rule?
                         {
                             stack.push(b);
                         }
