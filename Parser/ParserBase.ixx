@@ -47,9 +47,9 @@ export
     template <typename T>
     concept IToken = requires (T t)
     {
-        t.Type;
+        { t.Type } -> std::convertible_to<int>;
         { t.Value } -> std::same_as<string>;
-        { t.Eof() } -> std::same_as<bool>;
+        { t.IsEof() } -> std::same_as<bool>;
     };
     template <typename TokenType>
     struct Token;

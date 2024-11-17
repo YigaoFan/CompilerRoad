@@ -4,6 +4,7 @@ import std;
 import ParserBase;
 import GrammarSet;
 import InputStream;
+import String;
 
 using std::vector;
 using std::map;
@@ -22,13 +23,13 @@ class TableDrivenParser
 private:
     string startSymbol;
     vector<Grammar> grammars;
-    map<pair<string_view, string_view>, pair<int, int>> parseTable;
+    map<pair<string_view, int>, pair<int, int>> parseTable;
 public:
-    // how to distinguish nonterminal and terminal(which has enum type) in grammar
+    // how to distinguish nonterminal and terminal(which has enum type from Lexer) in grammar
     // do we need convert nonterminal and terminal to int to make program litter faster
-    static auto ConstructFrom(string startSymbol, vector<Grammar> grammars) -> TableDrivenParser
+    static auto ConstructFrom(string startSymbol, vector<Grammar> grammars, map<string, int> terminal2IntTokenType) -> TableDrivenParser
     {
-        map<pair<string_view, string_view>, pair<int, int>> parseTable;
+        map<pair<string_view, int>, pair<int, int>> parseTable;
 
         auto starts = Starts(startSymbol, grammars);
 
@@ -41,11 +42,12 @@ public:
             {
                 for (auto const& termin : start.at(j))
                 {
-                    if (parseTable.contains({ nontermin, termin }))
+                    auto tokenType = terminal2IntTokenType[string(termin)];
+                    if (parseTable.contains({ nontermin, tokenType }))
                     {
                         throw logic_error(format("grammar isn't LL(1), {{{}, {}}} point to multiple grammar: {}, {}", nontermin, termin, parseTable[{ nontermin, termin }], j));
                     }
-                    parseTable.insert({ { nontermin, termin }, { i, j } });
+                    parseTable.insert({ { nontermin, tokenType }, { i, j } });
                 }
             }
 
@@ -86,17 +88,23 @@ public:
                 return Value;
             }
 
-            auto Match(Tok const& token) const -> bool
-            {
-                token.
-            }
-
             auto IsEof() const -> bool
             {
                 return Value == eof;
             }
         };
-        auto nontermins = Nontermins(grammars) | to<set<string_view>>();
+        /// <summary>
+        /// Only work for terminal symbol or eof
+        /// </summary>
+        auto Match = [&terminal2IntTokenType](Symbol const& symbol, Tok const& token) -> bool
+        {
+            if (symbol.IsEof() and token.IsEof())
+            {
+                return true;
+            }
+            return terminal2IntTokenType[symbol] == token.Type;
+        };
+        auto IsTerminal = [nontermins = Nontermins(grammars) | to<set<string_view>>()](Symbol const& t) { return not nontermains.contains(t); };
         stack<Symbol> stack;
         stack.push(eof);
         stack.push(startSymbol);
@@ -109,13 +117,13 @@ public:
         {
             auto const& focus = stack.top();
 
-            if (focus.IsEof() and focus.Match(word)) // TODO word should not compare with eof directly
+            if (focus.IsEof() and Match(focus, word))
             {
                 return ParseSuccessResult<AstNode>{ .Result = move(root), .Remain = "" };
             }
-            else if ((not nontermins.contains(focus)) or focus.IsEof())
+            else if (IsTerminal(focus) or focus.IsEof())
             {
-                if (focus.Match(word))
+                if (Match(focus, word))
                 {
                     stack.pop();
                     // pop means match here
@@ -135,7 +143,7 @@ public:
                 if (parseTable.contains({ focus, word })) // word here actually is word.Type
                 {
                     auto [i, j] = parseTable[{ focus, word }];
-                    stack.pop(); // note: pop will change focus value, so it's after above step
+                    stack.pop(); // note: pop will change focus value, so it move to the bottom of the previous step
                     auto const& rule = grammars[i].second[j];
                     for (auto const& b : reverse(rule))
                     {

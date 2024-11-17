@@ -31,4 +31,5 @@ int main()
         stdStr = myStr;
     }
     cout << format("copy content from String to std::string: {}\n", stdStr);
+    // test share work as expect
 }
