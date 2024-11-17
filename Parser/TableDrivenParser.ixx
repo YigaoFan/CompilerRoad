@@ -70,7 +70,7 @@ public:
 
     // how to cooperate with the type from lexer
     template <IToken Tok>
-    auto Parse(Stream<Tok> auto stream) -> ParserResult<AstNode>
+    auto Parse(Stream<Tok> auto stream) -> ParserResult<AstNode<Tok>>
     {
         using std::ranges::to;
         using std::ranges::views::reverse;
@@ -86,9 +86,9 @@ public:
                 return Value;
             }
 
-            auto Match(Tok token) const -> bool
+            auto Match(Tok const& token) const -> bool
             {
-                // TODO
+                token.
             }
 
             auto IsEof() const -> bool

@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{fa5d972e-26e4-470b-bec1-cd4c634861fe}</ProjectGuid>
-    <RootNamespace>Parser</RootNamespace>
+    <ProjectGuid>{394ccc1c-1d6b-40ed-bc31-d072292b7cb8}</ProjectGuid>
+    <RootNamespace>Base</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -130,13 +130,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="GrammarSetTest.ixx" />
-    <ClCompile Include="InputStream.ixx" />
     <ClCompile Include="Main.ixx" />
-    <ClCompile Include="ParserBase.ixx" />
-    <ClCompile Include="ParserGenerator.ixx" />
-    <ClCompile Include="GrammarSet.ixx" />
-    <ClCompile Include="TableDrivenParser.ixx" />
+    <ClCompile Include="String.ixx" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

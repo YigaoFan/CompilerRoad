@@ -17,8 +17,9 @@ private:
         bool const Releasable = true;
     };
     Share* share;
+    // [start, end)
     size_t start;
-    size_t end; // not included
+    size_t end;
 
 public:
     static auto EmptyString() -> String
@@ -34,7 +35,7 @@ public:
     }
 
     explicit String(string const& s)
-        : share(new Share{ .Str = new char[s.size()], .RefCount = 1, .Releasable = true}), start(0), end(s.size())
+        : share(new Share{ .Str = new char[s.size()], .RefCount = 1, .Releasable = true }), start(0), end(s.size())
     {
         s.copy(const_cast<char *const>(share->Str), s.size());
     }
@@ -53,13 +54,12 @@ public:
 
     operator string_view() const
     {
-        return string_view(share->Str + start, end - start);
+        return string_view(share->Str + start, Length());
     }
 
     explicit operator string() const
     {
-        // test if it will copy, make sure it will copy to make string use safely
-        return string(share->Str + start, end - start);
+        return string(share->Str + start, Length());
     }
 
     auto operator= (String const& that) noexcept -> String&
@@ -107,14 +107,25 @@ public:
 
     auto Substring(size_t start) const -> String
     {
-        return Substring(start, end);
+        return Substring(start, Length());
     }
 
-    auto Substring(size_t start, size_t end) const -> String
+    auto Substring(size_t start, size_t length) const -> String
     {
         auto s{ *this };
-        s.start = start;
-        s.end = end;
+        if (auto newStart = s.start + start; newStart < s.end)
+        {
+            s.start = newStart;
+        }
+        else
+        {
+            s.start = s.end;
+        }
+
+        if (auto newEnd = s.start + length; newEnd < s.end)
+        {
+            s.end = newEnd;
+        }
         return s;
     }
 
@@ -127,6 +138,28 @@ public:
                 return true;
             }
         }
+        return false;
+    }
+
+    auto Contains(String const& s) const -> bool
+    {
+        if (share == s.share)
+        {
+            if (start >= s.start and end >= s.end)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        return Contains(static_cast<string_view>(s));
+    }
+
+    auto Contains(string_view s) const -> bool
+    {
+        return static_cast<string_view>(*this).contains(s);
     }
 
     auto Empty() const -> bool
@@ -141,7 +174,7 @@ public:
     
     ~String()
     {
-        if (share->Releasable and share->RefCount == 0)
+        if (share != nullptr and share->Releasable and share->RefCount == 0)
         {
             delete[] share->Str;
             delete share;
@@ -150,7 +183,36 @@ public:
     }
 };
 
+std::ostream& operator<<(std::ostream& os, String const& s)
+{
+    os << static_cast<string_view>(s);
+    return os;
+}
+
+template<>
+struct std::formatter<String, char> : private std::formatter<string_view, char>
+{
+    constexpr auto parse(std::format_parse_context& ctx)
+    {
+        // not implement
+        auto it = ctx.begin();
+        if (it == ctx.end())
+            return it;
+
+        if (it != ctx.end() && *it != '}')
+            throw std::format_error("Invalid format args for QuotableString.");
+
+        return it;
+    }
+
+    template<class FormatContext>
+    constexpr auto format(String const& t, FormatContext& fc) const
+    {
+        return std::formatter<string_view, char>::format(static_cast<string_view>(t), fc);
+    }
+};
 export
 {
     class String;
+    std::ostream& operator<<(std::ostream& os, String const& s);
 }

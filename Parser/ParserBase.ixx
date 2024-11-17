@@ -31,19 +31,6 @@ struct Token
     string Value;
 };
 
-//template <typename T>
-//concept IToken = requires (T t)
-//{
-//    t.Type;
-//    { t.Value } -> std::convertible_to<string>;
-//};
-
-struct AstNode
-{
-    vector<string> const ChildSymbols;
-    vector<variant<Token<int>, AstNode>> Children;
-};
-
 export
 {
     constexpr string_view epsilon = "";
@@ -66,5 +53,10 @@ export
     };
     template <typename TokenType>
     struct Token;
-    struct AstNode;
+    template <IToken Token>
+    struct AstNode
+    {
+        vector<string> const ChildSymbols;
+        vector<variant<Token, AstNode>> Children;
+    };
 }
