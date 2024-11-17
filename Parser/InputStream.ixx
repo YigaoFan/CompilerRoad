@@ -24,7 +24,7 @@ public:
         return str[this->currentPos++];
     }
 
-    auto Copy() -> StringViewStream const
+    auto Copy() const -> StringViewStream
     {
         return { this->str, this->currentPos, };
     }
@@ -48,7 +48,7 @@ public:
         return instream.get();
     }
 
-    auto Copy() -> FileStream const
+    auto Copy() const -> FileStream
     {
         throw; // not implement
     }

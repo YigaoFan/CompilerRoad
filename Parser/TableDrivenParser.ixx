@@ -101,7 +101,9 @@ public:
         stack.push(eof);
         stack.push(startSymbol);
         auto word = stream.NextItem();
-        AstNode workingNode;
+        AstNode root;
+        stack<AstNode*> workingNodes{};
+        workingNodes.push(&root);
 
         while (true)
         {
@@ -109,7 +111,7 @@ public:
 
             if (focus.IsEof() and focus.Match(word)) // TODO word should not compare with eof directly
             {
-                return ParseSuccessResult<AstNode>{};
+                return ParseSuccessResult<AstNode>{ .Result = move(root), .Remain = "" };
             }
             else if ((not nontermins.contains(focus)) or focus.IsEof())
             {
@@ -117,11 +119,14 @@ public:
                 {
                     stack.pop();
                     // pop means match here
+                    // combine focus info and word info into AstNode
+                    workNodes.top()->Children.push_back(word);
+                    workingNodes.push()
                     word = stream.NextItem();
                 }
                 else
                 {
-                    return ParseFailResult{ .Message = format("cannot found token for terminal({}) when parse", focus) };
+                    return ParseFailResult{ .Message = format("cannot found token for terminal symbol({}) when parse", focus) };
                 }
             }
             else
@@ -142,7 +147,7 @@ public:
                 }
                 else
                 {
-                    return ParseFailResult{ .Message = format("cannot expand (nonterminal: {}, word: {}) when parse", focus, word) };
+                    return ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, word: {}) when parse", focus, word) };
                 }
             }
         }

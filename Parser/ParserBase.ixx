@@ -8,6 +8,7 @@ using std::string_view;
 using std::expected;
 using std::vector;
 using std::pair;
+using std::variant;
 using Input = string; // TODO change
 
 template <typename T>
@@ -39,8 +40,8 @@ struct Token
 
 struct AstNode
 {
-    Token<int> Token; // TODO temp
-    vector<AstNode> Children;
+    vector<string> const ChildSymbols;
+    vector<variant<Token<int>, AstNode>> Children;
 };
 
 export
@@ -60,7 +61,8 @@ export
     concept IToken = requires (T t)
     {
         t.Type;
-        { t.Value } -> std::convertible_to<string>;
+        { t.Value } -> std::same_as<string>;
+        { t.Eof() } -> std::same_as<bool>;
     };
     template <typename TokenType>
     struct Token;
