@@ -7,6 +7,12 @@ int main()
 {
     auto s = String("Hello World");
     cout << s << endl;
+    auto newS0 = s + s;
+    cout << newS0 << endl;
+    auto newS1 = s + "I am very OK";
+    cout << newS1 << endl;
+    auto newS2 = s + 'a';
+    cout << newS2 << endl;
     auto otherS = String("Hello World");
     cout << format("compare result: {}\n", s == otherS);
 
@@ -31,5 +37,7 @@ int main()
         stdStr = myStr;
     }
     cout << format("copy content from String to std::string: {}\n", stdStr);
+
+
     // test share work as expect
 }

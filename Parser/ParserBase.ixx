@@ -1,6 +1,7 @@
 export module ParserBase;
 
 import std;
+import String;
 import InputStream;
 
 using std::string;
@@ -41,8 +42,8 @@ export
     struct ParseFailResult;
     template <typename T>
     using ParserResult = expected<ParseSuccessResult<T>, ParseFailResult>;
-    using LeftSide = string;
-    using RightSide = vector<string>;
+    using LeftSide = String;
+    using RightSide = vector<String>;
     using Grammar = pair<LeftSide, vector<RightSide>>;
     template <typename T>
     concept IToken = requires (T t)

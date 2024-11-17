@@ -5,6 +5,7 @@ import std;
 using std::size_t;
 using std::string_view;
 using std::string;
+using std::copy;
 
 class String
 {
@@ -20,6 +21,10 @@ private:
     // [start, end)
     size_t start;
     size_t end;
+    
+    String(Share* share, size_t start, size_t end)
+        : share(share), start(start), end(end)
+    { }
 
 public:
     static auto EmptyString() -> String
@@ -103,6 +108,43 @@ public:
         }
 
         return false;
+    }
+
+    auto operator< (String const& that) const -> bool
+    {
+        return static_cast<string_view>(*this) < static_cast<string_view>(that);
+    }
+
+    auto operator+ (char c) const->String
+    {
+        auto len = Length() + 1;
+        auto newShare = new Share{ .Str = new char[len], .RefCount = 1, .Releasable = true };
+        *copy(share->Str + start, share->Str + end, const_cast<char*>(newShare->Str)) = c;
+        return String(newShare, 0, len);
+    }
+
+    auto operator+ (String const& that) const -> String
+    {
+        return operator+(static_cast<string_view>(that));
+    }
+
+    template <size_t N>
+    auto operator+ (char const(&literal)[N]) const -> String
+    {
+        auto len = Length() + N - 1;
+        auto newShare = new Share{ .Str = new char[len], .RefCount = 1, .Releasable = true};
+        copy(literal, literal + N - 1,
+            copy(share->Str + start, share->Str + end, const_cast<char*>(newShare->Str)));
+        return String(newShare, 0, len);
+    }
+
+    auto operator+ (string_view s) const -> String
+    {
+        auto len = Length() + s.length();
+        auto newShare = new Share{ .Str = new char[len], .RefCount = 1, .Releasable = true};
+        copy(s.begin(), s.end(),
+            copy(share->Str + start, share->Str + end, const_cast<char*>(newShare->Str)));
+        return String(newShare, 0, len);
     }
 
     auto Substring(size_t start) const -> String

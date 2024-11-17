@@ -64,8 +64,8 @@ auto RemoveIndirectLeftRecur(vector<Grammar> grammars) -> vector<Grammar>
         auto firsts = 
             focus.second 
             | filter([](auto& i) { return not i.empty(); }) // filter affect the below index
-            | transform([](auto& i) -> string { return i.front(); });
-        map<string, set<size_t>> first2Indexes;
+            | transform([](auto& i) -> String { return i.front(); });
+        map<String, set<size_t>> first2Indexes;
         for (size_t j = 0; auto&& f : firsts)
         {
             // not sure the firsts will copy the first word from grammar or just a ref.
@@ -117,7 +117,7 @@ auto LeftFactor(Grammar grammar) -> pair<Grammar, vector<Grammar>>
     using std::format;
     using std::make_move_iterator;
 
-    map<string, vector<size_t>> prefix2Indexes;
+    map<String, vector<size_t>> prefix2Indexes;
     for (size_t i = 0; i < grammar.second.size(); ++i)
     {
         // should get max common prefix TODO
@@ -132,7 +132,7 @@ auto LeftFactor(Grammar grammar) -> pair<Grammar, vector<Grammar>>
     vector<Grammar> newGrammars;
     for (auto& [prefix, ids] : prefix2Indexes | filter([](auto& i) { return i.second.size() > 1; }))
     {
-        auto newNonterminName = format("{}_lf_{}", grammar.first, prefix);
+        auto newNonterminName = String(format("{}_lf_{}", grammar.first, prefix));
         Grammar g{ newNonterminName, {} };
         // keep the first item of ids in grammar.second
         // drop the remain items
@@ -186,7 +186,7 @@ auto RemoveEpsilon(set<string_view> s) -> set<string_view>
 
 auto GenAllSymbolFirstSetGetter(map<string_view, set<string_view>> const& nonterminFirstSets)
 {
-    return [&nonterminFirstSets](string const& symbol) -> set<string_view>
+    return [&nonterminFirstSets](String const& symbol) -> set<string_view>
     {
         if (nonterminFirstSets.contains(symbol))
         {
@@ -343,7 +343,6 @@ auto StartSet(Grammar const& grammar, map<string_view, set<string_view>> const& 
     return starts;
 }
 
-// TODO actual need startSymbol?
 /// <returns>match the hierarchy of grammars, can use same index to access it</returns>
 auto Starts(string_view startSymbol, vector<Grammar> const& grammars) -> vector<vector<set<string_view>>>
 {
