@@ -57,7 +57,7 @@ export
     template <IToken Token>
     struct AstNode
     {
-        vector<string> const ChildSymbols;
+        vector<String> const ChildSymbols;
         vector<variant<Token, AstNode>> Children;
     };
 }

@@ -2,9 +2,9 @@ export module GrammarSet;
 
 import std;
 import ParserBase;
+import String;
 
 using std::vector;
-using std::string;
 using std::string_view;
 using std::pair;
 using std::size_t;
