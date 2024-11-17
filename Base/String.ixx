@@ -187,7 +187,7 @@ public:
     {
         if (share == s.share)
         {
-            if (start >= s.start and end >= s.end)
+            if (s.start >= start and s.end <= end)
             {
                 return true;
             }
