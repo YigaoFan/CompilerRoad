@@ -1,4 +1,4 @@
-export module InputStream;
+export module Parser:InputStream;
 
 import std;
 

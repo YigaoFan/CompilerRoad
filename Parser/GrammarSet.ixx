@@ -1,8 +1,8 @@
-export module GrammarSet;
+export module Parser:GrammarSet;
 
 import std;
-import ParserBase;
-import String;
+import :ParserBase;
+import Base;
 
 using std::vector;
 using std::string_view;

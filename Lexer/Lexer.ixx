@@ -14,9 +14,18 @@ using std::move;
 template <typename T>
 class Lexer
 {
-public:
+private:
     RefineFiniteAutomata dfa;
 public:
+    struct Token
+    {
+        T Type;
+        string Value;
+        auto IsEof() const -> bool
+        {
+            return Value.empty(); // TODO: maybe change in the future
+        }
+    };
     template <size_t Size>
     static auto New(array<pair<string, T>, Size> const& identifyGroup) -> Lexer
     {
@@ -36,9 +45,9 @@ public:
     Lexer(RefineFiniteAutomata dfa) : dfa(move(dfa))
     { }
 
-    auto Lex(string code) -> vector<pair<string, T>> const
+    auto Lex(string code) -> vector<Token> const
     {
-
+        throw;
     }
 };
 

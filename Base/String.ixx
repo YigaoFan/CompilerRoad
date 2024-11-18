@@ -1,4 +1,4 @@
-export module String;
+export module Base:String;
 
 import std;
 

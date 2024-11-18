@@ -13,33 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="Test">
-      <UniqueIdentifier>{84094560-edfe-4ac5-b875-c86dffba110b}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.ixx">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="GrammarSet.ixx">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ParserBase.ixx">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ParserGenerator.ixx">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="GrammarSetTest.ixx">
-      <Filter>Test</Filter>
-    </ClCompile>
-    <ClCompile Include="TableDrivenParser.ixx">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="InputStream.ixx">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Parser.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

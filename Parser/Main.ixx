@@ -1,5 +1,5 @@
 import std;
-import TableDrivenParser;
+import Parser;
 
 int main()
 {

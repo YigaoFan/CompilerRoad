@@ -1,7 +1,7 @@
-export module ParserGenerator;
+export module Parser:ParserGenerator;
 
 import std;
-import ParserBase;
+import :ParserBase;
 
 using std::vector;
 

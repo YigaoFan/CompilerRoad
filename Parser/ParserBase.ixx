@@ -1,8 +1,8 @@
-export module ParserBase;
+export module Parser:ParserBase;
 
 import std;
-import String;
-import InputStream;
+import Base;
+import :InputStream;
 
 using std::string;
 using std::string_view;

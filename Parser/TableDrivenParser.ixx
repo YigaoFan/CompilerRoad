@@ -1,10 +1,10 @@
-export module TableDrivenParser;
+export module Parser:TableDrivenParser;
 
 import std;
-import ParserBase;
-import GrammarSet;
-import InputStream;
-import String;
+import :ParserBase;
+import :GrammarSet;
+import :InputStream;
+import Base;
 
 using std::vector;
 using std::map;
