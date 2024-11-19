@@ -126,11 +126,11 @@ private:
     friend auto OrWithoutMergeAcceptState(vector<FiniteAutomata<Input>> fas) -> FiniteAutomata<Input>;
 
     constexpr static int epsilon = 0;
-    State startState;
-    vector<State> acceptingStates;
     Graph<Input> transitionTable;
 
 public:
+    State const startState;
+    vector<State> const acceptingStates;
     static auto From(Input c) -> FiniteAutomata<Input>
     {
         auto transitionTable = Graph<Input>();
@@ -316,9 +316,16 @@ public:
         //print("Compress from {} to {}", chars.size(), newCharIndexes.size());
     }
 
+    auto RunFromStart(char input) const -> set<State>
+    {
+        return Run(fa.startState, input);
+    }
+
     auto Run(State from, char input) const -> set<State>
     {
-        for (auto& x : classification)
+        // TODO how to optimize the search below
+        // divide into two part to compare
+        for (auto const& x : classification)
         {
             if (input >= x.first.first and input <= x.first.second)
             {

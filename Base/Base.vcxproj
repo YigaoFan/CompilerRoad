@@ -134,6 +134,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Base.ixx" />
+    <ClCompile Include="Debug.ixx" />
     <ClCompile Include="Main.ixx" />
     <ClCompile Include="String.ixx" />
   </ItemGroup>
