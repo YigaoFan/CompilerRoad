@@ -6,12 +6,41 @@ using std::pair;
 using std::size_t;
 using std::set;
 using std::string;
+using std::optional;
+using std::map;
 using std::move;
 
 using State = size_t;
 
+/// <summary>
+/// support DFA now
+/// </summary>
+/// <typeparam name="InputItem"></typeparam>
 template <typename InputItem>
 class Graph
+{
+private:
+    map<State, map<InputItem, State>> transitions;
+public:
+    Graph(map<State, map<InputItem, State>> transitions) : transitions(move(transitions))
+    {
+    }
+
+    /// <summary>
+    /// recommend for DFA which <param>from</param> and <param>input</param> are identical to one path
+    /// </summary>
+    auto Run(State from, InputItem input) const -> optional<State>
+    {
+        if (auto& t = transitions.at(from); t.contains(input))
+        {
+            return t.at(input);
+        }
+        return {};
+    }
+};
+
+template <typename InputItem>
+class GraphDraft
 {
 private:
     template <typename T, typename Char>
@@ -19,14 +48,15 @@ private:
     vector<pair<State, vector<pair<InputItem, State>>>> transitions; // TODO to map, or add a function to freeze to map
 
 public:
-    Graph() = default;
-    Graph(vector<pair<int, vector<pair<InputItem, int>>>> transitions) : transitions(move(transitions))
+    GraphDraft() = default;
+    GraphDraft(vector<pair<int, vector<pair<InputItem, int>>>> transitions) : transitions(move(transitions))
     { }
 
     auto operator[](State from) const -> vector<pair<InputItem, State>> const&
     {
         return transitions[from].second;
     }
+
     /// <summary>
     /// state should keep [0..n] continuously
     /// </summary>
@@ -43,13 +73,12 @@ public:
         transitions[from].second.push_back({ input, to });
     }
 
-    auto Merge(Graph b) -> size_t
+    auto Merge(GraphDraft b) -> size_t
     {
         auto offset = this->StatesCount();
         b.OffsetStates(offset);
         transitions.reserve(transitions.size() + b.transitions.size());
         transitions.append_range(move(b.transitions));
-        //move(b.transitions.begin(), b.transitions.end(), std::back_inserter(transitions));
         return offset;
     }
 
@@ -111,6 +140,24 @@ public:
         }
         return pres;
     }
+
+    /// <summary>
+    /// support DFA freeze currently
+    /// </summary>
+    auto Freeze() const -> Graph<InputItem>
+    {
+        map<State, map<InputItem, State>> transitionMap;
+        for (auto& t : transitions)
+        {
+            map<InputItem, State> rh;
+            for (auto& i : t.second)
+            {
+                rh[i.first] = i.second;
+            }
+            transitionMap.insert({ t.first, move(rh) });
+        }
+        return Graph(move(transitionMap));
+    }
 private:
     auto OffsetStates(size_t offset) -> void
     {
@@ -130,9 +177,8 @@ private:
     }
 };
 
-
 template<>
-struct std::formatter<Graph<char>, char> // TODO after VS 17.12 it will support partial specification in other module
+struct std::formatter<GraphDraft<char>, char> // TODO after VS 17.12 it will support partial specification in other module
 {
     template<class ParseContext>
     constexpr ParseContext::iterator parse(ParseContext& ctx)
@@ -148,7 +194,7 @@ struct std::formatter<Graph<char>, char> // TODO after VS 17.12 it will support 
     }
 
     template<class FormatContext>
-    constexpr auto format(Graph<char>& t, FormatContext& fc) const
+    constexpr auto format(GraphDraft<char>& t, FormatContext& fc) const
     {
         using std::back_inserter;
         using std::format_to;
@@ -168,8 +214,11 @@ struct std::formatter<Graph<char>, char> // TODO after VS 17.12 it will support 
 export
 {
     template <typename InputItem>
+    class GraphDraft;
+    template <typename InputItem>
     class Graph;
+
     using State = size_t;
     template<>
-    struct std::formatter<Graph<char>>;
+    struct std::formatter<GraphDraft<char>>;
 }

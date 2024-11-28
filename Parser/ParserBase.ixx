@@ -25,13 +25,6 @@ struct ParseFailResult
     string Message;
 };
 
-template <typename TokenType>
-struct Token
-{
-    TokenType Type;
-    string Value;
-};
-
 export
 {
     constexpr string_view epsilon = "";
@@ -48,12 +41,10 @@ export
     template <typename T>
     concept IToken = requires (T t)
     {
-        { t.Type } -> std::convertible_to<int>;
+        { t.Type } -> std::convertible_to<int>; // when lex comes with conflict, it will chose the one with lower int value
         { t.Value } -> std::same_as<string>;
         { t.IsEof() } -> std::same_as<bool>;
     };
-    template <typename TokenType>
-    struct Token;
     template <IToken Token>
     struct AstNode
     {

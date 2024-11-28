@@ -36,7 +36,7 @@ public:
 
         auto starts = Starts(startSymbol, grammars); // string_view here is from grammar
 
-        for (size_t i = 0; auto const& g : grammars)
+        for (auto i = 0; auto const& g : grammars)
         {
             auto const& nontermin = g.first;
             auto const& start = starts.at(i);
