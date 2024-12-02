@@ -10,7 +10,7 @@ using std::optional;
 using std::map;
 using std::move;
 
-using State = size_t;
+export using State = size_t;
 
 /// <summary>
 /// support DFA now
@@ -218,7 +218,6 @@ export
     template <typename InputItem>
     class Graph;
 
-    using State = size_t;
     template<>
     struct std::formatter<GraphDraft<char>>;
 }

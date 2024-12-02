@@ -10,29 +10,26 @@ using std::expected;
 using std::vector;
 using std::pair;
 using std::variant;
-using Input = string; // TODO change
-
-template <typename T>
-struct ParseSuccessResult
-{
-    T Result;
-    Input Remain;
-};
-
-struct ParseFailResult
-{
-    // maybe add failed position later
-    string Message;
-};
 
 export
 {
     constexpr string_view epsilon = "";
     /// \0 in string means eof, note only work in grammar representation
     constexpr string_view eof = "\0";
+    //using Input = string; // TODO change
+
     template <typename T>
-    struct ParseSuccessResult;
-    struct ParseFailResult;
+    struct ParseSuccessResult
+    {
+        T Result;
+        String Remain;
+    };
+
+    struct ParseFailResult
+    {
+        // maybe add failed position later
+        string Message;
+    };
     template <typename T>
     using ParserResult = expected<ParseSuccessResult<T>, ParseFailResult>;
     using LeftSide = String;

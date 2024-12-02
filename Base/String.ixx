@@ -231,8 +231,8 @@ std::ostream& operator<<(std::ostream& os, String const& s)
     return os;
 }
 
-template<>
-struct std::formatter<String, char> : private std::formatter<string_view, char>
+export template<>
+struct std::formatter<String, char>
 {
     constexpr auto parse(std::format_parse_context& ctx)
     {
@@ -250,9 +250,10 @@ struct std::formatter<String, char> : private std::formatter<string_view, char>
     template<class FormatContext>
     constexpr auto format(String const& t, FormatContext& fc) const
     {
-        return std::formatter<string_view, char>::format(static_cast<string_view>(t), fc);
+        return std::format_to(fc.out(), "{}", static_cast<string_view>(t));
     }
 };
+
 export
 {
     class String;

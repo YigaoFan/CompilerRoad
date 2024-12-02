@@ -15,9 +15,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Main.ixx">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="String.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -25,6 +22,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Debug.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Main.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

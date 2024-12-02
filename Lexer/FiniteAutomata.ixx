@@ -31,88 +31,6 @@ using std::ranges::to;
 using std::ranges::views::transform;
 using std::ranges::views::filter;
 
-// formatter should be in a file
-template<> // before using format<set<size_t>>
-struct std::formatter<std::set<std::size_t>, char>
-{
-    constexpr auto parse(std::format_parse_context& ctx)
-    {
-        auto it = ctx.begin();
-        if (it == ctx.end())
-            return it;
-
-        if (it != ctx.end() && *it != '}')
-            throw std::format_error("Invalid format args for QuotableString.");
-
-        return it;
-    }
-
-    template<class FormatContext>
-    constexpr auto format(std::set<std::size_t>& t, FormatContext& fc) const
-    {
-        using std::back_inserter;
-        using std::format_to;
-        std::string out;
-        format_to(back_inserter(out), "{{");
-
-        for (auto first = true; auto x : t)
-        {
-            if (first)
-            {
-                first = false;
-                format_to(back_inserter(out), "{}", x);
-            }
-            else
-            {
-                format_to(back_inserter(out), ", {}", x);
-            }
-        }
-        format_to(back_inserter(out), "}}");
-
-        return format_to(fc.out(), "{}", out);
-    }
-};
-template<> // before using format<set<size_t>>
-struct std::formatter<std::vector<std::size_t>, char>
-{
-    constexpr auto parse(std::format_parse_context& ctx)
-    {
-        auto it = ctx.begin();
-        if (it == ctx.end())
-            return it;
-
-        if (it != ctx.end() && *it != '}')
-            throw std::format_error("Invalid format args for QuotableString.");
-
-        return it;
-    }
-
-    template<class FormatContext>
-    constexpr auto format(std::vector<std::size_t>& t, FormatContext& fc) const
-    {
-        using std::back_inserter;
-        using std::format_to;
-        std::string out;
-        format_to(back_inserter(out), "[");
-
-        for (auto first = true; auto x : t)
-        {
-            if (first)
-            {
-                first = false;
-                format_to(back_inserter(out), "{}", x);
-            }
-            else
-            {
-                format_to(back_inserter(out), ", {}", x);
-            }
-        }
-        format_to(back_inserter(out), "]");
-
-        return format_to(fc.out(), "{}", out);
-    }
-};
-
 template <typename Input, typename AcceptStateResult>
 class FiniteAutomata
 {
@@ -290,47 +208,6 @@ public:
         using std::move_iterator;
         // maybe some states don't have result? allow or not allow
         return FiniteAutomata<Input, AcceptStateResult>(transitionTable.Freeze(), StartState, map(move_iterator(AcceptState2Result.begin()), move_iterator(AcceptState2Result.end())));
-    }
-};
-
-template<> // before using format<set<size_t>>
-struct std::formatter<std::map<std::size_t, std::size_t>, char>
-{
-    constexpr auto parse(std::format_parse_context& ctx)
-    {
-        auto it = ctx.begin();
-        if (it == ctx.end())
-            return it;
-
-        if (it != ctx.end() && *it != '}')
-            throw std::format_error("Invalid format args for QuotableString.");
-
-        return it;
-    }
-
-    template<class FormatContext>
-    constexpr auto format(std::map<std::size_t, std::size_t>& t, FormatContext& fc) const
-    {
-        using std::back_inserter;
-        using std::format_to;
-        std::string out;
-        format_to(back_inserter(out), "{{");
-
-        for (auto first = true; auto x : t)
-        {
-            if (first)
-            {
-                first = false;
-                format_to(back_inserter(out), "{}", x);
-            }
-            else
-            {
-                format_to(back_inserter(out), ", {}", x);
-            }
-        }
-        format_to(back_inserter(out), "}}");
-
-        return format_to(fc.out(), "{}", out);
     }
 };
 
