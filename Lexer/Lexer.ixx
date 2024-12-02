@@ -14,6 +14,7 @@ using std::map;
 using std::set;
 using std::pair;
 using std::size_t;
+using std::optional;
 using std::move;
 
 template <typename T>
@@ -62,18 +63,44 @@ public:
             return toks;
         }
 
-        size_t i = 1;
-        for (auto r = dfa.RunFromStart(code.front()); r.has_value(); )
+        // TODO check: init tokenStart like this is OK?
+        for (size_t i = 0, tokenStart = i; ;)
         {
-            if (auto& s = r.value(); s.second.has_value())
+            vector<pair<pair<State, optional<T>>, size_t>> stack;
+
+            // here is little different with the figure 2.13 which has init state s0 from start
+            for (auto r = dfa.RunFromStart(code[i]); r.has_value(); )
             {
-                toks.push_back(Token{ .Type = s.second.value(), .Value = "", });
+                auto& s = r.value();
+                if (s.second.has_value())
+                {
+                    stack.clear();
+                }
+                auto nextState = s.first;
+                stack.push_back({ move(s), i });
+                r = dfa.Run(nextState, code[++i]);
+            }
+            if (stack.empty())
+            {
+                break;
+            }
+            // expect the stack's length is at least 1.
+            for (auto& state = stack.back().first; not (state.second.has_value() or stack.size() <= 1); stack.pop_back())
+            {
+            }
+
+            if (auto& state = stack.back().first; state.second.has_value())
+            {
+                auto lexemeLen = stack.back().second - tokenStart + 1;
+                toks.push_back(Token{ .Type = state.second.value(), .Value = string(code.substr(tokenStart, lexemeLen)), });
+                tokenStart = stack.back().second + 1;
             }
             else
             {
-                r = dfa.Run(s.first, code[i++]);
+                break;
             }
         }
+
         return toks;
     }
 };
