@@ -63,37 +63,53 @@ public:
             return toks;
         }
 
-        // TODO check: init tokenStart like this is OK?
-        for (size_t i = 0, tokenStart = i; ;)
+        set<pair<State, size_t>> failed;
+        for (size_t i = 0, tokenStart = i; i < code.length();)
         {
             vector<pair<pair<State, optional<T>>, size_t>> stack;
 
             // here is little different with the figure 2.13 which has init state s0 from start
-            for (auto r = dfa.RunFromStart(code[i]); r.has_value(); )
+            auto r = dfa.RunFromStart(code[i]);
+        CheckState:
+            if (r.has_value())
             {
                 auto& s = r.value();
+                if (failed.contains({ s.first, i }))
+                {
+                    stack.pop_back(); // need do this? current state is not pushed into stack, why pop up last state pair?
+                    break;
+                }
                 if (s.second.has_value())
                 {
                     stack.clear();
                 }
                 auto nextState = s.first;
                 stack.push_back({ move(s), i });
-                r = dfa.Run(nextState, code[++i]);
+                if (++i < code.length())
+                {
+                    r = dfa.Run(nextState, code[i]);
+                    goto CheckState;
+                }
+                else
+                {
+                    break;
+                }
             }
             if (stack.empty())
             {
                 break;
             }
-            // expect the stack's length is at least 1.
             for (auto& state = stack.back().first; not (state.second.has_value() or stack.size() <= 1); stack.pop_back())
             {
             }
 
-            if (auto& state = stack.back().first; state.second.has_value())
+            if (auto& result = stack.back().first; result.second.has_value())
             {
+                failed.insert({ result.first, i });
                 auto lexemeLen = stack.back().second - tokenStart + 1;
-                toks.push_back(Token{ .Type = state.second.value(), .Value = string(code.substr(tokenStart, lexemeLen)), });
+                toks.push_back(Token{ .Type = result.second.value(), .Value = string(code.substr(tokenStart, lexemeLen)), });
                 tokenStart = stack.back().second + 1;
+                i = tokenStart;
             }
             else
             {
