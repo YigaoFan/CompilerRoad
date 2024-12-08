@@ -11,11 +11,14 @@ using std::vector;
 using std::pair;
 using std::variant;
 
+template <typename A, typename B>
+concept ExplicitConvertibleTo = requires (A a) { static_cast<B>(a); };
+
 export
 {
     constexpr string_view epsilon = "";
     /// \0 in string means eof, note only work in grammar representation
-    constexpr string_view eof = "\0";
+    constexpr auto eof = "\0";
     //using Input = string; // TODO change
 
     template <typename T>
@@ -38,8 +41,8 @@ export
     template <typename T>
     concept IToken = requires (T t)
     {
-        { t.Type } -> std::convertible_to<int>; // when lex comes with conflict, it will chose the one with lower int value
-        { t.Value } -> std::same_as<string>;
+        { t.Type } -> ExplicitConvertibleTo<int>; // when lex comes with conflict, it will chose the one with lower int value
+        { t.Value } -> std::convertible_to<string>;
         { t.IsEof() } -> std::same_as<bool>;
     };
     template <IToken Token>

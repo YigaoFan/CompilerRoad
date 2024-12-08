@@ -110,6 +110,32 @@ public:
         return false;
     }
 
+    auto operator== (char const* that) const -> bool
+    {
+        if (share->Str == that)
+        {
+            if (start == 0)
+            {
+                return Length() == string_view(that).length();
+            }
+            else
+            {
+                return false;
+            }
+        }
+        return string_view(*this) == string_view(that);
+    }
+
+    template <size_t N>
+    auto operator== (char const(&that)[N]) const -> bool
+    {
+        if (Length() != N)
+        {
+            return false;
+        }
+        return operator== (static_cast<char const*>(that));
+    }
+
     auto operator< (String const& that) const -> bool
     {
         return static_cast<string_view>(*this) < static_cast<string_view>(that);

@@ -140,6 +140,9 @@
     <ClCompile Include="Main.ixx" />
     <ClCompile Include="String.ixx" />
   </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="String.natvis" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

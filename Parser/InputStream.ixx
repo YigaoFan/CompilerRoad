@@ -60,7 +60,7 @@ export
     concept Stream = requires (T t)
     {
         { t.NextItem() } -> std::same_as<Item>;
-        { t.Copy() } -> std::same_as<T>;
-        { t.Eof() } -> std::same_as<bool>;
+        //{ t.Copy() } -> std::same_as<T>; // TODO: used?
+        //{ t.Eof() } -> std::same_as<bool>; // TODO: used?
     };
 }

@@ -20,6 +20,23 @@ using std::format;
 class TableDrivenParser
 {
 private:
+    struct Symbol
+    {
+        String Value;
+        Symbol(String symbol) : Value(move(symbol))
+        {
+        }
+
+        //operator string_view() const // not support define this operator in function, so move it out
+        //{
+        //    return Value;
+        //}
+
+        auto IsEof() const -> bool
+        {
+            return Value == eof;
+        }
+    };
     String startSymbol;
     vector<Grammar> grammars;
     map<pair<String, int>, pair<int, int>> parseTable;
@@ -65,13 +82,7 @@ public:
     TableDrivenParser(TableDrivenParser const&) = delete;
     auto operator= (TableDrivenParser const&) -> TableDrivenParser = delete;
     TableDrivenParser(TableDrivenParser&&) = default;
-    auto operator= (TableDrivenParser&& that) -> TableDrivenParser&
-    {
-        startSymbol = move(that.startSymbol);
-        grammars = move(that.grammars);
-        parseTable = move(that.parseTable);
-        return *this;
-    }
+    auto operator= (TableDrivenParser&& that) -> TableDrivenParser& = default;
 
     // how to cooperate with the type from lexer
     template <IToken Tok>
@@ -80,37 +91,22 @@ public:
         using std::ranges::to;
         using std::ranges::views::reverse;
         using std::ranges::views::filter;
+        using std::unexpected;
 
-        struct Symbol
-        {
-            String Value;
-            Symbol(String symbol) : Value(move(symbol))
-            { }
-            
-            operator string const& () const
-            {
-                return Value;
-            }
-
-            auto IsEof() const -> bool
-            {
-                return Value == eof;
-            }
-        };
         /// <summary>
         /// Only work for terminal symbol or eof
         /// </summary>
-        auto MatchTerminal = [&terminal2IntTokenType](Symbol const& symbol, Tok const& token) -> bool
+        auto MatchTerminal = [this](Symbol const& symbol, Tok const& token) -> bool
         {
             if (symbol.IsEof() and token.IsEof())
             {
                 return true;
             }
-            return terminal2IntTokenType[symbol] == token.Type;
+            return static_cast<int>(terminal2IntTokenType.at(symbol.Value)) == static_cast<int>(token.Type);
         };
-        auto IsTerminal = [nontermins = Nontermins(grammars) | to<set<string_view>>()](Symbol const& t) { return not nontermins.contains(t); };
+        auto IsTerminal = [nontermins = Nontermins(grammars) | to<set<string_view>>()](Symbol const& t) { return not nontermins.contains(t.Value); };
         stack<Symbol> symbolStack;
-        symbolStack.push(eof);
+        symbolStack.push(String(eof));
         symbolStack.push(startSymbol);
         auto word = stream.NextItem();
         AstNode<Tok> root;
@@ -123,7 +119,7 @@ public:
 
             if (focus.IsEof() and MatchTerminal(focus, word))
             {
-                return ParseSuccessResult<AstNode>{ .Result = move(root), .Remain = "" };
+                return ParseSuccessResult<AstNode<Tok>>{ .Result = move(root), .Remain = "" };
             }
             else if (IsTerminal(focus) or focus.IsEof())
             {
@@ -137,19 +133,19 @@ public:
                 }
                 else
                 {
-                    return ParseFailResult{ .Message = format("cannot found token for terminal symbol({}) when parse", focus) };
+                    return unexpected(ParseFailResult{ .Message = format("cannot found token for terminal symbol({}) when parse", focus.Value) });
                 }
             }
             else
             {
-                if (parseTable.contains({ focus, word.Type }))
+                if (auto dest = pair{ focus.Value, static_cast<int>(word.Type) }; parseTable.contains(dest))
                 {
-                    auto [i, j] = parseTable[{ focus, word.Type }];
+                    auto [i, j] = parseTable[dest];
                     symbolStack.pop(); // note: pop will change focus value, so it move to the bottom of the previous step
                     auto const& rule = grammars[i].second[j];
-                    auto filteredRule = rule | filter([](auto x) { return x != epsilon; });
-                    workingNodes.top()->Children.push_back(AstNode<Tok>{ .ChildSymbols = filteredRule, .Children = {} }); // maybe need to<vector<String>>()
-                    workingNodes.push(&workingNodes.top()->Children.back());
+                    auto filteredRule = rule | filter([](auto x) { return x != epsilon; }) | to<vector<String>>();
+                    workingNodes.top()->Children.push_back(AstNode<Tok>{ .ChildSymbols = filteredRule, .Children = {} });
+                    workingNodes.push(&std::get<AstNode<Tok>>(workingNodes.top()->Children.back()));
 
                     for (auto const& b : reverse(filteredRule))
                     {
@@ -161,7 +157,7 @@ public:
                 }
                 else
                 {
-                    return ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, word: {}) when parse", focus, word) };
+                    return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, word: {}) when parse", focus.Value, word) });
                 }
             }
         }

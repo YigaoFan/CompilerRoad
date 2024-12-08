@@ -18,20 +18,23 @@ using std::optional;
 using std::move;
 
 template <typename T>
+struct Token
+{
+    T Type;
+    string Value;
+    auto IsEof() const -> bool
+    {
+        return Value.empty(); // TODO: maybe change in the future
+    }
+};
+
+template <typename T>
 class Lexer
 {
 private:
     RefineFiniteAutomata<T> dfa;
+    using Token = Token<T>;
 public:
-    struct Token
-    {
-        T Type;
-        string Value;
-        auto IsEof() const -> bool
-        {
-            return Value.empty(); // TODO: maybe change in the future
-        }
-    };
     template <size_t Size>
     static auto New(array<pair<string, T>, Size> const& identifyGroup) -> Lexer
     {
@@ -43,8 +46,6 @@ public:
             fas.push_back(Minimize<false>(NFA2DFA(ConstructNFAFrom(i.first, i.second, classification))));
         }
 
-        // add Minize here to each fa
-        // add constructing and freeze state to code, then we can simple store the (state, result) pair in code, then freeze to map when need to be running
         auto fullFa = OrWithoutMergeAcceptState(move(fas));
         auto dfa = NFA2DFA(move(fullFa));
         auto mdfa = Minimize<true>(move(dfa));
@@ -114,8 +115,36 @@ public:
     }
 };
 
+
+template<typename T>
+struct std::formatter<Token<T>, char>
+{
+    constexpr auto parse(std::format_parse_context& ctx)
+    {
+        // not implement
+        auto it = ctx.begin();
+        if (it == ctx.end())
+            return it;
+
+        if (it != ctx.end() && *it != '}')
+            throw std::format_error("Invalid format args for QuotableString.");
+
+        return it;
+    }
+
+    template<class FormatContext>
+    constexpr auto format(Token<T> const& t, FormatContext& fc) const
+    {
+        return std::format_to(fc.out(), "Type: {}, Value: {}", t.Type, t.Value);
+    }
+};
+
 export
 {
     template <typename T>
     class Lexer;
+    template <typename T>
+    struct Token;
+    template<typename T>
+    struct std::formatter<Token<T>, char>;
 }
