@@ -35,17 +35,18 @@ public:
     template <size_t Size>
     static auto New(array<pair<string, T>, Size> const& identifyGroup) -> Lexer
     {
-        vector<FiniteAutomataDraft<size_t, T>> nfas{};
+        vector<FiniteAutomataDraft<size_t, T>> fas{};
         vector<pair<set<State>, T>> accepts2TokenType;
         map<pair<char, char>, size_t> classification{};
         for (auto& i : identifyGroup)
         {
-            nfas.push_back(ConstructNFAFrom(i.first, i.second, classification));
+            fas.push_back(Minimize<false>(NFA2DFA(ConstructNFAFrom(i.first, i.second, classification))));
         }
 
+        // add Minize here to each fa
         // add constructing and freeze state to code, then we can simple store the (state, result) pair in code, then freeze to map when need to be running
-        auto fullNfa = OrWithoutMergeAcceptState(move(nfas));
-        auto dfa = NFA2DFA(move(fullNfa));
+        auto fullFa = OrWithoutMergeAcceptState(move(fas));
+        auto dfa = NFA2DFA(move(fullFa));
         auto mdfa = Minimize<true>(move(dfa));
         return Lexer(RefineFiniteAutomata(mdfa.Freeze(), move(classification)));
     }
@@ -74,11 +75,11 @@ public:
             if (r.has_value())
             {
                 auto& s = r.value();
-                if (failed.contains({ s.first, i }))
-                {
-                    stack.pop_back(); // need do this? current state is not pushed into stack, why pop up last state pair?
-                    break;
-                }
+                //if (failed.contains({ s.first, i }))
+                //{
+                //    stack.pop_back(); // need do this? current state is not pushed into stack, why pop up last state pair?
+                //    break;
+                //}
                 if (s.second.has_value())
                 {
                     stack.clear();
@@ -89,10 +90,6 @@ public:
                 {
                     r = dfa.Run(nextState, code[i]);
                     goto CheckState;
-                }
-                else
-                {
-                    break;
                 }
             }
             if (stack.empty())
@@ -110,10 +107,6 @@ public:
                 toks.push_back(Token{ .Type = result.second.value(), .Value = string(code.substr(tokenStart, lexemeLen)), });
                 tokenStart = stack.back().second + 1;
                 i = tokenStart;
-            }
-            else
-            {
-                break;
             }
         }
 

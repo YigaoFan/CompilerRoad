@@ -19,6 +19,7 @@ using std::map;
 using std::optional;
 using std::out_of_range;
 using std::runtime_error;
+using std::move_iterator;
 using std::back_inserter;
 using std::isdigit;
 using std::isalpha;
@@ -90,7 +91,7 @@ public:
         auto s1 = transitionTable.AllocateState();
         transitionTable.AddTransition(s0, c, s1);
 
-        return FiniteAutomataDraft(s0, { s1 }, move(transitionTable));
+        return FiniteAutomataDraft(s0, { s1 }, move(transitionTable), {});
     }
 
     // follow priority order to run FiniteAutomataDraft<char> combination, parentheses, closure, concatenation and alternation
@@ -123,6 +124,7 @@ public:
         auto newAccept = a.transitionTable.AllocateState();
 
         a.transitionTable.AddTransition(newStart, epsilon, a.StartState);
+        a.transitionTable.AddTransition(newStart, epsilon, newAccept);
 
         for (auto accept : a.AcceptingStates)
         {
@@ -174,7 +176,7 @@ public:
         return FiniteAutomataDraft<char>(start, { accept }, move(transitionTable));
     }
 
-    FiniteAutomataDraft(State StartState, vector<State> acceptingStates, GraphDraft<Input> transitionTable, vector<pair<State, AcceptStateResult>> acceptState2Result = {})
+    FiniteAutomataDraft(State StartState, vector<State> acceptingStates, GraphDraft<Input> transitionTable, vector<pair<State, AcceptStateResult>> acceptState2Result)
         : StartState(StartState), AcceptingStates(move(acceptingStates)), transitionTable(move(transitionTable)), AcceptState2Result(move(acceptState2Result))
     { }
 
@@ -205,7 +207,6 @@ public:
 
     auto Freeze() const -> FiniteAutomata<Input, AcceptStateResult>
     {
-        using std::move_iterator;
         // maybe some states don't have result? allow or not allow
         return FiniteAutomata<Input, AcceptStateResult>(transitionTable.Freeze(), StartState, map(move_iterator(AcceptState2Result.begin()), move_iterator(AcceptState2Result.end())));
     }
@@ -216,10 +217,10 @@ class RefineFiniteAutomata
 {
 private:
     FiniteAutomata<size_t, Result> fa;
-    map<pair<char, char>, size_t> classification;
+    vector<pair<pair<char, char>, size_t>> classification;
 public:
     RefineFiniteAutomata(FiniteAutomata<size_t, Result> fa, map<pair<char, char>, size_t> classification)
-        : fa(move(fa)), classification(move(classification))
+        : fa(move(fa)), classification(move_iterator(classification.begin()), move_iterator(classification.end())) // already sorted
     { }
 
     /// <summary>
@@ -261,16 +262,46 @@ public:
 
     auto Run(State from, char input) const -> optional<pair<State, optional<Result>>>
     {
-        // TODO how to optimize the search below
-        // divide into two part to compare, to make it faster
-        for (auto const& x : classification)
+        if (auto r = fa.Run(from, static_cast<size_t>(input)); r.has_value())
         {
-            if (input >= x.first.first and input <= x.first.second)
+            return r;
+        }
+
+        // divide into 2 parts to search
+        for (size_t i = classification.size() / 2; ;)
+        {
+            auto const& x = classification[i];
+            if (input >= x.first.first)
             {
-                return fa.Run(from, x.second);
+                if (input <= x.first.second)
+                {
+                    return fa.Run(from, x.second);
+                }
+                else // move right
+                {
+                    if (auto next = (classification.size() + i) / 2; next != i)
+                    {
+                        i = next;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+            else // move left
+            {
+                if (auto next = i / 2; next != i)
+                {
+                    i = next;
+                }
+                else
+                {
+                    break;
+                }
             }
         }
-        return fa.Run(from, static_cast<size_t>(input));
+        return {};
     }
 };
 
@@ -468,7 +499,9 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<cha
 
     if (regExp.length() == 1)
     {
-        return FiniteAutomataDraft<size_t, Result>::From(static_cast<size_t>(regExp[0]));
+        auto fa = FiniteAutomataDraft<size_t, Result>::From(static_cast<size_t>(regExp[0]));
+        fa.SetAcceptStateResult(move(acceptStateResult));
+        return fa;
     }
     auto postfixRegExp = Convert2PostfixForm(regExp);
     auto operandStack = vector<variant<char, FiniteAutomataDraft<size_t, Result>>>();
@@ -810,12 +843,17 @@ auto Minimize(FiniteAutomataDraft<Input, Result> dfa) -> FiniteAutomataDraft<Inp
         throw std::logic_error("don't find accept states in partition");
     }
     //RefineFiniteAutomata::CompressInput(transitionTable_mdfa);
-    return FiniteAutomataDraft<Input, Result>(start_mdfa.value(), move(accepts_mdfa), move(transitionTable_mdfa));
+    return FiniteAutomataDraft<Input, Result>(start_mdfa.value(), move(accepts_mdfa), move(transitionTable_mdfa), move(accept2Result));
 }
 
 template <typename Input, typename Result>
 auto OrWithoutMergeAcceptState(vector<FiniteAutomataDraft<Input, Result>> fas) -> FiniteAutomataDraft<Input, Result>
 {
+    if (fas.size() == 1)
+    {
+        return move(fas.back());
+    }
+
     GraphDraft<Input> transitionTable;
     auto start = transitionTable.AllocateState();
     vector<State> accepts;
