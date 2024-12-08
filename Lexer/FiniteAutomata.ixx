@@ -878,8 +878,8 @@ auto OrWithoutMergeAcceptState(vector<FiniteAutomataDraft<Input, Result>> fas) -
     return FiniteAutomataDraft<Input, Result>(start, move(accepts), move(transitionTable), move(acceptState2Result));
 }
 
-template<typename Result>
-struct std::formatter<FiniteAutomataDraft<char, Result>, char>// : std::formatter<Graph<char>, char> // change Char to char, and inherit to use base format
+template<typename Input, typename Result>
+struct std::formatter<FiniteAutomataDraft<Input, Result>, char>
 {
     constexpr auto parse(std::format_parse_context& ctx)
     {
@@ -894,7 +894,7 @@ struct std::formatter<FiniteAutomataDraft<char, Result>, char>// : std::formatte
     }
 
     template<class FormatContext>
-    constexpr auto format(FiniteAutomataDraft<char, Result>& t, FormatContext& fc) const
+    constexpr auto format(FiniteAutomataDraft<Input, Result>& t, FormatContext& fc) const
     {
         using std::format_to;
         std::string out;
@@ -922,8 +922,8 @@ export
     auto Minimize(FiniteAutomataDraft<Input, Result> dfa) -> FiniteAutomataDraft<Input, Result>;
     template <typename Input, typename Result>
     auto OrWithoutMergeAcceptState(vector<FiniteAutomataDraft<Input, Result>> fas) -> FiniteAutomataDraft<Input, Result>;
-    template<typename Result>
-    struct std::formatter<FiniteAutomataDraft<char, Result>, char>;
+    template<typename Input, typename Result>
+    struct std::formatter<FiniteAutomataDraft<Input, Result>, char>;
     template <typename Input, typename Result>
     class FiniteAutomataDraft;
     template <typename Result>
