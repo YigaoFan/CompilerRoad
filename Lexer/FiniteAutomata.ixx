@@ -266,20 +266,37 @@ public:
         {
             return r;
         }
-
-        // divide into 2 parts to search
-        for (size_t i = classification.size() / 2; ;)
+        else if (classification.empty())
         {
-            auto const& x = classification[i];
-            if (input >= x.first.first)
+            return r;
+        }
+        else
+        {
+            // divide into 2 parts to search
+            for (size_t i = classification.size() / 2; ;)
             {
-                if (input <= x.first.second)
+                auto const& x = classification[i];
+                if (input >= x.first.first)
                 {
-                    return fa.Run(from, x.second);
+                    if (input <= x.first.second)
+                    {
+                        return fa.Run(from, x.second);
+                    }
+                    else // move right
+                    {
+                        if (auto next = (classification.size() + i) / 2; next != i)
+                        {
+                            i = next;
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
                 }
-                else // move right
+                else // move left
                 {
-                    if (auto next = (classification.size() + i) / 2; next != i)
+                    if (auto next = i / 2; next != i)
                     {
                         i = next;
                     }
@@ -288,19 +305,9 @@ public:
                         break;
                     }
                 }
-            }
-            else // move left
-            {
-                if (auto next = i / 2; next != i)
-                {
-                    i = next;
-                }
-                else
-                {
-                    break;
-                }
-            }
+            }            
         }
+
         return {};
     }
 };
