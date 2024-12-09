@@ -393,6 +393,11 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
                 output.push_back(op);
             }
             break;
+        case '\\':
+            output.push_back('\\');
+            ++i;
+            output.push_back(regExp[i]);
+            goto addPossibleRelationWithNextChar;
         default:
             output.push_back(c);
         addPossibleRelationWithNextChar:
@@ -504,12 +509,26 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<cha
         regExp = regExp.substr(1, regExp.length() - 2);
     }
 
-    if (regExp.length() == 1)
+    switch (regExp.length())
+    {
+    case 1:
     {
         auto fa = FiniteAutomataDraft<size_t, Result>::From(static_cast<size_t>(regExp[0]));
         fa.SetAcceptStateResult(move(acceptStateResult));
         return fa;
     }
+    case 2:
+        if (regExp[0] == '\\')
+        {
+            auto fa = FiniteAutomataDraft<size_t, Result>::From(static_cast<size_t>(regExp[1]));
+            fa.SetAcceptStateResult(move(acceptStateResult));
+            return fa;
+        }
+        break;
+    default:
+        break;
+    }
+    
     auto postfixRegExp = Convert2PostfixForm(regExp);
     auto operandStack = vector<variant<char, FiniteAutomataDraft<size_t, Result>>>();
     struct
@@ -567,6 +586,10 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<cha
             operandStack.push_back(FiniteAutomataDraft<size_t, Result>::Or(std::visit(converter, move(b)), std::visit(converter, move(a))));
             break;
         }
+        case '\\':
+            ++i;
+            operandStack.push_back(postfixRegExp[i]);
+            break;
         default:
             // number or alphabet
             operandStack.push_back(c);

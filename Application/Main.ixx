@@ -14,6 +14,8 @@ enum class TokType : int
     Id,
     Space,
     ClassName,
+    LeftParen,
+    RightParen,
 };
 
 template<>
@@ -85,16 +87,18 @@ auto TestRollBack() -> void
 
 int main()
 {
-    TestRollBack();
+    //TestRollBack();
     std::array rules = 
     {
-        pair<string, TokType>{ "if|for|function", TokType::Keyword },
+        pair<string, TokType>{ "if|for|func", TokType::Keyword },
         pair<string, TokType>{ "[a-zA-Z][a-zA-Z0-9_]*", TokType::Id },
         pair<string, TokType>{ "[A-Z][a-zA-Z0-9]*", TokType::ClassName },
+        pair<string, TokType>{ "\\(", TokType::LeftParen },
+        pair<string, TokType>{ "\\)", TokType::RightParen },
         pair<string, TokType>{ " ", TokType::Space },
     };
     auto l = Lexer<TokType>::New(rules);
-    string code = "if ab0 for Hello function";
+    string code = "if ab0 for Hello func (a)";
     auto tokens = l.Lex(code);
     auto p = TableDrivenParser::ConstructFrom("program",
     {

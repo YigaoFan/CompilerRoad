@@ -84,7 +84,6 @@ public:
     TableDrivenParser(TableDrivenParser&&) = default;
     auto operator= (TableDrivenParser&& that) -> TableDrivenParser& = default;
 
-    // how to cooperate with the type from lexer
     template <IToken Tok>
     auto Parse(Stream<Tok> auto stream) -> ParserResult<AstNode<Tok>>
     {
@@ -141,7 +140,7 @@ public:
                 if (auto dest = pair{ focus.Value, static_cast<int>(word.Type) }; parseTable.contains(dest))
                 {
                     auto [i, j] = parseTable[dest];
-                    symbolStack.pop(); // note: pop will change focus value, so it move to the bottom of the previous step
+                    symbolStack.pop();
                     auto const& rule = grammars[i].second[j];
                     auto filteredRule = rule | filter([](auto x) { return x != epsilon; }) | to<vector<String>>();
                     workingNodes.top()->Children.push_back(AstNode<Tok>{ .ChildSymbols = filteredRule, .Children = {} });
