@@ -76,11 +76,11 @@ public:
             if (r.has_value())
             {
                 auto& s = r.value();
-                //if (failed.contains({ s.first, i }))
-                //{
-                //    stack.pop_back(); // need do this? current state is not pushed into stack, why pop up last state pair?
-                //    break;
-                //}
+                if (failed.contains({ s.first, i }))
+                {
+                    std::println("no need to continue state {} at {}", s.first, i);
+                    goto RollBack2Accept;
+                }
                 if (s.second.has_value())
                 {
                     stack.clear();
@@ -89,16 +89,20 @@ public:
                 stack.push_back({ move(s), i });
                 if (++i < code.length())
                 {
+                    std::println("run state {} by {}", nextState, i);
                     r = dfa.Run(nextState, code[i]);
                     goto CheckState;
                 }
             }
+        RollBack2Accept:
             if (stack.empty())
             {
                 break;
             }
-            for (auto& state = stack.back().first; not (state.second.has_value() or stack.size() <= 1); stack.pop_back())
+            for (auto state = &stack.back().first; not (state->second.has_value() or stack.size() <= 1); stack.pop_back(), state = &stack.back().first)
             {
+                std::println("failed record: state {} at {}", state->first, stack.back().second);
+                failed.insert({ state->first, stack.back().second });
             }
 
             if (auto& result = stack.back().first; result.second.has_value())

@@ -8,7 +8,7 @@ using std::string;
 using std::string_view;
 using std::vector;
 
-enum class TokType : int // TODO recover to enum class
+enum class TokType : int
 {
     Keyword,
     Id,
@@ -72,9 +72,20 @@ struct VectorStream
     }
 };
 
+auto TestRollBack() -> void
+{
+    std::array rules =
+    {
+        pair<string, TokType>{ "ab|(ab)*c", TokType::Id },
+    };
+    string rollbackStr = "abababab";
+    auto l = Lexer<TokType>::New(rules);
+    auto toks = l.Lex(rollbackStr);
+}
+
 int main()
 {
-    constexpr bool b = std::is_convertible_v<TokType, int>;
+    TestRollBack();
     std::array rules = 
     {
         pair<string, TokType>{ "if|for|function", TokType::Keyword },
@@ -83,7 +94,7 @@ int main()
         pair<string, TokType>{ " ", TokType::Space },
     };
     auto l = Lexer<TokType>::New(rules);
-    string code = "if ab0 for Hello";
+    string code = "if ab0 for Hello function";
     auto tokens = l.Lex(code);
     auto p = TableDrivenParser::ConstructFrom("program",
     {
