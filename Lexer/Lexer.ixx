@@ -57,7 +57,7 @@ public:
 
     // TODO change to generator when VS release 17.13 which will support std::generator
     // this function should obtain the ownership of the code, so use string. We can transfer to Stream interface in the future
-    auto Lex(string_view code) -> vector<Token> const
+    auto Lex(string_view code) const -> vector<Token>
     {
         vector<Token> toks{};
         if (code.empty())

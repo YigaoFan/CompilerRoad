@@ -16,6 +16,9 @@ enum class TokType : int
     ClassName,
     LeftParen,
     RightParen,
+    LeftBracket,
+    RightBracket,
+    Comma,
 };
 
 template<>
@@ -87,6 +90,10 @@ auto TestRollBack() -> void
 
 int main()
 {
+    using std::ranges::views::filter;
+    using std::ranges::to;
+    using std::move;
+
     //TestRollBack();
     std::array rules = 
     {
@@ -95,26 +102,41 @@ int main()
         pair<string, TokType>{ "[A-Z][a-zA-Z0-9]*", TokType::ClassName },
         pair<string, TokType>{ "\\(", TokType::LeftParen },
         pair<string, TokType>{ "\\)", TokType::RightParen },
+        pair<string, TokType>{ "{", TokType::LeftBracket },
+        pair<string, TokType>{ "}", TokType::RightBracket },
+        pair<string, TokType>{ ",", TokType::Comma },
         pair<string, TokType>{ " ", TokType::Space },
     };
     auto l = Lexer<TokType>::New(rules);
-    string code = "if ab0 for Hello func (a)";
-    auto tokens = l.Lex(code);
+    //string code = "if ab0 for Hello func (a)";
+    string code = "func a (a, b) {}";
+    auto tokens = l.Lex(code) | filter([](auto& x) -> bool { return x.Type != TokType::Space; }) | to<vector<Token<TokType>>>();
     auto p = TableDrivenParser::ConstructFrom("program",
     {
         { "program", {
             { "function" }
         }},
         { "function", {
-            { "func", "id", "(", "paras", ")", "{", "}"} // how to process ( in parser: define it in lexer or parse it directly
+            { "func", "id", "(", "paras", ")", "{", "}" } // how to process ( in parser: define it in lexer or parse it directly
         }},
-        { "paras", {
-            { "id", ",", "paras" },
-            { "id" },
+        { "paras", { // for paras, how to distinguish below two rule? TODO In LL(1), how to handle this?
+            //{ "id", ",", "paras" },
+            //{ "id" },
+            { "id", "more-paras" },
+        }},
+        { "more-paras", {
+            { ",", "paras"},
+            {}
         }},
     },
     {
+        // TODO remove the cast
         { "id", static_cast<int>(TokType::Id) },
+        { ",", static_cast<int>(TokType::Comma) },
+        { "(", static_cast<int>(TokType::LeftParen) },
+        { ")", static_cast<int>(TokType::RightParen) },
+        { "{", static_cast<int>(TokType::LeftBracket) },
+        { "}", static_cast<int>(TokType::RightBracket) },
     });
-    p.Parse<Token<TokType>>(VectorStream{ .Tokens = move(tokens) });
+    auto ast = p.Parse<Token<TokType>>(VectorStream{ .Tokens = move(tokens) });
 }

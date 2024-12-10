@@ -212,8 +212,9 @@ auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_v
     /// if it's possible terminal symbol, use this to read
     auto FirstsOf = GenAllSymbolFirstSetGetter(firstSets);
 
-    for (auto changing = false; changing; changing = false)
+    for (auto changing = true; changing; )
     {
+        changing = false;
         for (auto const& g : grammars)
         {
             for (auto const& rule : g.second)
@@ -244,6 +245,7 @@ auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_v
                 // how to remove below copy caused by union operation
                 if (auto newFirsts = SetUnion(firstSets[g.first], rhs); newFirsts.size() > firstSets[g.first].size())
                 {
+                    std::println("{} firsts chnaged: {}", g.first, newFirsts);
                     firstSets[g.first] = move(newFirsts);
                     changing = true;
                 }
@@ -266,8 +268,9 @@ auto FollowSets(string_view startSymbol, vector<Grammar> const& grammars, map<st
     /// if it's possible terminal symbol, use this to read
     auto FirstsOf = GenAllSymbolFirstSetGetter(firstSets);
 
-    for (auto changing = false; changing; changing = false)
+    for (auto changing = true; changing; )
     {
+        changing = false;
         for (auto const& g : grammars)
         {
             auto trailer = followSets[g.first];
@@ -277,7 +280,7 @@ auto FollowSets(string_view startSymbol, vector<Grammar> const& grammars, map<st
                 {
                     continue;
                 }
-                for (auto i = rule.size() - 1; i >= 0; --i)
+                for (int i = rule.size() - 1; i >= 0; --i)
                 {
                     auto& b = rule[i];
                     if (nontermins.contains(b))
