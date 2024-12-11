@@ -55,6 +55,21 @@ struct std::formatter<TokType, char>
         case TokType::ClassName:
             s = "ClassName";
             break;
+        case TokType::Comma:
+            s = "Comma";
+            break;
+        case TokType::LeftBracket:
+            s = "LeftBracket";
+            break;
+        case TokType::RightBracket:
+            s = "RightBracket";
+            break;
+        case TokType::LeftParen:
+            s = "LeftParen";
+            break;
+        case TokType::RightParen:
+            s = "RightParen";
+            break;
         }
         return std::format_to(fc.out(), "{}", s);
     }
@@ -109,7 +124,7 @@ int main()
     };
     auto l = Lexer<TokType>::New(rules);
     //string code = "if ab0 for Hello func (a)";
-    string code = "func a (a, b) {}";
+    string code = "func a (b, c) {}";
     auto tokens = l.Lex(code) | filter([](auto& x) -> bool { return x.Type != TokType::Space; }) | to<vector<Token<TokType>>>();
     auto p = TableDrivenParser::ConstructFrom("program",
     {
@@ -119,18 +134,24 @@ int main()
         { "function", {
             { "func", "id", "(", "paras", ")", "{", "}" } // how to process ( in parser: define it in lexer or parse it directly
         }},
-        { "paras", { // for paras, how to distinguish below two rule? TODO In LL(1), how to handle this?
+        { "paras", { // for paras, how to distinguish below two rule? TODO In LL(1), how to handle this? left factor
             //{ "id", ",", "paras" },
             //{ "id" },
-            { "id", "more-paras" },
+            { "id", "more-paras" }, // TODO not at least one para
         }},
         { "more-paras", {
             { ",", "paras"},
             {}
         }},
+        { "literal", {
+            { "string" },
+            { "boolean" },
+            { "number" },
+        }},
     },
     {
         // TODO remove the cast
+        { "func", static_cast<int>(TokType::Keyword) },
         { "id", static_cast<int>(TokType::Id) },
         { ",", static_cast<int>(TokType::Comma) },
         { "(", static_cast<int>(TokType::LeftParen) },
@@ -138,5 +159,6 @@ int main()
         { "{", static_cast<int>(TokType::LeftBracket) },
         { "}", static_cast<int>(TokType::RightBracket) },
     });
+    tokens.push_back({ .Value = "" });
     auto ast = p.Parse<Token<TokType>>(VectorStream{ .Tokens = move(tokens) });
 }

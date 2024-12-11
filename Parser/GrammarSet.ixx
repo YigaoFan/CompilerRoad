@@ -323,23 +323,20 @@ auto StartSet(Grammar const& grammar, map<string_view, set<string_view>> const& 
     for (auto const& rule : grammar.second)
     {
         starts.push_back({});
-        if (not rule.empty())
+        for (auto const& sym : rule)
         {
-            for (auto const& sym : rule)
+            if (auto f = FirstsOf(sym); f.contains(epsilon))
             {
-                if (auto f = FirstsOf(sym); f.contains(epsilon))
-                {
-                    f = RemoveEpsilon(move(f));
-                    starts.back() = SetUnion(f, starts.back());
-                }
-                else
-                {
-                    starts.back() = SetUnion(f, starts.back());
-                    goto NextRule;
-                }
+                f = RemoveEpsilon(move(f));
+                starts.back() = SetUnion(f, starts.back());
             }
-            starts.back() = SetUnion(starts.back(), followSets.at(grammar.first));
+            else
+            {
+                starts.back() = SetUnion(f, starts.back());
+                goto NextRule;
+            }
         }
+        starts.back() = SetUnion(starts.back(), followSets.at(grammar.first));
     NextRule:
         continue;
     }
@@ -365,4 +362,5 @@ export
 {
     auto Nontermins(vector<Grammar> const& grammars);
     auto Starts(string_view startSymbol, vector<Grammar> const& grammars) -> vector<vector<set<string_view>>>;
+    auto LeftFactor(Grammar grammar) -> pair<Grammar, vector<Grammar>>;
 }

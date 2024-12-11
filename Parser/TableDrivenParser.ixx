@@ -49,6 +49,12 @@ public:
     /// </summary>
     static auto ConstructFrom(String startSymbol, vector<Grammar> grammars, map<string_view, int> terminal2IntTokenType) -> TableDrivenParser
     {
+        // TODO
+        //vector<pair<Grammar, vector<Grammar>>> xs;
+        //for (auto g : grammars)
+        //{
+        //    xs.push_back(LeftFactor(g));
+        //}
         map<pair<String, int>, pair<int, int>> parseTable;
 
         auto starts = Starts(startSymbol, grammars); // string_view here is from grammar
@@ -57,7 +63,6 @@ public:
         {
             auto const& nontermin = g.first;
             auto const& start = starts.at(i);
-            ++i;
             for (auto j = 0; j < start.size(); ++j)
             {
                 for (auto const& termin : start.at(j))
@@ -70,8 +75,9 @@ public:
                     parseTable.insert({ { nontermin, tokenType }, { i, j } });
                 }
             }
-
+            ++i;
         }
+        std::println("parse table: {}", parseTable);
         return TableDrivenParser(move(startSymbol), move(grammars), move(parseTable), move(terminal2IntTokenType));
     }
 
@@ -108,8 +114,8 @@ public:
         symbolStack.push(String(eof));
         symbolStack.push(startSymbol);
         auto word = stream.NextItem();
-        AstNode<Tok> root;
-        stack<AstNode<Tok>*> workingNodes{};
+        AstNode<Tok> root{ .Name = "root", .ChildSymbols = { startSymbol } }; // TODO why "root" is shown as "???" in VS debugger
+        stack<AstNode<Tok>*> workingNodes;
         workingNodes.push(&root);
 
         while (true)
@@ -142,15 +148,24 @@ public:
                     auto [i, j] = parseTable[dest];
                     symbolStack.pop();
                     auto const& rule = grammars[i].second[j];
-                    auto filteredRule = rule | filter([](auto x) { return x != epsilon; }) | to<vector<String>>();
-                    workingNodes.top()->Children.push_back(AstNode<Tok>{ .ChildSymbols = filteredRule, .Children = {} });
+                    auto filteredRule = rule | filter([](auto x) { return x != epsilon; }) | to<vector<String>>();// TODO check where is the epsilon?
+                    workingNodes.top()->Children.push_back(AstNode<Tok>{.Name = grammars[i].first, .ChildSymbols = filteredRule, .Children = {} });
                     workingNodes.push(&std::get<AstNode<Tok>>(workingNodes.top()->Children.back()));
-
-                    for (auto const& b : reverse(filteredRule))
+                PopAllFilledNodes:
+                    if (auto working = workingNodes.top(); working->Children.size() == working->ChildSymbols.size())
                     {
-                        if (b != epsilon)
+                        workingNodes.pop();
+                        goto PopAllFilledNodes;
+                    }
+
+                    if (not filteredRule.empty())
+                    {
+                        for (auto const& b : reverse(filteredRule))
                         {
-                            symbolStack.push(b);
+                            if (b != epsilon)
+                            {
+                                symbolStack.push(b);
+                            }
                         }
                     }
                 }
