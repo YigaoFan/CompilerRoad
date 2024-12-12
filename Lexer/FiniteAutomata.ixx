@@ -150,7 +150,7 @@ public:
         {
             for (auto& e : item.second)
             {
-                e.first.Signal = ! e.first.Signal;
+                e.first.Signal = not e.first.Signal;
             }
         });
 
