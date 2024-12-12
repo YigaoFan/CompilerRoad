@@ -150,7 +150,10 @@ public:
         {
             for (auto& e : item.second)
             {
-                e.first.Signal = not e.first.Signal;
+                if (e.first.Data != epsilon.Data)
+                {
+                    e.first.Signal = not e.first.Signal;
+                }
             }
         });
 
