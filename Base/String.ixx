@@ -141,7 +141,7 @@ public:
         return static_cast<string_view>(*this) < static_cast<string_view>(that);
     }
 
-    auto operator+ (char c) const->String
+    auto operator+ (char c) const -> String
     {
         auto len = Length() + 1;
         auto newShare = new Share{ .Str = new char[len], .RefCount = 1, .Releasable = true };

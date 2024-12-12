@@ -19,6 +19,7 @@ enum class TokType : int
     LeftBracket,
     RightBracket,
     Comma,
+    String,
 };
 
 template<>
@@ -105,10 +106,24 @@ auto TestRollBack() -> void
 
 int main()
 {
+    constexpr int a = not 0;
     using std::ranges::views::filter;
     using std::ranges::to;
     using std::move;
 
+    //{
+    //    std::set<Step, std::less<void>> ss;
+    //    ss.insert({ .Signal = Step::Signal::Pass, .Data = 'a' });
+    //    std::println("ss has a: {}", ss.contains('a'));
+    //    std::println("ss has b: {}", ss.contains('b'));
+    //}
+    //{
+    //    std::set<Step, std::less<void>> ss;
+    //    ss.insert({ .Signal = Step::Signal::Block, .Data = 'a' });
+    //    std::println("ss has a: {}", ss.contains('a'));
+    //    std::println("ss has b: {}", ss.contains('b'));
+    //}
+    return 0;
     //TestRollBack();
     std::array rules = 
     {
@@ -121,10 +136,13 @@ int main()
         pair<string, TokType>{ "}", TokType::RightBracket },
         pair<string, TokType>{ ",", TokType::Comma },
         pair<string, TokType>{ " ", TokType::Space },
+        //pair<string, TokType>{ "\"[a-zA-Z0-9]*\"", TokType::String }, // TODO support
+        //pair<string, TokType>{ "\"[^0-9]*\"", TokType::String }, // TODO support
+        pair<string, TokType>{ "\"[^0]*\"", TokType::String },
     };
     auto l = Lexer<TokType>::New(rules);
     //string code = "if ab0 for Hello func (a)";
-    string code = "func a (b, c) {}";
+    string code = "func a (b, c) {} \"ab9\"";
     auto tokens = l.Lex(code) | filter([](auto& x) -> bool { return x.Type != TokType::Space; }) | to<vector<Token<TokType>>>();
     auto p = TableDrivenParser::ConstructFrom("program",
     {

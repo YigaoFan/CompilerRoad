@@ -32,6 +32,55 @@ using std::ranges::to;
 using std::ranges::views::transform;
 using std::ranges::views::filter;
 
+struct Step
+{
+public:
+    enum class Direction : int
+    {
+        Pass,
+        Block,
+    };
+    Direction Signal = Direction::Pass;
+    size_t Data;
+
+    auto operator< (Step const& that) const -> bool
+    {
+        return Data < that.Data;
+    }
+
+    auto operator== (Step const& that) const -> bool
+    {
+        return Signal == that.Signal and Data == that.Data;
+    }
+
+    auto operator!= (Step const& that) const -> bool
+    {
+        return not operator==(that);
+    }
+
+    auto operator< (size_t c) const -> bool
+    {
+        switch (Signal)
+        {
+        case Direction::Pass:
+            return Data < c;
+        case Direction::Block:
+            return Data == c;
+        }
+        throw std::logic_error(std::format("not handled Signal: {}", static_cast<int>(Signal)));
+    }
+};
+
+auto operator! (Step::Direction const& a) -> Step::Direction
+{
+    return static_cast<Step::Direction>(not static_cast<int>(a));
+}
+
+auto operator< (size_t b, Step const& a) -> bool
+{
+    return a < b;
+}
+
 template <typename Input, typename AcceptStateResult>
 class FiniteAutomata
 {
@@ -46,7 +95,8 @@ public:
     {
     }
 
-    auto Run(State from, Input input) const -> optional<pair<State, optional<AcceptStateResult>>>
+    template <typename InputeItem>
+    auto Run(State from, InputeItem input) const -> optional<pair<State, optional<AcceptStateResult>>>
     {
         if (auto r = transitionTable.Run(from, input); r.has_value())
         {
@@ -76,7 +126,7 @@ private:
     template <typename Input, typename AcceptStateResult>
     friend auto OrWithoutMergeAcceptState(vector<FiniteAutomataDraft<Input, AcceptStateResult>> fas) -> FiniteAutomataDraft<Input, AcceptStateResult>;
 
-    constexpr static int epsilon = 0;
+    static inline auto epsilon = Step{ .Data = 0 };
     GraphDraft<Input> transitionTable;
 
 public:
@@ -92,6 +142,19 @@ public:
         transitionTable.AddTransition(s0, c, s1);
 
         return FiniteAutomataDraft(s0, { s1 }, move(transitionTable), {});
+    }
+
+    static auto Not(FiniteAutomataDraft a) -> FiniteAutomataDraft
+    {
+        a.transitionTable.Traverse([](pair<State, vector<pair<Input, State>>>& item)
+        {
+            for (auto& e : item.second)
+            {
+                e.first.Signal = ! e.first.Signal;
+            }
+        });
+
+        return a;
     }
 
     // follow priority order to run FiniteAutomataDraft<char> combination, parentheses, closure, concatenation and alternation
@@ -169,7 +232,7 @@ public:
             auto n1 = transitionTable.AllocateState();
 
             transitionTable.AddTransition(start, epsilon, n0);
-            transitionTable.AddTransition(n0, i, n1);
+            transitionTable.AddTransition(n0, Step{ .Data = i }, n1);
             transitionTable.AddTransition(n1, epsilon, accept);
         }
 
@@ -216,10 +279,10 @@ template <typename Result>
 class RefineFiniteAutomata
 {
 private:
-    FiniteAutomata<size_t, Result> fa;
+    FiniteAutomata<Step, Result> fa;
     vector<pair<pair<char, char>, size_t>> classification;
 public:
-    RefineFiniteAutomata(FiniteAutomata<size_t, Result> fa, map<pair<char, char>, size_t> classification)
+    RefineFiniteAutomata(FiniteAutomata<Step, Result> fa, map<pair<char, char>, size_t> classification)
         : fa(move(fa)), classification(move_iterator(classification.begin()), move_iterator(classification.end())) // already sorted
     { }
 
@@ -322,6 +385,7 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
         case '+': return 2;
         case '-': return 2;
         case '|': return 1;
+        case '^': return 0;
         default: throw std::out_of_range(format("out of operate range: {}", op));
         }
     };
@@ -366,6 +430,9 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
         case '[':
             operators.push_back('[');
             break;
+        case '^':
+            operators.push_back('^');
+            break;
         case ']':
             for (;;)
             {
@@ -401,8 +468,9 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
         default:
             output.push_back(c);
         addPossibleRelationWithNextChar:
-            if (i != len - 1 && not isOperatorOrEndScope(regExp[i + 1]))
+            if (i != len - 1 and not isOperatorOrEndScope(regExp[i + 1]))
             {
+                // [^ will affect relation here
                 if (any_of(operators.cbegin(), operators.cend(), [](char ch) { return '[' == ch; }))
                 {
                     AddOperator('|');
@@ -426,84 +494,10 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
 /// <summary>
 /// assume regExp is valid regular expression
 /// </summary>
-//auto ConstructNFAFrom(string_view regExp) -> FiniteAutomataDraft<char>
-//{
-//    // support [0-9a-z]
-//    if (regExp.starts_with("(") && regExp.ends_with(")"))
-//    {
-//        regExp = regExp.substr(1, regExp.length() - 2);
-//    }
-//
-//    if (regExp.length() == 1)
-//    {
-//        return FiniteAutomataDraft<char>::From(regExp[0]);
-//    }
-//    auto postfixRegExp = Convert2PostfixForm(regExp);
-//    auto operandStack = vector<variant<char, FiniteAutomataDraft<char>>>();
-//    struct
-//    {
-//        auto operator()(char c) -> FiniteAutomataDraft<char> { return FiniteAutomataDraft<char>::From(c); }
-//        auto operator()(FiniteAutomataDraft<char>&& fa) -> FiniteAutomataDraft<char> { return move(fa); }
-//    } converter;
-//    for (size_t l = postfixRegExp.size(), i = 0; i < l; i++)
-//    {
-//        auto c = postfixRegExp[i];
-//        switch (c)
-//        {
-//        case '+':
-//        {
-//            auto a = move(operandStack.back());
-//            operandStack.pop_back();
-//            auto b = move(operandStack.back());
-//            operandStack.pop_back();
-//            operandStack.push_back(FiniteAutomataDraft<char>::Concat(std::visit(converter, move(b)), std::visit(converter, move(a))));
-//            break;
-//        }
-//        case '-':
-//        {
-//            auto a = move(operandStack.back());
-//            operandStack.pop_back();
-//            auto b = move(operandStack.back());
-//            operandStack.pop_back();
-//            operandStack.push_back(FiniteAutomataDraft<char>::Range(std::get<char>(b), std::get<char>(a)));
-//            break;
-//        }
-//        case '*':
-//        {
-//            auto a = move(operandStack.back());
-//            operandStack.pop_back();
-//            operandStack.push_back(FiniteAutomataDraft<char>::ZeroOrMore(std::visit(converter, move(a))));
-//            break;
-//        }
-//        case '|':
-//        {
-//            auto a = move(operandStack.back());
-//            operandStack.pop_back();
-//            auto b = move(operandStack.back());
-//            operandStack.pop_back();
-//            operandStack.push_back(FiniteAutomataDraft<char>::Or(std::visit(converter, move(b)), std::visit(converter, move(a))));
-//            break;
-//        }
-//        default:
-//            // number or alphabet
-//            operandStack.push_back(c);
-//            break;
-//        }
-//    }
-//    if (operandStack.size() != 1)
-//    {
-//        throw std::logic_error(nameof(operandStack)" doesn't have one finite automata as final result");
-//    }
-//    return move(std::get<FiniteAutomataDraft<char>>(operandStack.front()));
-//}
-
-/// <summary>
-/// assume regExp is valid regular expression
-/// </summary>
 template <typename Result>
-auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<char, char>, size_t>& classification) -> FiniteAutomataDraft<size_t, Result>
+auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<char, char>, size_t>& classification) -> FiniteAutomataDraft<Step, Result>
 {
-    // support [0-9a-z]
+    using Automata = FiniteAutomataDraft<Step, Result>;
     if (regExp.starts_with("(") && regExp.ends_with(")"))
     {
         regExp = regExp.substr(1, regExp.length() - 2);
@@ -513,14 +507,14 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<cha
     {
     case 1:
     {
-        auto fa = FiniteAutomataDraft<size_t, Result>::From(static_cast<size_t>(regExp[0]));
+        auto fa = Automata::From(Step{ .Data = static_cast<size_t>(regExp[0]) });
         fa.SetAcceptStateResult(move(acceptStateResult));
         return fa;
     }
     case 2:
         if (regExp[0] == '\\')
         {
-            auto fa = FiniteAutomataDraft<size_t, Result>::From(static_cast<size_t>(regExp[1]));
+            auto fa = Automata::From(Step{ .Data = static_cast<size_t>(regExp[1]) });
             fa.SetAcceptStateResult(move(acceptStateResult));
             return fa;
         }
@@ -530,11 +524,11 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<cha
     }
     
     auto postfixRegExp = Convert2PostfixForm(regExp);
-    auto operandStack = vector<variant<char, FiniteAutomataDraft<size_t, Result>>>();
+    auto operandStack = vector<variant<char, Automata>>();
     struct
     {
-        auto operator()(char c) -> FiniteAutomataDraft<size_t, Result> { return FiniteAutomataDraft<size_t, Result>::From(static_cast<size_t>(c)); }
-        auto operator()(FiniteAutomataDraft<size_t, Result>&& fa) -> FiniteAutomataDraft<size_t, Result> { return move(fa); }
+        auto operator()(char c) -> Automata { return Automata::From(Step{ .Data = static_cast<size_t>(c) }); }
+        auto operator()(Automata&& fa) -> Automata { return move(fa); }
     } converter;
     for (size_t l = postfixRegExp.size(), i = 0; i < l; i++)
     {
@@ -547,7 +541,7 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<cha
             operandStack.pop_back();
             auto b = move(operandStack.back());
             operandStack.pop_back();
-            operandStack.push_back(FiniteAutomataDraft<size_t, Result>::Concat(std::visit(converter, move(b)), std::visit(converter, move(a))));
+            operandStack.push_back(Automata::Concat(std::visit(converter, move(b)), std::visit(converter, move(a))));
             break;
         }
         case '-':
@@ -567,14 +561,14 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<cha
                 size_t c = classification.size() + 128;
                 classification.insert({ p, c });
             }
-            operandStack.push_back(FiniteAutomataDraft<size_t, Result>::From(classification[p]));
+            operandStack.push_back(Automata::From(Step{ .Data = classification[p] }));
             break;
         }
         case '*':
         {
             auto a = move(operandStack.back());
             operandStack.pop_back();
-            operandStack.push_back(FiniteAutomataDraft<size_t, Result>::ZeroOrMore(std::visit(converter, move(a))));
+            operandStack.push_back(Automata::ZeroOrMore(std::visit(converter, move(a))));
             break;
         }
         case '|':
@@ -583,7 +577,14 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<cha
             operandStack.pop_back();
             auto b = move(operandStack.back());
             operandStack.pop_back();
-            operandStack.push_back(FiniteAutomataDraft<size_t, Result>::Or(std::visit(converter, move(b)), std::visit(converter, move(a))));
+            operandStack.push_back(Automata::Or(std::visit(converter, move(b)), std::visit(converter, move(a))));
+            break;
+        }
+        case '^':
+        {
+            auto a = move(operandStack.back());
+            operandStack.pop_back();
+            operandStack.push_back(Automata::Not(std::visit(converter, move(a))));
             break;
         }
         case '\\':
@@ -600,7 +601,7 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<cha
     {
         throw std::logic_error(nameof(operandStack)" doesn't have one finite automata as final result");
     }
-    auto finalNfa = move(std::get<FiniteAutomataDraft<size_t, Result>>(operandStack.front()));
+    auto finalNfa = move(std::get<Automata>(operandStack.front()));
     finalNfa.SetAcceptStateResult(move(acceptStateResult));
     return finalNfa;
 }
@@ -942,10 +943,13 @@ struct std::formatter<FiniteAutomataDraft<Input, Result>, char>
 
 export
 {
+    struct Step;
+    auto operator< (size_t b, Step const& a) -> bool;
+    auto operator! (Step::Direction const& a)->Step::Direction;
     auto Convert2PostfixForm(string_view regExp) -> vector<char>;
     //auto ConstructNFAFrom(string_view regExp) -> FiniteAutomataDraft<char>;
     template <typename Result>
-    auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<char, char>, size_t>& classification) -> FiniteAutomataDraft<size_t, Result>;
+    auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<char, char>, size_t>& classification) -> FiniteAutomataDraft<Step, Result>;
     template <typename Input, typename Result>
     auto NFA2DFA(FiniteAutomataDraft<Input, Result> nfa) -> FiniteAutomataDraft<Input, Result>;
     template <bool DivideAccepts, typename Input, typename Result>

@@ -280,7 +280,7 @@ auto FollowSets(string_view startSymbol, vector<Grammar> const& grammars, map<st
                 {
                     continue;
                 }
-                for (int i = rule.size() - 1; i >= 0; --i)
+                for (int i = static_cast<int>(rule.size() - 1); i >= 0; --i)
                 {
                     auto& b = rule[i];
                     if (nontermins.contains(b))

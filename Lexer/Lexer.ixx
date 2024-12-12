@@ -38,7 +38,7 @@ public:
     template <size_t Size>
     static auto New(array<pair<string, T>, Size> const& identifyGroup) -> Lexer
     {
-        vector<FiniteAutomataDraft<size_t, T>> fas{};
+        vector<FiniteAutomataDraft<Step, T>> fas{};
         vector<pair<set<State>, T>> accepts2TokenType;
         map<pair<char, char>, size_t> classification{};
         for (auto& i : identifyGroup)

@@ -11,6 +11,7 @@ using std::map;
 using std::move;
 
 export using State = size_t;
+export using StateComp = std::less<void>;
 
 /// <summary>
 /// support DFA now
@@ -20,20 +21,21 @@ template <typename InputItem>
 class Graph
 {
 private:
-    map<State, map<InputItem, State>> transitions;
+    map<State, map<InputItem, State, StateComp>> transitions;
 public:
-    Graph(map<State, map<InputItem, State>> transitions) : transitions(move(transitions))
+    Graph(map<State, map<InputItem, State, StateComp>> transitions) : transitions(move(transitions))
     {
     }
 
     /// <summary>
     /// recommend for DFA which <param>from</param> and <param>input</param> are identical to one path
     /// </summary>
-    auto Run(State from, InputItem input) const -> optional<State>
+    template <typename Input>
+    auto Run(State from, Input input) const -> optional<State>
     {
         if (auto& t = transitions.at(from); t.contains(input))
         {
-            return t.at(input);
+            return t.find(input)->second; // template <class Key> at(Key const&) is from C++26
         }
         return {};
     }
@@ -45,7 +47,7 @@ class GraphDraft
 private:
     template <typename T, typename Char>
     friend struct std::formatter;
-    vector<pair<State, vector<pair<InputItem, State>>>> transitions; // TODO to map, or add a function to freeze to map
+    vector<pair<State, vector<pair<InputItem, State>>>> transitions;
 
 public:
     GraphDraft() = default;
@@ -146,10 +148,10 @@ public:
     /// </summary>
     auto Freeze() const -> Graph<InputItem>
     {
-        map<State, map<InputItem, State>> transitionMap;
+        map<State, map<InputItem, State, StateComp>> transitionMap;
         for (auto& t : transitions)
         {
-            map<InputItem, State> rh;
+            map<InputItem, State, StateComp> rh;
             for (auto& i : t.second)
             {
                 rh[i.first] = i.second;
@@ -157,6 +159,15 @@ public:
             transitionMap.insert({ t.first, move(rh) });
         }
         return Graph(move(transitionMap));
+    }
+
+    template <typename Func>
+    auto Traverse(Func func) -> void
+    {
+        for (auto& x : transitions)
+        {
+            func(x);
+        }
     }
 private:
     auto OffsetStates(size_t offset) -> void
