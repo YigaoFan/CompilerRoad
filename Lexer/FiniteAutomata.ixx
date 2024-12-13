@@ -54,37 +54,7 @@ public:
     /// </summary>
     auto operator< (Step const& that) const -> bool
     {
-        if (Signal != that.Signal)
-        {
-            return Signal < that.Signal;
-        }
-        switch (Signal)
-        {
-        case Step::Strategy::PassOne:
-        case Step::Strategy::BlockOne:
-            return Data < that.Data;
-        case Step::Strategy::PassRange:
-        case Step::Strategy::BlockRange:
-            auto sum0 = Left + Right;
-            auto sum1 = that.Left + that.Right;
-            if (sum0 < sum1)
-            {
-                return true;
-            }
-            else if (Left < that.Left)
-            {
-                return true;
-            }
-            else if (Right < that.Right)
-            {
-                return true;
-            }
-            // need more detail compare there
-            return false;
-        default:
-            throw logic_error(format("not handled Signal: {}", static_cast<int>(Signal)));
-        }
-        return Data < that.Data;
+        return OrderValue() < that.OrderValue();
     }
 
     /// <summary>
@@ -119,11 +89,25 @@ public:
     {
         // by actual test, below compare act as expected TODO think
         // should match the order semantic defined by Step < Step
+        // user OrderValue to control compare branch correct, how to present pass and block
+        // how to control pass or 
         switch (Signal)
         {
         case Strategy::PassOne:
-            return Data < c;
-        case Strategy::BlockOne:
+            if (c == Data)
+            {
+                return false;
+            }
+            else if (c < Data)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        case Strategy::BlockOne: 
+
             return Data == c;
         case Strategy::PassRange:
             if (c < Left)
@@ -157,6 +141,7 @@ private:
             break;
         case Step::Strategy::PassRange:
             v = (Left + Right) / 2;
+            v += 0.5;
             break;
         case Step::Strategy::BlockRange:
             v = (Left + Right) / 2;
@@ -187,7 +172,7 @@ auto operator! (Step::Strategy const& a) -> Step::Strategy
 
 auto operator< (size_t b, Step const& a) -> bool
 {
-    return a < b;
+    return not (a < b);
 }
 
 template <typename Input, typename AcceptStateResult>
