@@ -65,7 +65,13 @@ public:
             return Data < that.Data;
         case Step::Strategy::PassRange:
         case Step::Strategy::BlockRange:
-            if (Left < that.Left)
+            auto sum0 = Left + Right;
+            auto sum1 = that.Left + that.Right;
+            if (sum0 < sum1)
+            {
+                return true;
+            }
+            else if (Left < that.Left)
             {
                 return true;
             }
@@ -73,6 +79,7 @@ public:
             {
                 return true;
             }
+            // need more detail compare there
             return false;
         default:
             throw logic_error(format("not handled Signal: {}", static_cast<int>(Signal)));
@@ -111,6 +118,7 @@ public:
     auto operator< (size_t c) const -> bool
     {
         // by actual test, below compare act as expected TODO think
+        // should match the order semantic defined by Step < Step
         switch (Signal)
         {
         case Strategy::PassOne:
@@ -118,13 +126,45 @@ public:
         case Strategy::BlockOne:
             return Data == c;
         case Strategy::PassRange:
+            if (c < Left)
+            {
+                return true;
+            }
+            else if (c > Right)
+            {
+
+            }
             if (c >= Left and c <= Right)
             {
-                return false;
+                return true;
             }
-            return true;
+            return false;
         }
         throw logic_error(std::format("not handled Signal: {}", static_cast<int>(Signal)));
+    }
+private:
+    auto OrderValue() const -> float
+    {
+        float v = 0;
+        switch (Signal)
+        {
+        case Step::Strategy::PassOne:
+            v = Data;
+            v += 0.5;
+            break;
+        case Step::Strategy::BlockOne:
+            v = Data;
+            break;
+        case Step::Strategy::PassRange:
+            v = (Left + Right) / 2;
+            break;
+        case Step::Strategy::BlockRange:
+            v = (Left + Right) / 2;
+            break;
+        default:
+            throw logic_error(std::format("not handled Signal: {}", static_cast<int>(Signal)));
+        }
+        return v;
     }
 };
 
@@ -298,15 +338,12 @@ public:
         auto start = transitionTable.AllocateState();
         auto accept = transitionTable.AllocateState();
 
-        //for (auto i = a; i <= b; i++)
-        {
-            auto n0 = transitionTable.AllocateState();
-            auto n1 = transitionTable.AllocateState();
+        auto n0 = transitionTable.AllocateState();
+        auto n1 = transitionTable.AllocateState();
 
-            transitionTable.AddTransition(start, epsilon, n0);
-            transitionTable.AddTransition(n0, Step{ .Signal = Step::Strategy::PassRange, .Left = static_cast<size_t>(a), .Right = static_cast<size_t>(b) }, n1);
-            transitionTable.AddTransition(n1, epsilon, accept);
-        }
+        transitionTable.AddTransition(start, epsilon, n0);
+        transitionTable.AddTransition(n0, Step{ .Signal = Step::Strategy::PassRange, .Left = static_cast<size_t>(a), .Right = static_cast<size_t>(b) }, n1);
+        transitionTable.AddTransition(n1, epsilon, accept);
 
         return FiniteAutomataDraft(start, { accept }, move(transitionTable), {});
     }
