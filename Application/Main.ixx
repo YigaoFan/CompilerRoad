@@ -2,6 +2,7 @@ import std;
 import Lexer;
 import Base;
 import Parser;
+import FiniteAutomata;
 
 using std::pair;
 using std::string;
@@ -71,6 +72,9 @@ struct std::formatter<TokType, char>
         case TokType::RightParen:
             s = "RightParen";
             break;
+        case TokType::String:
+            s = "String";
+            break;
         }
         return std::format_to(fc.out(), "{}", s);
     }
@@ -113,17 +117,23 @@ int main()
 
     //{
     //    std::set<Step, std::less<void>> ss;
-    //    ss.insert({ .Signal = Step::Signal::Pass, .Data = 'a' });
+    //    ss.insert({ .Signal = Step::Strategy::PassOne, .Data = 'a' });
     //    std::println("ss has a: {}", ss.contains('a'));
     //    std::println("ss has b: {}", ss.contains('b'));
     //}
     //{
     //    std::set<Step, std::less<void>> ss;
-    //    ss.insert({ .Signal = Step::Signal::Block, .Data = 'a' });
+    //    ss.insert({ .Signal = Step::Strategy::BlockOne, .Data = 'a' });
     //    std::println("ss has a: {}", ss.contains('a'));
     //    std::println("ss has b: {}", ss.contains('b'));
     //}
-    return 0;
+    //{
+    //    std::set<Step, std::less<void>> ss;
+    //    ss.insert({ .Signal = Step::Strategy::BlockOne, .Data = 'b' });
+    //    std::println("ss has a: {}", ss.contains('a'));
+    //    std::println("ss has b: {}", ss.contains('b'));
+    //}
+    //return 0;
     //TestRollBack();
     std::array rules = 
     {
@@ -138,11 +148,11 @@ int main()
         pair<string, TokType>{ " ", TokType::Space },
         //pair<string, TokType>{ "\"[a-zA-Z0-9]*\"", TokType::String }, // TODO support
         //pair<string, TokType>{ "\"[^0-9]*\"", TokType::String }, // TODO support
-        pair<string, TokType>{ "\"[^0]*\"", TokType::String },
+        //pair<string, TokType>{ "\"[^0]*\"", TokType::String },
     };
     auto l = Lexer<TokType>::New(rules);
-    //string code = "if ab0 for Hello func (a)";
-    string code = "func a (b, c) {} \"ab9\"";
+    string code = "if ab0 for Hello func (a)";
+    //string code = "func a (b, c) {} \"0\"";
     auto tokens = l.Lex(code) | filter([](auto& x) -> bool { return x.Type != TokType::Space; }) | to<vector<Token<TokType>>>();
     auto p = TableDrivenParser::ConstructFrom("program",
     {

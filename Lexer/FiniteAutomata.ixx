@@ -20,6 +20,7 @@ using std::optional;
 using std::out_of_range;
 using std::runtime_error;
 using std::move_iterator;
+using std::logic_error;
 using std::back_inserter;
 using std::isdigit;
 using std::isalpha;
@@ -35,22 +36,68 @@ using std::ranges::views::filter;
 struct Step
 {
 public:
-    enum class Direction : int
+    enum class Strategy : int
     {
-        Pass,
-        Block,
+        PassOne,
+        BlockOne,
+        PassRange,
+        BlockRange,
     };
-    Direction Signal = Direction::Pass;
+    Strategy Signal = Strategy::PassOne;
+    // TODO maybe merge below 3 field in the future
     size_t Data;
+    size_t Left;
+    size_t Right;
 
+    /// <summary>
+    /// for ordering in map
+    /// </summary>
     auto operator< (Step const& that) const -> bool
     {
+        if (Signal != that.Signal)
+        {
+            return Signal < that.Signal;
+        }
+        switch (Signal)
+        {
+        case Step::Strategy::PassOne:
+        case Step::Strategy::BlockOne:
+            return Data < that.Data;
+        case Step::Strategy::PassRange:
+        case Step::Strategy::BlockRange:
+            if (Left < that.Left)
+            {
+                return true;
+            }
+            else if (Right < that.Right)
+            {
+                return true;
+            }
+            return false;
+        default:
+            throw logic_error(format("not handled Signal: {}", static_cast<int>(Signal)));
+        }
         return Data < that.Data;
     }
 
+    /// <summary>
+    /// for compare in FiniteAutomataCraft.Run
+    /// </summary>
     auto operator== (Step const& that) const -> bool
     {
-        return Signal == that.Signal and Data == that.Data;
+        if (Signal == that.Signal)
+        {
+            switch (Signal)
+            {
+            case Strategy::PassOne:
+            case Strategy::BlockOne:
+                return Data == that.Data;
+            case Strategy::PassRange:
+            case Strategy::BlockRange:
+                return Left == that.Left and Right == that.Right;
+            }
+        }
+        return false;
     }
 
     auto operator!= (Step const& that) const -> bool
@@ -58,22 +105,44 @@ public:
         return not operator==(that);
     }
 
+    /// <summary>
+    /// for support not same type map.contains
+    /// </summary>
     auto operator< (size_t c) const -> bool
     {
+        // by actual test, below compare act as expected TODO think
         switch (Signal)
         {
-        case Direction::Pass:
+        case Strategy::PassOne:
             return Data < c;
-        case Direction::Block:
+        case Strategy::BlockOne:
             return Data == c;
+        case Strategy::PassRange:
+            if (c >= Left and c <= Right)
+            {
+                return false;
+            }
+            return true;
         }
-        throw std::logic_error(std::format("not handled Signal: {}", static_cast<int>(Signal)));
+        throw logic_error(std::format("not handled Signal: {}", static_cast<int>(Signal)));
     }
 };
 
-auto operator! (Step::Direction const& a) -> Step::Direction
+auto operator! (Step::Strategy const& a) -> Step::Strategy
 {
-    return static_cast<Step::Direction>(not static_cast<int>(a));
+    switch (a)
+    {
+    case Step::Strategy::BlockOne:
+        return Step::Strategy::PassOne;
+    case Step::Strategy::PassOne:
+        return Step::Strategy::BlockOne;
+    case Step::Strategy::PassRange:
+        return Step::Strategy::BlockRange;
+    case Step::Strategy::BlockRange:
+        return Step::Strategy::PassRange;
+    default:
+        throw logic_error(std::format("not handled Signal: {}", static_cast<int>(a)));
+    }
 }
 
 auto operator< (size_t b, Step const& a) -> bool
@@ -134,12 +203,12 @@ public:
     vector<State> AcceptingStates;
     vector<pair<State, AcceptStateResult>> AcceptState2Result;
 
-    static auto From(Input c) -> FiniteAutomataDraft
+    static auto From(char c) -> FiniteAutomataDraft
     {
         auto transitionTable = GraphDraft<Input>();
         auto s0 = transitionTable.AllocateState();
         auto s1 = transitionTable.AllocateState();
-        transitionTable.AddTransition(s0, c, s1);
+        transitionTable.AddTransition(s0, Step{ .Data = static_cast<size_t>(c) }, s1);
 
         return FiniteAutomataDraft(s0, { s1 }, move(transitionTable), {});
     }
@@ -225,21 +294,21 @@ public:
         {
             throw std::out_of_range(format("{} and {} should be number or alphabet", a, b));
         }
-        auto transitionTable = GraphDraft<char>();
+        auto transitionTable = GraphDraft<Input>();
         auto start = transitionTable.AllocateState();
         auto accept = transitionTable.AllocateState();
 
-        for (auto i = a; i <= b; i++)
+        //for (auto i = a; i <= b; i++)
         {
             auto n0 = transitionTable.AllocateState();
             auto n1 = transitionTable.AllocateState();
 
             transitionTable.AddTransition(start, epsilon, n0);
-            transitionTable.AddTransition(n0, Step{ .Data = i }, n1);
+            transitionTable.AddTransition(n0, Step{ .Signal = Step::Strategy::PassRange, .Left = static_cast<size_t>(a), .Right = static_cast<size_t>(b) }, n1);
             transitionTable.AddTransition(n1, epsilon, accept);
         }
 
-        return FiniteAutomataDraft<char>(start, { accept }, move(transitionTable));
+        return FiniteAutomataDraft(start, { accept }, move(transitionTable), {});
     }
 
     FiniteAutomataDraft(State StartState, vector<State> acceptingStates, GraphDraft<Input> transitionTable, vector<pair<State, AcceptStateResult>> acceptState2Result)
@@ -346,7 +415,7 @@ public:
                 {
                     if (input <= x.first.second)
                     {
-                        return fa.Run(from, x.second);
+                        return fa.Run(from, x.second); // this classification[i] do wrong job when in block direction. I should make range Step to limit range match at specific node
                     }
                     else // move right
                     {
@@ -498,7 +567,7 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
 /// assume regExp is valid regular expression
 /// </summary>
 template <typename Result>
-auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<char, char>, size_t>& classification) -> FiniteAutomataDraft<Step, Result>
+auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<char, char>, size_t>&) -> FiniteAutomataDraft<Step, Result>
 {
     using Automata = FiniteAutomataDraft<Step, Result>;
     if (regExp.starts_with("(") && regExp.ends_with(")"))
@@ -510,14 +579,14 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<cha
     {
     case 1:
     {
-        auto fa = Automata::From(Step{ .Data = static_cast<size_t>(regExp[0]) });
+        auto fa = Automata::From(regExp[0]);
         fa.SetAcceptStateResult(move(acceptStateResult));
         return fa;
     }
     case 2:
         if (regExp[0] == '\\')
         {
-            auto fa = Automata::From(Step{ .Data = static_cast<size_t>(regExp[1]) });
+            auto fa = Automata::From(regExp[1]);
             fa.SetAcceptStateResult(move(acceptStateResult));
             return fa;
         }
@@ -530,7 +599,7 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<cha
     auto operandStack = vector<variant<char, Automata>>();
     struct
     {
-        auto operator()(char c) -> Automata { return Automata::From(Step{ .Data = static_cast<size_t>(c) }); }
+        auto operator()(char c) -> Automata { return Automata::From(c); }
         auto operator()(Automata&& fa) -> Automata { return move(fa); }
     } converter;
     for (size_t l = postfixRegExp.size(), i = 0; i < l; i++)
@@ -555,16 +624,17 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult, map<pair<cha
             operandStack.pop_back();
             char left = std::get<char>(b);
             char right = std::get<char>(a);
+            operandStack.push_back(Automata::Range(left, right));
             // should all content in [] be a item in classification?
             // when item bigger than 128, it will use classification
             // should template FiniteAutomataDraft<char>?
-            auto p = pair{ left, right };
-            if (not classification.contains(p))
-            {
-                size_t c = classification.size() + 128;
-                classification.insert({ p, c });
-            }
-            operandStack.push_back(Automata::From(Step{ .Data = classification[p] }));
+            //auto p = pair{ left, right };
+            //if (not classification.contains(p))
+            //{
+            //    size_t c = classification.size() + 128;
+            //    classification.insert({ p, c });
+            //}
+            //operandStack.push_back(Automata::From(Step{ .Data = classification[p] }));
             break;
         }
         case '*':
@@ -948,7 +1018,7 @@ export
 {
     struct Step;
     auto operator< (size_t b, Step const& a) -> bool;
-    auto operator! (Step::Direction const& a)->Step::Direction;
+    auto operator! (Step::Strategy const& a)->Step::Strategy;
     auto Convert2PostfixForm(string_view regExp) -> vector<char>;
     //auto ConstructNFAFrom(string_view regExp) -> FiniteAutomataDraft<char>;
     template <typename Result>
