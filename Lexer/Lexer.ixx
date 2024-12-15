@@ -2,6 +2,7 @@ export module Lexer;
 
 import std;
 import FiniteAutomata;
+import FiniteAutomataBuilder;
 import Graph;
 import Base;
 
@@ -32,27 +33,26 @@ template <typename T>
 class Lexer
 {
 private:
-    RefineFiniteAutomata<T> dfa;
+    FiniteAutomata<char, T> dfa;
     using Token = Token<T>;
 public:
     template <size_t Size>
     static auto New(array<pair<string, T>, Size> const& identifyGroup) -> Lexer
     {
-        vector<FiniteAutomataDraft<Step, T>> fas{};
+        vector<FiniteAutomataDraft<char, T>> fas{};
         vector<pair<set<State>, T>> accepts2TokenType;
-        map<pair<char, char>, size_t> classification{};
         for (auto& i : identifyGroup)
         {
-            fas.push_back(Minimize<false>(NFA2DFA(ConstructNFAFrom(i.first, i.second, classification))));
+            fas.push_back(Minimize<false>(NFA2DFA(ConstructNFAFrom(i.first, i.second))));
         }
 
         auto fullFa = OrWithoutMergeAcceptState(move(fas));
         auto dfa = NFA2DFA(move(fullFa));
         auto mdfa = Minimize<true>(move(dfa));
-        return Lexer(RefineFiniteAutomata(mdfa.Freeze(), move(classification)));
+        return Lexer(mdfa.Freeze());
     }
 
-    Lexer(RefineFiniteAutomata<T> dfa) : dfa(move(dfa))
+    Lexer(FiniteAutomata<char, T> dfa) : dfa(move(dfa))
     { }
 
     // TODO change to generator when VS release 17.13 which will support std::generator

@@ -24,6 +24,9 @@
     <ClCompile Include="FiniteAutomata.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="FiniteAutomataBuilder.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Util.h">

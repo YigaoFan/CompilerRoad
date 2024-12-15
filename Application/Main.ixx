@@ -146,13 +146,13 @@ int main()
         pair<string, TokType>{ "}", TokType::RightBracket },
         pair<string, TokType>{ ",", TokType::Comma },
         pair<string, TokType>{ " ", TokType::Space },
-        //pair<string, TokType>{ "\"[a-zA-Z0-9]*\"", TokType::String }, // TODO support
-        //pair<string, TokType>{ "\"[^0-9]*\"", TokType::String }, // TODO support
-        //pair<string, TokType>{ "\"[^0]*\"", TokType::String },
+        pair<string, TokType>{ "\"[^\"]*\"", TokType::String }, // TODO support
+        //pair<string, TokType>{ "\"[^a-z]*\"", TokType::String }, // TODO support 
+        //pair<string, TokType>{ "\"[^0]*\"", TokType::String }, // OK
     };
     auto l = Lexer<TokType>::New(rules);
-    string code = "if ab0 for Hello func (a)";
-    //string code = "func a (b, c) {} \"0\"";
+    //string code = "if ab for Hello func a";
+    string code = "func a (b, c) {} \"01234a\""; // not work as expected for string regular exp: "\"[^a-z]*\"" TODO check 
     auto tokens = l.Lex(code) | filter([](auto& x) -> bool { return x.Type != TokType::Space; }) | to<vector<Token<TokType>>>();
     auto p = TableDrivenParser::ConstructFrom("program",
     {
@@ -171,11 +171,11 @@ int main()
             { ",", "paras"},
             {}
         }},
-        { "literal", {
-            { "string" },
-            { "boolean" },
-            { "number" },
-        }},
+        //{ "literal", {
+        //    { "string" },
+        //    { "boolean" },
+        //    { "number" },
+        //}},
     },
     {
         // TODO remove the cast

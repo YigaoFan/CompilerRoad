@@ -135,6 +135,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="FiniteAutomata.ixx" />
+    <ClCompile Include="FiniteAutomataBuilder.ixx" />
     <ClCompile Include="Graph.ixx" />
     <ClCompile Include="Lexer.ixx" />
   </ItemGroup>

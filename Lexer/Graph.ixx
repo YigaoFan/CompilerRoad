@@ -30,14 +30,23 @@ public:
     /// <summary>
     /// recommend for DFA which <param>from</param> and <param>input</param> are identical to one path
     /// </summary>
-    template <typename Input>
-    auto Run(State from, Input input) const -> optional<State>
+    template <typename InputLike>
+    auto Run(State from, InputLike input) const -> optional<State>
     {
         if (auto& t = transitions.at(from); t.contains(input))
         {
-            return t.find(input)->second; // template <class Key> at(Key const&) is from C++26
+            return t.find(input)->second; // template <class Key> at(Key const&) is supported from C++26
         }
         return {};
+    }
+
+    auto OutStepsOf(State s) const -> map<InputItem, State, StateComp> const&
+    {
+        if (transitions.contains(s))
+        {
+            return transitions.at(s);
+        }
+        throw std::logic_error(std::format("no state {} in Graph", s));
     }
 };
 
