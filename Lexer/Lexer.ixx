@@ -107,11 +107,15 @@ public:
 
             if (auto& result = stack.back().first; result.second.has_value())
             {
-                failed.insert({ result.first, i });
                 auto lexemeLen = stack.back().second - tokenStart + 1;
                 toks.push_back(Token{ .Type = result.second.value(), .Value = string(code.substr(tokenStart, lexemeLen)), });
                 tokenStart = stack.back().second + 1;
                 i = tokenStart;
+            }
+            else
+            {
+                failed.insert({ result.first, stack.back().second });
+                break;
             }
         }
 
