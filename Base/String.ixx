@@ -69,7 +69,10 @@ public:
 
     auto operator= (String const& that) noexcept -> String&
     {
-        --share->RefCount;
+        if (share != nullptr and share->RefCount > 0)
+        {
+            --share->RefCount;
+        }
         share = that.share;
         start = that.start;
         end = that.end;
@@ -80,7 +83,10 @@ public:
 
     auto operator= (String&& that) noexcept -> String&
     {
-        --share->RefCount;
+        if (share != nullptr and share->RefCount > 0)
+        {
+            --share->RefCount;
+        }
         share = that.share;
         start = that.start;
         end = that.end;
