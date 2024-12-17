@@ -56,7 +56,7 @@ public:
         //    xs.push_back(LeftFactor(g));
         //}
         map<pair<String, int>, pair<int, int>> parseTable;
-
+        grammars = RemoveIndirectLeftRecur(move(grammars));
         auto starts = Starts(startSymbol, grammars); // string_view here is from grammar
 
         for (auto i = 0; auto const& g : grammars)
@@ -107,7 +107,7 @@ public:
             {
                 return true;
             }
-            return static_cast<int>(terminal2IntTokenType.at(symbol.Value)) == static_cast<int>(token.Type);
+            return static_cast<int>(terminal2IntTokenType.at(symbol.Value)) == static_cast<int>(token.Type); // TODO compare the actual value, like the Keyword include multiple values
         };
         auto IsTerminal = [nontermins = Nontermins(grammars) | to<set<string_view>>()](Symbol const& t) { return not nontermins.contains(t.Value); };
         stack<Symbol> symbolStack;
@@ -148,8 +148,8 @@ public:
                     auto [i, j] = parseTable[dest];
                     symbolStack.pop();
                     auto const& rule = grammars[i].second[j];
-                    auto filteredRule = rule | filter([](auto x) { return x != epsilon; }) | to<vector<String>>();// TODO check where is the epsilon?
-                    workingNodes.top()->Children.push_back(AstNode<Tok>{.Name = grammars[i].first, .ChildSymbols = filteredRule, .Children = {} });
+                    //auto& filteredRule = rule;// | filter([](auto x) { return x != epsilon; }) | to<vector<String>>();// TODO check where is the epsilon?
+                    workingNodes.top()->Children.push_back(AstNode<Tok>{.Name = grammars[i].first, .ChildSymbols = rule, .Children = {} });
                     workingNodes.push(&std::get<AstNode<Tok>>(workingNodes.top()->Children.back()));
                 PopAllFilledNodes:
                     if (auto working = workingNodes.top(); working->Children.size() == working->ChildSymbols.size())
@@ -158,9 +158,9 @@ public:
                         goto PopAllFilledNodes;
                     }
 
-                    if (not filteredRule.empty())
+                    if (not rule.empty())
                     {
-                        for (auto const& b : reverse(filteredRule))
+                        for (auto const& b : reverse(rule))
                         {
                             if (b != epsilon)
                             {

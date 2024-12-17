@@ -16,96 +16,113 @@ using std::ranges::views::filter;
 using std::ranges::views::drop;
 using std::ranges::to;
 
-auto Nontermins(vector<Grammar> const& grammars)
+export auto Nontermins(vector<Grammar> const& grammars)
 {
     auto nontermins = grammars | transform([](auto& e) { return e.first; });
     return nontermins;
 }
 
 /// <returns>.first is original noterminal, .second is new nonterminal</returns>
-auto DirectLeftRecur2RightRecur(Grammar grammar) -> pair<Grammar, Grammar>
+auto DirectLeftRecur2RightRecur(Grammar grammar) -> pair<bool, pair<Grammar, Grammar>>
 {
     auto const& left = grammar.first;
-    vector<RightSide> leftRecurs;
-    vector<RightSide> nonLeftRecurs;
+    vector<RightSide> rightRecurs;
+    vector<RightSide> originalRss;
     auto rightRecurNonTerm = left + '\'';
+    auto leftRecursive = false;
 
-    for (auto& right : grammar.second)
+    for (auto rs : grammar.second)
     {
-        if (not right.empty() and right.front() == left)
+        if ((not rs.empty()) and rs.front() == left)
         {
-            right.erase(right.begin());
-            right.push_back(rightRecurNonTerm);
-            leftRecurs.push_back(move(right));
+            leftRecursive = true;
+            rs.erase(rs.begin());
+            rs.push_back(rightRecurNonTerm);
+            rightRecurs.push_back(move(rs));
         }
         else
         {
-            right.push_back(rightRecurNonTerm);
-            nonLeftRecurs.push_back(move(right));
+            rs.push_back(rightRecurNonTerm);
+            originalRss.push_back(move(rs));
         }
     }
 
-    leftRecurs.push_back({});
-    return
+    if (leftRecursive)
     {
-        { left, move(nonLeftRecurs) },
-        { rightRecurNonTerm, move(leftRecurs) },
-    };
+        rightRecurs.push_back({});
+        return
+        {
+            true,
+            {
+                { left, move(originalRss) },
+                { rightRecurNonTerm, move(rightRecurs) },
+            }
+        };
+    }
+    else
+    {
+        return
+        {
+            false,
+            { grammar, { "", {} }}
+        };
+    }
 }
 
 auto RemoveIndirectLeftRecur(vector<Grammar> grammars) -> vector<Grammar>
 {
-    using std::ranges::views::join;
+    using std::ranges::views::zip;
+    using std::ranges::views::iota;
+    using std::ranges::fold_left;
+    using std::ranges::views::reverse;
 
-    auto nontermins = Nontermins(grammars);
+    auto nontermins = Nontermins(grammars) | to<vector<String>>();
     for (size_t i = 0; i < nontermins.size(); ++i)
     {
         auto& focus = grammars[i];
-        auto firsts = 
-            focus.second 
-            | filter([](auto& i) { return not i.empty(); }) // filter affect the below index
-            | transform([](auto& i) -> String { return i.front(); });
-        map<String, set<size_t>> first2Indexes;
-        for (size_t j = 0; auto&& f : firsts)
-        {
-            // not sure the firsts will copy the first word from grammar or just a ref.
-            // if a ref, the move will empty the first word of grammar which is unexpected.
-            // I use explicit return type(string) to explicit copy it
-            first2Indexes[f].insert(move(j));
-            ++j;
-        }
+        vector<String> firsts;
+        auto first2Indexes = fold_left(
+            zip(focus.second, iota(0))
+            | filter([](auto i) -> bool { return not std::get<0>(i).empty(); })
+            | transform([](auto i) -> pair<String, int> { return { std::get<0>(i).front(), std::get<1>(i) }; }),
+            map<String, vector<int>>{}, [](map<String, vector<int>> result, pair<String, int> item) -> map<String, vector<int>> { result[item.first].push_back(item.second); return result; });
 
+        vector<int> laterRemoves;
         for (size_t s = 0; s < i; ++s) // grammar[i] will be changed multiple times
         {
-            auto&& destFirst = grammars[s].first;
-            // find grammars[i].first -> grammars[s].first form
-            if (first2Indexes.contains(destFirst))
+            auto&& searchFirst = nontermins[s];
+            // find grammars[i].first -> grammars[s].first xxx form
+            if (first2Indexes.contains(searchFirst))
             {
-                auto&& destIndexes = first2Indexes[destFirst];
-                for (size_t j = 0; j < focus.second.size(); ++j)
+                for (auto j : first2Indexes[searchFirst])
                 {
-                    auto& rs = focus.second[j];
-                    if (destIndexes.contains(j))
+                    if (not grammars[s].second.empty()) // TODO need to handle when false?
                     {
-                        rs.erase(rs.begin());
-
-                        if (not grammars[s].second.empty())
+                        auto postfix = focus.second[j];
+                        postfix.erase(postfix.begin());
+                        vector<RightSide> newRs;
+                        for (auto copy : grammars[s].second)
                         {
-                            for (auto replace : grammars[s].second | drop(1))
-                            {
-                                replace.append_range(rs);
-                                focus.second.push_back(replace);
-                            }
-                            // delay the 1st item operation, because it will change rs itself which is used in above
-                            rs.insert_range(rs.begin(), grammars[s].second[0]);
+                            copy.append_range(postfix);
+                            newRs.push_back(move(copy));
                         }
+                        focus.second.append_range(move(newRs));
                     }
                 }
+                laterRemoves.append_range(move(first2Indexes[searchFirst]));
             }
         }
-        auto [original, newNontermin] = DirectLeftRecur2RightRecur(move(focus));
+        for (auto j : reverse(laterRemoves))
+        {
+            focus.second.erase(focus.second.begin() + j);
+        }
+        auto [recursive, gs] = DirectLeftRecur2RightRecur(move(focus));
+        auto&& [original, newNontermin] = gs;
         focus = move(original);
-        grammars.push_back(move(newNontermin));
+        if (recursive)
+        {
+            grammars.push_back(move(newNontermin));
+        }
     }
     
     return grammars;
@@ -360,7 +377,7 @@ auto Starts(string_view startSymbol, vector<Grammar> const& grammars) -> vector<
 
 export
 {
-    auto Nontermins(vector<Grammar> const& grammars);
     auto Starts(string_view startSymbol, vector<Grammar> const& grammars) -> vector<vector<set<string_view>>>;
     auto LeftFactor(Grammar grammar) -> pair<Grammar, vector<Grammar>>;
+    auto RemoveIndirectLeftRecur(vector<Grammar> grammars) -> vector<Grammar>;
 }

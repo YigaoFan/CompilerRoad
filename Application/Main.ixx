@@ -11,6 +11,7 @@ using std::vector;
 
 enum class TokType : int
 {
+    Keyword_If, // TODO temp
     Keyword,
     Id,
     Space,
@@ -21,6 +22,12 @@ enum class TokType : int
     RightBracket,
     Comma,
     String,
+    Number,
+    Boolean,
+    EqualSign,
+    PrefixOperator,
+    QuestionMark,
+    Colon,
 };
 
 template<>
@@ -75,6 +82,24 @@ struct std::formatter<TokType, char>
         case TokType::String:
             s = "String";
             break;
+        case TokType::Number:
+            s = "Number";
+            break;
+        case TokType::Boolean:
+            s = "Boolean";
+            break;
+        case TokType::EqualSign:
+            s = "EqualSign";
+            break;
+        case TokType::PrefixOperator:
+            s = "PrefixOperator";
+            break;
+        case TokType::QuestionMark:
+            s = "QuestionMark";
+            break;
+        case TokType::Colon:
+            s = "QuestionMark";
+            break;
         }
         return std::format_to(fc.out(), "{}", s);
     }
@@ -110,34 +135,66 @@ auto TestRollBack() -> void
 
 int main()
 {
-    constexpr int a = not 0;
     using std::ranges::views::filter;
     using std::ranges::to;
+    using std::ranges::views::iota;
     using std::move;
 
-    //{
-    //    std::set<Step, std::less<void>> ss;
-    //    ss.insert({ .Signal = Step::Strategy::PassOne, .Data = 'a' });
-    //    std::println("ss has a: {}", ss.contains('a'));
-    //    std::println("ss has b: {}", ss.contains('b'));
-    //}
-    //{
-    //    std::set<Step, std::less<void>> ss;
-    //    ss.insert({ .Signal = Step::Strategy::BlockOne, .Data = 'a' });
-    //    std::println("ss has a: {}", ss.contains('a'));
-    //    std::println("ss has b: {}", ss.contains('b'));
-    //}
-    //{
-    //    std::set<Step, std::less<void>> ss;
-    //    ss.insert({ .Signal = Step::Strategy::BlockOne, .Data = 'b' });
-    //    std::println("ss has a: {}", ss.contains('a'));
-    //    std::println("ss has b: {}", ss.contains('b'));
-    //}
+    //auto newG = RemoveIndirectLeftRecur({
+    //    { "program", {
+    //        { "function" }
+    //    }},
+    //    { "function", {
+    //        { "func", "id", "(", "paras", ")", "{", "statement"/*s*/, "}" } // how to process ( in parser: define it in lexer or parse it directly
+    //    }},
+    //    { "paras", { // for paras, how to distinguish below two rule? TODO In LL(1), how to handle this? left factor
+    //        //{ "id", ",", "paras" },
+    //        //{ "id" },
+    //        { "id", "more-paras" },
+    //        {},
+    //    }},
+    //    { "more-paras", {
+    //        { ",", "paras"},
+    //        {},
+    //    }},
+    //    { "literal", {
+    //        { "string" },
+    //        { "boolean" },
+    //        { "number" },
+    //    }},
+    //    { "exp", {
+    //        { "literal" },
+    //        { "id" },
+    //        { "(", "exp", ")" },
+    //        { "prefix-operator", "exp" }, // TODO implement infix operator, they have same operators conflict
+    //        { "exp", "?", "exp", ":", "exp" },
+    //        { "exp", "(", "exp", ")" },
+    //        { "exp", ".", "id" },
+    //        { "exp", "[", "exp", "]" },
+    //    }},
+    //    { "statement", {
+    //        { "var-stmt" },
+    //        { "if-stmt" },
+    //        //{ "number" },
+    //    }},
+    //    { "var-stmt", {
+    //        { "var", "id", "=", "literal" },
+    //        //{ "boolean" },
+    //        //{ "number" },
+    //    }},
+    //    { "if-stmt", {
+    //        { "if", "(", "exp", ")", "{", "statement", "}" },
+    //        //{ "boolean" },
+    //        //{ "number" },
+    //    }},
+    //    });
+    //std::println("new grammar: {}", newG);
     //return 0;
     //TestRollBack();
     std::array rules = 
     {
-        pair<string, TokType>{ "if|for|func", TokType::Keyword },
+        pair<string, TokType>{ "if|for|func|var", TokType::Keyword },
+        pair<string, TokType>{ "if", TokType::Keyword_If },
         pair<string, TokType>{ "[a-zA-Z][a-zA-Z0-9_]*", TokType::Id },
         pair<string, TokType>{ "[A-Z][a-zA-Z0-9]*", TokType::ClassName },
         pair<string, TokType>{ "\\(", TokType::LeftParen },
@@ -146,36 +203,67 @@ int main()
         pair<string, TokType>{ "}", TokType::RightBracket },
         pair<string, TokType>{ ",", TokType::Comma },
         pair<string, TokType>{ " ", TokType::Space },
-        //pair<string, TokType>{ "\"[^\"]*\"", TokType::String }, // TODO support
-        pair<string, TokType>{ "\"[^a-z]*\"", TokType::String }, // TODO support 
-        //pair<string, TokType>{ "\"[^0]*\"", TokType::String }, // OK
+        pair<string, TokType>{ "\"[^\"]*\"", TokType::String },
+        pair<string, TokType>{ "[1-9][0-9]*", TokType::Number },
+        pair<string, TokType>{ "false|true", TokType::Boolean },
+        pair<string, TokType>{ "=", TokType::EqualSign },
+        pair<string, TokType>{ "[\\+\\-!]", TokType::PrefixOperator },
+        pair<string, TokType>{ "?", TokType::QuestionMark },
     };
     auto l = Lexer<TokType>::New(rules);
     //string code = "if ab for Hello func a";
-    string code = "func a (b, c) {} \"0a\""; // not work as expected for string regular exp: "\"[^a-z]*\"" TODO check 
+    //string code = "func a (b, c) {} \"0abc12\"";
+    //string code = "func a (b, c) { var a = 1 } ";
+    string code = "func a (b, c) { if (false) { var d = 1 } } -";
     auto tokens = l.Lex(code) | filter([](auto& x) -> bool { return x.Type != TokType::Space; }) | to<vector<Token<TokType>>>();
-    auto p = TableDrivenParser::ConstructFrom("program",
+    auto p = TableDrivenParser::ConstructFrom("program", // support like "exp"s
     {
         { "program", {
             { "function" }
         }},
         { "function", {
-            { "func", "id", "(", "paras", ")", "{", "}" } // how to process ( in parser: define it in lexer or parse it directly
+            { "func", "id", "(", "paras", ")", "{", "statement"/*s*/, "}" } // how to process ( in parser: define it in lexer or parse it directly
         }},
         { "paras", { // for paras, how to distinguish below two rule? TODO In LL(1), how to handle this? left factor
             //{ "id", ",", "paras" },
             //{ "id" },
-            { "id", "more-paras" }, // TODO not at least one para
+            { "id", "more-paras" },
+            {},
         }},
         { "more-paras", {
             { ",", "paras"},
-            {}
+            {},
         }},
-        //{ "literal", {
-        //    { "string" },
-        //    { "boolean" },
-        //    { "number" },
-        //}},
+        { "literal", {
+            { "string" },
+            { "boolean" },
+            { "number" },
+        }},
+        { "exp", {
+            { "literal" },
+            { "id" },
+            { "(", "exp", ")" },
+            { "prefix-operator", "exp" }, // TODO implement infix operator, they have same operators conflict
+            { "exp", "?", "exp", ":", "exp" },
+            { "exp", "(", "exp", ")" },
+            { "exp", ".", "id" },
+            { "exp", "[", "exp", "]" },
+        }},
+        { "statement", {
+            { "var-stmt" },
+            { "if-stmt" },
+            //{ "number" },
+        }},
+        { "var-stmt", {
+            { "var", "id", "=", "literal" },
+            //{ "boolean" },
+            //{ "number" },
+        }},
+        { "if-stmt", {
+            { "if", "(", "exp", ")", "{", "statement", "}" },
+            //{ "boolean" },
+            //{ "number" },
+        }},
     },
     {
         // TODO remove the cast
@@ -186,7 +274,20 @@ int main()
         { ")", static_cast<int>(TokType::RightParen) },
         { "{", static_cast<int>(TokType::LeftBracket) },
         { "}", static_cast<int>(TokType::RightBracket) },
+        { "string", static_cast<int>(TokType::String) },
+        { "number", static_cast<int>(TokType::Number) },
+        { "boolean", static_cast<int>(TokType::Boolean) },
+        { "=", static_cast<int>(TokType::EqualSign) },
+        { "var", static_cast<int>(TokType::Keyword) },
+        { "if", static_cast<int>(TokType::Keyword_If) }, // how to handle different keyword
+        { "prefix-operator", static_cast<int>(TokType::PrefixOperator) },
+        { "?", static_cast<int>(TokType::QuestionMark) },
+        { ":", static_cast<int>(TokType::Colon) },
     });
-    tokens.push_back({ .Value = "" });
+    tokens.push_back({ .Value = "" }); // add eof
     auto ast = p.Parse<Token<TokType>>(VectorStream{ .Tokens = move(tokens) });
+    if (ast.has_value())
+    {
+        std::println("ast: {}", ast.value().Result);
+    }
 }
