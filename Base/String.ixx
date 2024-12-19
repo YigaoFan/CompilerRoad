@@ -69,10 +69,7 @@ public:
 
     auto operator= (String const& that) noexcept -> String&
     {
-        if (share != nullptr and share->RefCount > 0)
-        {
-            --share->RefCount;
-        }
+        ReduceCurrentShareRef();
         share = that.share;
         start = that.start;
         end = that.end;
@@ -83,10 +80,7 @@ public:
 
     auto operator= (String&& that) noexcept -> String&
     {
-        if (share != nullptr and share->RefCount > 0)
-        {
-            --share->RefCount;
-        }
+        ReduceCurrentShareRef();
         share = that.share;
         start = that.start;
         end = that.end;
@@ -249,6 +243,24 @@ public:
     ~String()
     {
         if (share != nullptr and share->Releasable and share->RefCount == 0)
+        {
+            delete[] share->Str;
+            delete share;
+            share = nullptr;
+        }
+    }
+private:
+    auto ReduceCurrentShareRef() -> void
+    {
+        if (share == nullptr)
+        {
+            return;
+        }
+        if (share->RefCount > 0)
+        {
+            --share->RefCount;
+        }
+        if (share->RefCount == 0 and share->Releasable)
         {
             delete[] share->Str;
             delete share;
