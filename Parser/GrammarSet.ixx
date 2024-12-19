@@ -69,7 +69,7 @@ auto DirectLeftRecur2RightRecur(Grammar grammar) -> pair<bool, pair<Grammar, Gra
     }
 }
 
-auto RemoveIndirectLeftRecur(vector<Grammar> grammars) -> vector<Grammar>
+auto RemoveIndirectLeftRecur(String startSymbol, vector<Grammar> grammars) -> vector<Grammar>
 {
     using std::ranges::views::zip;
     using std::ranges::views::iota;
@@ -80,7 +80,6 @@ auto RemoveIndirectLeftRecur(vector<Grammar> grammars) -> vector<Grammar>
     for (size_t i = 0; i < nontermins.size(); ++i)
     {
         auto& focus = grammars[i];
-        vector<String> firsts;
         auto first2Indexes = fold_left(
             zip(focus.second, iota(0))
             | filter([](auto i) -> bool { return not std::get<0>(i).empty(); })
@@ -125,7 +124,28 @@ auto RemoveIndirectLeftRecur(vector<Grammar> grammars) -> vector<Grammar>
         }
     }
     
-    return grammars;
+    set<String> usingNonTerms;
+    for (auto const& oldNonTers : Nontermins(grammars))
+    {
+        for (auto const& g : grammars)
+        {
+            for (auto const& rs : g.second)
+            {
+                for (auto const& x : rs)
+                {
+                    if (x == oldNonTers)
+                    {
+                        usingNonTerms.insert(oldNonTers);
+                        goto NextNonTers;
+                    }
+                }
+            }
+        }
+    NextNonTers:
+        continue;
+    }
+
+    return grammars | filter([&](auto x) -> bool { return x.first == startSymbol or usingNonTerms.contains(x.first); }) | to<vector<Grammar>>();
 }
 
 /// <returns>.first is original noterminal, .second is new nonterminal</returns>
@@ -238,6 +258,11 @@ auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_v
             {
                 if (rule.empty())
                 {
+                    if (not firstSets[g.first].contains(epsilon))
+                    {
+                        firstSets[g.first].insert(epsilon);
+                        changing = true;
+                    }
                     continue;
                 }
                 auto rhs = RemoveEpsilon(FirstsOf(rule[0]));
@@ -262,7 +287,7 @@ auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_v
                 // how to remove below copy caused by union operation
                 if (auto newFirsts = SetUnion(firstSets[g.first], rhs); newFirsts.size() > firstSets[g.first].size())
                 {
-                    std::println("{} firsts chnaged: {}", g.first, newFirsts);
+                    std::println("{} firsts changed: {}", g.first, newFirsts);
                     firstSets[g.first] = move(newFirsts);
                     changing = true;
                 }
@@ -290,13 +315,13 @@ auto FollowSets(string_view startSymbol, vector<Grammar> const& grammars, map<st
         changing = false;
         for (auto const& g : grammars)
         {
-            auto trailer = followSets[g.first];
             for (auto const& rule : g.second)
             {
                 if (rule.empty())
                 {
                     continue;
                 }
+                auto trailer = followSets[g.first];
                 for (int i = static_cast<int>(rule.size() - 1); i >= 0; --i)
                 {
                     auto& b = rule[i];
@@ -379,5 +404,5 @@ export
 {
     auto Starts(string_view startSymbol, vector<Grammar> const& grammars) -> vector<vector<set<string_view>>>;
     auto LeftFactor(Grammar grammar) -> pair<Grammar, vector<Grammar>>;
-    auto RemoveIndirectLeftRecur(vector<Grammar> grammars) -> vector<Grammar>;
+    auto RemoveIndirectLeftRecur(String startSymbol, vector<Grammar> grammars) -> vector<Grammar>;
 }
