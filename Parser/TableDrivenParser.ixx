@@ -16,6 +16,7 @@ using std::stack;
 using std::set;
 using std::move;
 using std::format;
+using std::println;
 
 class TableDrivenParser
 {
@@ -26,11 +27,6 @@ private:
         Symbol(String symbol) : Value(move(symbol))
         {
         }
-
-        //operator string_view() const // not support define this operator in function, so move it out
-        //{
-        //    return Value;
-        //}
 
         auto IsEof() const -> bool
         {
@@ -56,9 +52,11 @@ public:
         //    xs.push_back(LeftFactor(g));
         //}
         map<pair<String, int>, pair<int, int>> parseTable;
-        grammars = RemoveIndirectLeftRecur(move(grammars));
+        grammars = RemoveIndirectLeftRecur(startSymbol, move(grammars));
+        //std::println("new grammar: {}", grammars);
         auto starts = Starts(startSymbol, grammars); // string_view here is from grammar
 
+        // handle e-production, focus <- pop() TODO
         for (auto i = 0; auto const& g : grammars)
         {
             auto const& nontermin = g.first;
@@ -67,12 +65,19 @@ public:
             {
                 for (auto const& termin : start.at(j))
                 {
-                    auto tokenType = terminal2IntTokenType[termin];
-                    if (parseTable.contains({ nontermin, tokenType }))
+                    if (not terminal2IntTokenType.contains(termin))
                     {
+                        throw std::out_of_range(format("terminal2IntTokenType not include token type for {}", termin));
+                    }
+                    auto tokenType = terminal2IntTokenType.at(termin);
+                    auto key = pair{ nontermin, tokenType };
+                    if (parseTable.contains(key))
+                    {
+                        auto const& [otherI, otherJ] = parseTable.at(key);
                         throw logic_error(format("grammar isn't LL(1), {{{}, {}}} point to multiple grammar: {}, {}", nontermin, termin, parseTable[{ nontermin, tokenType }], j));
                     }
-                    parseTable.insert({ { nontermin, tokenType }, { i, j } });
+                    println("when come {}, move to {} -> {}", key, grammars[i].first, grammars[i].second[j]);
+                    parseTable.insert({ move(key), { i, j }});
                 }
             }
             ++i;
@@ -103,10 +108,18 @@ public:
         /// </summary>
         auto MatchTerminal = [this](Symbol const& symbol, Tok const& token) -> bool
         {
-            if (symbol.IsEof() and token.IsEof())
+            if (symbol.IsEof())
             {
-                return true;
+                if (token.IsEof())
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
             }
+
             return static_cast<int>(terminal2IntTokenType.at(symbol.Value)) == static_cast<int>(token.Type); // TODO compare the actual value, like the Keyword include multiple values
         };
         auto IsTerminal = [nontermins = Nontermins(grammars) | to<set<string_view>>()](Symbol const& t) { return not nontermins.contains(t.Value); };
@@ -145,10 +158,10 @@ public:
             {
                 if (auto dest = pair{ focus.Value, static_cast<int>(word.Type) }; parseTable.contains(dest))
                 {
+                    // add log here
                     auto [i, j] = parseTable[dest];
                     symbolStack.pop();
                     auto const& rule = grammars[i].second[j];
-                    //auto& filteredRule = rule;// | filter([](auto x) { return x != epsilon; }) | to<vector<String>>();// TODO check where is the epsilon?
                     workingNodes.top()->Children.push_back(AstNode<Tok>{.Name = grammars[i].first, .ChildSymbols = rule, .Children = {} });
                     workingNodes.push(&std::get<AstNode<Tok>>(workingNodes.top()->Children.back()));
                 PopAllFilledNodes:
@@ -162,10 +175,7 @@ public:
                     {
                         for (auto const& b : reverse(rule))
                         {
-                            if (b != epsilon)
-                            {
                                 symbolStack.push(b);
-                            }
                         }
                     }
                 }

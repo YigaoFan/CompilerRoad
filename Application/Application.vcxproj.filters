@@ -18,5 +18,8 @@
     <ClCompile Include="Main.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="TestMain.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
