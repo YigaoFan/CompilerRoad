@@ -14,6 +14,23 @@ using std::variant;
 template <typename A, typename B>
 concept ExplicitConvertibleTo = requires (A a) { static_cast<B>(a); };
 
+template<std::size_t N>
+struct ZeroOrMoreItems
+{
+    char p[N]{};
+
+    constexpr ZeroOrMoreItems(char const(&pp)[N])
+    {
+        std::ranges::copy(pp, p);
+    }
+};
+
+template<ZeroOrMoreItems A>
+constexpr auto operator""s()
+{
+
+}
+
 export
 {
     constexpr string_view epsilon = "";
