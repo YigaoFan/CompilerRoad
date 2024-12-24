@@ -15,6 +15,7 @@ using std::ranges::views::transform;
 using std::ranges::views::filter;
 using std::ranges::views::drop;
 using std::ranges::to;
+using std::format;
 
 export auto Nontermins(vector<Grammar> const& grammars)
 {
@@ -151,7 +152,7 @@ auto RemoveIndirectLeftRecur(String startSymbol, vector<Grammar> grammars) -> ve
 /// <returns>.first is original noterminal, .second is new nonterminal</returns>
 auto LeftFactor(Grammar grammar) -> pair<Grammar, vector<Grammar>>
 {
-    using std::format;
+    // should only left factor which is not left recursive
     using std::make_move_iterator;
 
     map<String, vector<size_t>> prefix2Indexes;
@@ -398,6 +399,61 @@ auto Starts(string_view startSymbol, vector<Grammar> const& grammars) -> vector<
         starts.push_back(StartSet(g, firsts, follows));
     }
     return starts;
+}
+
+using Lr1Item = std::tuple<pair<LeftSide, RightSide>, int, string_view>;
+
+auto Closure(set<Lr1Item> s) -> set<Lr1Item>
+{
+    auto changing = true;
+    for (; changing;)
+    {
+        changing = false;
+    }
+}
+
+auto Goto(set<Lr1Item> s, string_view x) -> set<Lr1Item>
+{
+    set<Lr1Item> t;
+    for (auto const& [rule, i, lookahead] : s)
+    {
+        if (rule.second[i] == x)
+        {
+            t.insert({ rule, i + 1, lookahead });
+        }
+    }
+    return Closure(move(t));
+}
+
+auto GrammarOf(string_view nonterminal, vector<Grammar> const& grammars) -> Grammar const&
+{
+    for (auto const& i : grammars)
+    {
+        if (i.first == nonterminal)
+        {
+            return i;
+        }
+    }
+    throw std::out_of_range(format("not found grammar for {}", nonterminal));
+}
+
+auto BuildCanonicalCollectionOfSetsOfLr1Items(string_view startSymbol, vector<Grammar> grammars) -> set<set<Lr1Item>>
+{
+    set<Lr1Item> cc0;
+    auto const& g = GrammarOf(startSymbol, grammars);
+    for (auto const& i : g.second)
+    {
+        cc0.insert({ pair{ g.first, i }, 0, eof });
+    }
+    cc0 = Closure(move(cc0));
+
+    set<set<Lr1Item>> cc{ move(cc0) };
+
+    for (auto changing = true; changing;)
+    {
+        changing = false;
+    }
+    return cc;
 }
 
 export
