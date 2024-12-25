@@ -534,6 +534,7 @@ auto FillActionGotoTable(string_view startSymbol, vector<Grammar> const& grammar
 {
     map<pair<size_t, string_view>, Action> actions;
     map<pair<size_t, string_view>, size_t> gotos;
+    auto nontermins = Nontermins(grammars);
 
     for (auto const& cci : cc)
     {
@@ -559,7 +560,7 @@ auto FillActionGotoTable(string_view startSymbol, vector<Grammar> const& grammar
                 }
             }
         }
-        for (auto const& n : Nontermins(grammars))
+        for (auto const& n : nontermins)
         {
             if (auto p = pair{ cci.first, n }; transitions.contains(p))
             {
