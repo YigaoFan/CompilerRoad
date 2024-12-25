@@ -10,6 +10,7 @@ using std::pair;
 using std::size_t;
 using std::map;
 using std::set;
+using std::queue;
 using std::move;
 using std::ranges::views::transform;
 using std::ranges::views::filter;
@@ -401,29 +402,6 @@ auto Starts(string_view startSymbol, vector<Grammar> const& grammars) -> vector<
     return starts;
 }
 
-using Lr1Item = std::tuple<pair<LeftSide, RightSide>, int, string_view>;
-
-auto Closure(set<Lr1Item> s) -> set<Lr1Item>
-{
-    auto changing = true;
-    for (; changing;)
-    {
-        changing = false;
-    }
-}
-
-auto Goto(set<Lr1Item> s, string_view x) -> set<Lr1Item>
-{
-    set<Lr1Item> t;
-    for (auto const& [rule, i, lookahead] : s)
-    {
-        if (rule.second[i] == x)
-        {
-            t.insert({ rule, i + 1, lookahead });
-        }
-    }
-    return Closure(move(t));
-}
 
 auto GrammarOf(string_view nonterminal, vector<Grammar> const& grammars) -> Grammar const&
 {
@@ -437,7 +415,67 @@ auto GrammarOf(string_view nonterminal, vector<Grammar> const& grammars) -> Gram
     throw std::out_of_range(format("not found grammar for {}", nonterminal));
 }
 
-auto BuildCanonicalCollectionOfSetsOfLr1Items(string_view startSymbol, vector<Grammar> grammars) -> set<set<Lr1Item>>
+using Lr1Item = std::tuple<pair<LeftSide, RightSide>, int, string_view>;
+auto Closure(set<Lr1Item> s, vector<Grammar> const& grammars, map<string_view, set<string_view>> const& firstSets) -> set<Lr1Item>
+{
+    set<string_view> const nonterminals = Nontermins(grammars) | to<set<string_view>>();
+    auto First = [&firstSets](this auto&& self, vector<string_view> const& rs) -> set<string_view>
+    {
+        if (rs.empty())
+        {
+            return { epsilon };
+        }
+        if (not self.firstSets.contains(rs.front())) // it's terminal
+        {
+            return { rs.front() };
+        }
+        else
+        {
+            auto f = self.firstSets.at(rs.front());
+            if (f.contains(epsilon))
+            {
+                f.insert_range(self(vector<string_view>{ rs.begin() + 1, rs.end() }));
+            }
+            return f;
+        }
+    };
+
+    for (auto changing = true; changing;)
+    {
+        changing = false;
+        for (auto const& [rule, i, _] : s)
+        {
+            if (auto const& expect = rule.second[i]; nonterminals.contains(expect))
+            {
+                vector<string_view> lookahead{ rule.second.begin() + i + 1, rule.second.end() };
+                for (auto const& p : GrammarOf(expect, grammars).second)
+                {
+                    for (auto b : First(lookahead))
+                    {
+                        auto [_, inserted] = s.insert({ pair{ expect, p }, 0, move(b) });
+                        changing = inserted;
+                    }
+                }
+            }
+        }
+    }
+    return s;
+}
+
+auto Goto(set<Lr1Item> s, string_view x, vector<Grammar> const& grammars, map<string_view, set<string_view>> const& firstSets) -> set<Lr1Item>
+{
+    set<Lr1Item> t;
+    for (auto const& [rule, i, lookahead] : s)
+    {
+        if (rule.second[i] == x)
+        {
+            t.insert({ rule, i + 1, lookahead });
+        }
+    }
+    return Closure(move(t), grammars, firstSets);
+}
+
+auto BuildCanonicalCollectionOfSetsOfLr1Items(string_view startSymbol, vector<Grammar> const& grammars) -> pair<map<set<Lr1Item>, size_t>, map<pair<set<Lr1Item>, string_view>, set<Lr1Item>>>
 {
     set<Lr1Item> cc0;
     auto const& g = GrammarOf(startSymbol, grammars);
@@ -445,15 +483,92 @@ auto BuildCanonicalCollectionOfSetsOfLr1Items(string_view startSymbol, vector<Gr
     {
         cc0.insert({ pair{ g.first, i }, 0, eof });
     }
-    cc0 = Closure(move(cc0));
+    auto firsts = FirstSets(grammars);
+    cc0 = Closure(move(cc0), grammars, firsts);
 
-    set<set<Lr1Item>> cc{ move(cc0) };
+    map<set<Lr1Item>, size_t> cc;
+    queue<set<Lr1Item>> workingList;
+    workingList.push(move(cc0));
+    map<pair<set<Lr1Item>, string_view>, set<Lr1Item>> transitions;
 
-    for (auto changing = true; changing;)
+    for (; not workingList.empty();)
     {
-        changing = false;
+        auto cci = move(workingList.front());
+        workingList.pop();
+        cc.insert({ cci, cc.size() });
+        auto afterPlaceholderSymbols = cci
+            | filter([](Lr1Item const& x) -> bool { return std::get<1>(x) < std::get<0>(x).second.size() - 1; })
+            | transform([](Lr1Item const& x) -> string_view { return std::get<0>(x).second[static_cast<size_t>(std::get<1>(x)) + 1]; })
+            | to<set<string_view>>();
+        for (auto x : afterPlaceholderSymbols)
+        {
+            set<Lr1Item> temp = Goto(cci, x, grammars, firsts);
+            if (not cc.contains(temp))
+            {
+                workingList.push(temp);
+            }
+            transitions.insert({ pair{ move(cci), x }, move(temp) });
+        }
     }
-    return cc;
+    return { move(cc), move(transitions) };
+}
+
+
+struct Action
+{
+    enum class Type
+    {
+        Shift,
+        Reduce,
+        Accept,
+    } Type;
+    union
+    {
+        size_t J;
+        pair<string_view, size_t> ItemsToWhat;
+    };
+};
+
+auto FillActionGotoTable(string_view startSymbol, vector<Grammar> const& grammars, map<set<Lr1Item>, size_t> const& cc, map<pair<set<Lr1Item>, string_view>, set<Lr1Item>> transitions)
+    -> pair<map<pair<size_t, string_view>, Action>, map<pair<size_t, string_view>, size_t>>
+{
+    map<pair<size_t, string_view>, Action> actions;
+    map<pair<size_t, string_view>, size_t> gotos;
+
+    for (auto const& cci : cc)
+    {
+        for (auto const& [rule, pos, lookahead] : cci.first)
+        {
+            if (pos < rule.second.size())
+            {
+                string_view sym = rule.second[pos];
+                if (auto p = pair{ cci.first, sym }; transitions.contains(p))
+                {
+                    actions.insert({ { cci.second, sym }, Action{.Type = Action::Type::Shift, .J = cc.at(transitions.at(p)) } });
+                }
+            }
+            else if (pos == rule.second.size())
+            {
+                if (rule.first == startSymbol and lookahead == eof)
+                {
+                    actions.insert({ { cci.second, eof }, Action{.Type = Action::Type::Accept } });
+                }
+                else
+                {
+                    actions.insert({ { cci.second, lookahead }, Action{.Type = Action::Type::Reduce, .ItemsToWhat = { rule.first, rule.second.size() }} });
+                }
+            }
+        }
+        for (auto const& n : Nontermins(grammars))
+        {
+            if (auto p = pair{ cci.first, n }; transitions.contains(p))
+            {
+                gotos.insert({ { cci.second, n}, cc.at(transitions.at(p)) });
+            }
+        }
+    }
+
+    return { move(actions), move(gotos) };
 }
 
 export
