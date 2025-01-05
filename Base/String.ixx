@@ -39,10 +39,10 @@ public:
     {
     }
 
-    explicit String(string const& s)
+    explicit String(string_view s)
         : share(new Share{ .Str = new char[s.size()], .RefCount = 1, .Releasable = true }), start(0), end(s.size())
     {
-        s.copy(const_cast<char *const>(share->Str), s.size());
+        s.copy(const_cast<char* const>(share->Str), s.size());
     }
 
     String(String const& that)

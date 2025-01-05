@@ -10,11 +10,12 @@ using std::expected;
 using std::vector;
 using std::pair;
 using std::variant;
+using std::size_t;
 
 template <typename A, typename B>
 concept ExplicitConvertibleTo = requires (A a) { static_cast<B>(a); };
 
-template<std::size_t N>
+template <size_t N>
 struct ZeroOrMoreItems
 {
     char p[N]{};
@@ -25,11 +26,11 @@ struct ZeroOrMoreItems
     }
 };
 
-template<ZeroOrMoreItems A>
-constexpr auto operator""s()
-{
-
-}
+//template <ZeroOrMoreItems A>
+//constexpr auto operator""s()
+//{
+//
+//}
 
 export
 {
@@ -119,4 +120,17 @@ export
             return std::format_to(fc.out(), "{}", s);
         }
     };
+
+    template <size_t N1>
+    auto operator| (string_view left, char const(&right)[N1]) -> vector<RightSide>
+    {
+        return { { String(left) }, { right } };
+    }
+
+    template <size_t N0>
+    auto operator| (vector<RightSide> left, char const(&right)[N0]) -> vector<RightSide>
+    {
+        left.push_back({ right });
+        return left;
+    }
 }

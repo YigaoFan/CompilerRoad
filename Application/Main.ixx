@@ -167,6 +167,7 @@ int main()
     using std::ranges::to;
     using std::ranges::views::iota;
     using std::move;
+    using namespace std::string_view_literals;
 
     //TestRollBack();
     // use book sample to test
@@ -245,11 +246,7 @@ int main()
             { ",", "paras"},
             {},
         }},
-        { "literal", {
-            { "string" },
-            { "boolean" },
-            { "number" },
-        }},
+        { "literal", "string"sv | "boolean" | "number" },
         { "suffix-ternary-operation", {
             { "?", "exp", ":", "exp" },
             { },
@@ -272,7 +269,7 @@ int main()
             { "exp_2" },
         }},
         { "exp_2", {
-            { "prefix-operator", "exp_2" }, // TODO implement infix operator, they have same operators conflict
+            { "prefix-operator", "exp_2" },
             { "exp_3", "suffix-invoke-operation" },
         }},
         { "exp_3", {
