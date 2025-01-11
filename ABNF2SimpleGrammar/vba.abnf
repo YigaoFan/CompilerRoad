@@ -1,0 +1,8 @@
+Integer -> integer-literal [ "%" | "&" | "^" ]
+integer-literal -> decimal-literal | octal-literal | hex-literal
+decimal-literal -> 1*decimal-digit
+octal-literal -> "&" [ "o" | "O"] 1*octal-digit
+hex-literal -> "&" ["h" | "H"] 1*hex-digit
+octal-digit -> '0'-'7'
+decimal-digit -> octal-digit | "8" | "9"
+hex-digit -> decimal-digit | 'A'-'F' | 'a'-'f'
