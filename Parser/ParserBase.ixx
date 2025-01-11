@@ -54,8 +54,8 @@ export
     template <typename T>
     using ParserResult = expected<ParseSuccessResult<T>, ParseFailResult>;
     using LeftSide = String;
-    using RightSide = vector<String>;
-    using Grammar = pair<LeftSide, vector<RightSide>>;
+    using SimpleRightSide = vector<String>;
+    using SimpleGrammar = pair<LeftSide, vector<SimpleRightSide>>;
     template <typename T>
     concept IToken = requires (T t)
     {
@@ -122,13 +122,13 @@ export
     };
 
     template <size_t N1>
-    auto operator| (string_view left, char const(&right)[N1]) -> vector<RightSide>
+    auto operator| (string_view left, char const(&right)[N1]) -> vector<SimpleRightSide>
     {
         return { { String(left) }, { right } };
     }
 
     template <size_t N0>
-    auto operator| (vector<RightSide> left, char const(&right)[N0]) -> vector<RightSide>
+    auto operator| (vector<SimpleRightSide> left, char const(&right)[N0]) -> vector<SimpleRightSide>
     {
         left.push_back({ right });
         return left;

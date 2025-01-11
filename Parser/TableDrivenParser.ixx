@@ -4,6 +4,7 @@ import std;
 import Base;
 import :ParserBase;
 import :GrammarSet;
+import :GrammarPreProcess;
 import :InputStream;
 
 using std::vector;
@@ -34,7 +35,7 @@ private:
         }
     };
     String startSymbol;
-    vector<Grammar> grammars;
+    vector<SimpleGrammar> grammars;
     map<pair<String, int>, pair<int, int>> parseTable;
     map<string_view, int> terminal2IntTokenType;
 public:
@@ -43,18 +44,24 @@ public:
     /// <summary>
     /// attention: make string_view in terminal2IntTokenType is alive when parse
     /// </summary>
-    static auto ConstructFrom(String startSymbol, vector<Grammar> grammars, map<string_view, int> terminal2IntTokenType) -> TableDrivenParser
+    static auto ConstructFrom(String startSymbol, vector<SimpleGrammar> grammars, map<string_view, int> terminal2IntTokenType) -> TableDrivenParser
     {
-        // TODO
-        //vector<pair<Grammar, vector<Grammar>>> xs;
-        //for (auto g : grammars)
-        //{
-        //    xs.push_back(LeftFactor(g));
-        //}
+        vector<SimpleGrammar> newAddGrammars;
+        for (auto& g : grammars)
+        {
+            auto [newG, addGrammars] = LeftFactor(move(g));
+            g = move(newG);
+            if (addGrammars.has_value())
+            {
+                newAddGrammars.append_range(move(addGrammars.value()));
+            }
+        }
+        grammars.append_range(move(newAddGrammars));
+        //std::println("after left refactor: {}", grammars);
         map<pair<String, int>, pair<int, int>> parseTable;
         grammars = RemoveIndirectLeftRecur(startSymbol, move(grammars));
-        //std::println("new grammar: {}", grammars);
         auto starts = Starts(startSymbol, grammars); // string_view here is from grammar
+        //std::println("after remove left recur grammar: {}", grammars);
 
         // handle e-production, focus <- pop() TODO
         for (auto i = 0; auto const& g : grammars)
@@ -76,7 +83,7 @@ public:
                         auto const& [otherI, otherJ] = parseTable.at(key);
                         throw logic_error(format("grammar isn't LL(1), {{{}, {}}} point to multiple grammar: {}, {}", nontermin, termin, parseTable[{ nontermin, tokenType }], j));
                     }
-                    println("when come {}, move to {} -> {}", key, grammars[i].first, grammars[i].second[j]);
+                    //println("when come {}, move to {} -> {}", key, grammars[i].first, grammars[i].second[j]);
                     parseTable.insert({ move(key), { i, j }});
                 }
             }
@@ -86,7 +93,7 @@ public:
         return TableDrivenParser(move(startSymbol), move(grammars), move(parseTable), move(terminal2IntTokenType));
     }
 
-    TableDrivenParser(String startSymbol, vector<Grammar> grammars, map<pair<String, int>, pair<int, int>> parseTable, map<string_view, int> terminal2IntTokenType)
+    TableDrivenParser(String startSymbol, vector<SimpleGrammar> grammars, map<pair<String, int>, pair<int, int>> parseTable, map<string_view, int> terminal2IntTokenType)
         : startSymbol(move(startSymbol)), grammars(move(grammars)), parseTable(move(parseTable)), terminal2IntTokenType(move(terminal2IntTokenType))
     { }
 
@@ -165,17 +172,20 @@ public:
                     workingNodes.top()->Children.push_back(AstNode<Tok>{.Name = grammars[i].first, .ChildSymbols = rule, .Children = {} });
                     workingNodes.push(&std::get<AstNode<Tok>>(workingNodes.top()->Children.back()));
                 PopAllFilledNodes:
-                    if (auto working = workingNodes.top(); working->Children.size() == working->ChildSymbols.size())
+                    if (not workingNodes.empty())
                     {
-                        workingNodes.pop();
-                        goto PopAllFilledNodes;
+                        if (auto working = workingNodes.top(); working->Children.size() == working->ChildSymbols.size())
+                        {
+                            workingNodes.pop();
+                            goto PopAllFilledNodes;
+                        }
                     }
 
                     if (not rule.empty())
                     {
                         for (auto const& b : reverse(rule))
                         {
-                                symbolStack.push(b);
+                            symbolStack.push(b);
                         }
                     }
                 }
@@ -187,6 +197,11 @@ public:
         }
 
     }
+};
+
+class LrTableDrivenParser
+{
+
 };
 
 export

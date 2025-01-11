@@ -8,7 +8,7 @@ using std::vector;
 class ParserGenerator
 {
 public:
-    auto ConstructFrom(vector<Grammar> grammars) -> ParserGenerator
+    auto ConstructFrom(vector<SimpleGrammar> grammars) -> ParserGenerator
     {
 
     }

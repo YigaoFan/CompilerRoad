@@ -134,6 +134,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="GrammarPreProcess.ixx" />
     <ClCompile Include="GrammarSetTest.ixx" />
     <ClCompile Include="InputStream.ixx" />
     <ClCompile Include="Parser.ixx" />

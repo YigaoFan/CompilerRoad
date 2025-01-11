@@ -14,188 +14,13 @@ using std::queue;
 using std::move;
 using std::ranges::views::transform;
 using std::ranges::views::filter;
-using std::ranges::views::drop;
 using std::ranges::to;
 using std::format;
 
-export auto Nontermins(vector<Grammar> const& grammars)
+export auto Nontermins(vector<SimpleGrammar> const& grammars)
 {
     auto nontermins = grammars | transform([](auto& e) { return e.first; });
     return nontermins;
-}
-
-/// <returns>.first is original noterminal, .second is new nonterminal</returns>
-auto DirectLeftRecur2RightRecur(Grammar grammar) -> pair<bool, pair<Grammar, Grammar>>
-{
-    auto const& left = grammar.first;
-    vector<RightSide> rightRecurs;
-    vector<RightSide> originalRss;
-    auto rightRecurNonTerm = left + '\'';
-    auto leftRecursive = false;
-
-    for (auto rs : grammar.second)
-    {
-        if ((not rs.empty()) and rs.front() == left)
-        {
-            leftRecursive = true;
-            rs.erase(rs.begin());
-            rs.push_back(rightRecurNonTerm);
-            rightRecurs.push_back(move(rs));
-        }
-        else
-        {
-            rs.push_back(rightRecurNonTerm);
-            originalRss.push_back(move(rs));
-        }
-    }
-
-    if (leftRecursive)
-    {
-        rightRecurs.push_back({});
-        return
-        {
-            true,
-            {
-                { left, move(originalRss) },
-                { rightRecurNonTerm, move(rightRecurs) },
-            }
-        };
-    }
-    else
-    {
-        return
-        {
-            false,
-            { grammar, { "", {} }}
-        };
-    }
-}
-
-auto RemoveIndirectLeftRecur(String startSymbol, vector<Grammar> grammars) -> vector<Grammar>
-{
-    using std::ranges::views::zip;
-    using std::ranges::views::iota;
-    using std::ranges::fold_left;
-    using std::ranges::views::reverse;
-
-    auto nontermins = Nontermins(grammars) | to<vector<String>>();
-    for (size_t i = 0; i < nontermins.size(); ++i)
-    {
-        auto& focus = grammars[i];
-        auto first2Indexes = fold_left(
-            zip(focus.second, iota(0))
-            | filter([](auto i) -> bool { return not std::get<0>(i).empty(); })
-            | transform([](auto i) -> pair<String, int> { return { std::get<0>(i).front(), std::get<1>(i) }; }),
-            map<String, vector<int>>{}, [](map<String, vector<int>> result, pair<String, int> item) -> map<String, vector<int>> { result[item.first].push_back(item.second); return result; });
-
-        vector<int> laterRemoves;
-        for (size_t s = 0; s < i; ++s) // grammar[i] will be changed multiple times
-        {
-            auto&& searchFirst = nontermins[s];
-            // find grammars[i].first -> grammars[s].first xxx form
-            if (first2Indexes.contains(searchFirst))
-            {
-                for (auto j : first2Indexes[searchFirst])
-                {
-                    if (not grammars[s].second.empty()) // TODO need to handle when false?
-                    {
-                        auto postfix = focus.second[j];
-                        postfix.erase(postfix.begin());
-                        vector<RightSide> newRs;
-                        for (auto copy : grammars[s].second)
-                        {
-                            copy.append_range(postfix);
-                            newRs.push_back(move(copy));
-                        }
-                        focus.second.append_range(move(newRs));
-                    }
-                }
-                laterRemoves.append_range(move(first2Indexes[searchFirst]));
-            }
-        }
-        for (auto j : reverse(laterRemoves))
-        {
-            focus.second.erase(focus.second.begin() + j);
-        }
-        auto [recursive, gs] = DirectLeftRecur2RightRecur(move(focus));
-        auto&& [original, newNontermin] = gs;
-        focus = move(original);
-        if (recursive)
-        {
-            grammars.push_back(move(newNontermin));
-        }
-    }
-    
-    set<String> usingNonTerms;
-    for (auto const& oldNonTers : Nontermins(grammars))
-    {
-        for (auto const& g : grammars)
-        {
-            for (auto const& rs : g.second)
-            {
-                for (auto const& x : rs)
-                {
-                    if (x == oldNonTers)
-                    {
-                        usingNonTerms.insert(oldNonTers);
-                        goto NextNonTers;
-                    }
-                }
-            }
-        }
-    NextNonTers:
-        continue;
-    }
-
-    return grammars | filter([&](auto x) -> bool { return x.first == startSymbol or usingNonTerms.contains(x.first); }) | to<vector<Grammar>>();
-}
-
-/// <returns>.first is original noterminal, .second is new nonterminal</returns>
-auto LeftFactor(Grammar grammar) -> pair<Grammar, vector<Grammar>>
-{
-    // should only left factor which is not left recursive
-    using std::make_move_iterator;
-
-    map<String, vector<size_t>> prefix2Indexes;
-    for (size_t i = 0; i < grammar.second.size(); ++i)
-    {
-        // should get max common prefix TODO
-        // abc, abd, aed how to process max common prefix
-        auto& rs = grammar.second[i];
-        if (not rs.empty())
-        {
-            prefix2Indexes[rs.front()].push_back(i);
-        }
-    }
-
-    vector<Grammar> newGrammars;
-    for (auto& [prefix, ids] : prefix2Indexes | filter([](auto& i) { return i.second.size() > 1; }))
-    {
-        auto newNonterminName = String(format("{}_lf_{}", grammar.first, prefix));
-        Grammar g{ newNonterminName, {} };
-        // keep the first item of ids in grammar.second
-        // drop the remain items
-        auto& rs = grammar.second[ids[0]];
-        g.second.push_back(RightSide{ make_move_iterator(rs.begin() + 1), make_move_iterator(rs.end()) });
-        rs.erase(rs.begin() + 1, rs.end());
-        rs.push_back(move(newNonterminName));
-
-        for (auto i : ids | drop(1))
-        {
-            auto& rs = grammar.second[i];
-            rs.erase(rs.begin());
-            g.second.push_back(move(rs));
-            grammar.second.erase(grammar.second.begin() + i);
-        }
-        auto [newG, subNewGrammars] = LeftFactor(move(g));
-        newGrammars.push_back(move(newG));
-        if (not subNewGrammars.empty())
-        {
-            newGrammars.append_range(move(subNewGrammars));
-        }
-    }
-
-    return { move(grammar), move(newGrammars) };
 }
 
 // TODO refine below two function's type to make it support move value from rvalue arg
@@ -238,7 +63,7 @@ auto GenAllSymbolFirstSetGetter(map<string_view, set<string_view>> const& nonter
 
 /// <returns>because of using string_view which is constructed from the string in grammars, 
 /// so the return value should only be used while grammars is alive</returns>
-auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_view>>
+auto FirstSets(vector<SimpleGrammar> const& grammars) -> map<string_view, set<string_view>>
 {
     map<string_view, set<string_view>> firstSets;
 
@@ -300,7 +125,7 @@ auto FirstSets(vector<Grammar> const& grammars) -> map<string_view, set<string_v
     return firstSets;
 }
 
-auto FollowSets(string_view startSymbol, vector<Grammar> const& grammars, map<string_view, set<string_view>> const& firstSets) -> map<string_view, set<string_view>>
+auto FollowSets(string_view startSymbol, vector<SimpleGrammar> const& grammars, map<string_view, set<string_view>> const& firstSets) -> map<string_view, set<string_view>>
 {
     map<string_view, set<string_view>> followSets;
     auto nontermins = Nontermins(grammars) | to<set<string_view>>();
@@ -360,7 +185,7 @@ auto FollowSets(string_view startSymbol, vector<Grammar> const& grammars, map<st
 /// <summary>
 /// start is for rule, first and follow are for terminal/nonterminal symbol
 /// </summary>
-auto StartSet(Grammar const& grammar, map<string_view, set<string_view>> const& firstSets, map<string_view, set<string_view>> const& followSets) -> vector<set<string_view>>
+auto StartSet(SimpleGrammar const& grammar, map<string_view, set<string_view>> const& firstSets, map<string_view, set<string_view>> const& followSets) -> vector<set<string_view>>
 {
     vector<set<string_view>> starts;
     auto FirstsOf = GenAllSymbolFirstSetGetter(firstSets);
@@ -388,7 +213,7 @@ auto StartSet(Grammar const& grammar, map<string_view, set<string_view>> const& 
 }
 
 /// <returns>match the hierarchy of grammars, can use same index to access it</returns>
-auto Starts(string_view startSymbol, vector<Grammar> const& grammars) -> vector<vector<set<string_view>>>
+auto Starts(string_view startSymbol, vector<SimpleGrammar> const& grammars) -> vector<vector<set<string_view>>>
 {
     auto firsts = FirstSets(grammars);
     auto follows = FollowSets(startSymbol, grammars, firsts);
@@ -403,7 +228,7 @@ auto Starts(string_view startSymbol, vector<Grammar> const& grammars) -> vector<
 }
 
 
-auto GrammarOf(string_view nonterminal, vector<Grammar> const& grammars) -> Grammar const&
+auto GrammarOf(string_view nonterminal, vector<SimpleGrammar> const& grammars) -> SimpleGrammar const&
 {
     for (auto const& i : grammars)
     {
@@ -415,8 +240,8 @@ auto GrammarOf(string_view nonterminal, vector<Grammar> const& grammars) -> Gram
     throw std::out_of_range(format("not found grammar for {}", nonterminal));
 }
 
-using Lr1Item = std::tuple<pair<LeftSide, RightSide>, int, string_view>;
-auto Closure(set<Lr1Item> s, vector<Grammar> const& grammars, map<string_view, set<string_view>> const& firstSets) -> set<Lr1Item>
+using Lr1Item = std::tuple<pair<LeftSide, SimpleRightSide>, int, string_view>;
+auto Closure(set<Lr1Item> s, vector<SimpleGrammar> const& grammars, map<string_view, set<string_view>> const& firstSets) -> set<Lr1Item>
 {
     set<string_view> const nonterminals = Nontermins(grammars) | to<set<string_view>>();
     auto First = [&firstSets](this auto&& self, vector<string_view> const& rs) -> set<string_view>
@@ -462,7 +287,7 @@ auto Closure(set<Lr1Item> s, vector<Grammar> const& grammars, map<string_view, s
     return s;
 }
 
-auto Goto(set<Lr1Item> s, string_view x, vector<Grammar> const& grammars, map<string_view, set<string_view>> const& firstSets) -> set<Lr1Item>
+auto Goto(set<Lr1Item> s, string_view x, vector<SimpleGrammar> const& grammars, map<string_view, set<string_view>> const& firstSets) -> set<Lr1Item>
 {
     set<Lr1Item> t;
     for (auto const& [rule, i, lookahead] : s)
@@ -475,7 +300,7 @@ auto Goto(set<Lr1Item> s, string_view x, vector<Grammar> const& grammars, map<st
     return Closure(move(t), grammars, firstSets);
 }
 
-auto BuildCanonicalCollectionOfSetsOfLr1Items(string_view startSymbol, vector<Grammar> const& grammars) -> pair<map<set<Lr1Item>, size_t>, map<pair<set<Lr1Item>, string_view>, set<Lr1Item>>>
+auto BuildCanonicalCollectionOfSetsOfLr1Items(string_view startSymbol, vector<SimpleGrammar> const& grammars) -> pair<map<set<Lr1Item>, size_t>, map<pair<set<Lr1Item>, string_view>, set<Lr1Item>>>
 {
     set<Lr1Item> cc0;
     auto const& g = GrammarOf(startSymbol, grammars);
@@ -529,7 +354,7 @@ struct Action
     };
 };
 
-auto FillActionGotoTable(string_view startSymbol, vector<Grammar> const& grammars, map<set<Lr1Item>, size_t> const& cc, map<pair<set<Lr1Item>, string_view>, set<Lr1Item>> transitions)
+auto FillActionGotoTable(string_view startSymbol, vector<SimpleGrammar> const& grammars, map<set<Lr1Item>, size_t> const& cc, map<pair<set<Lr1Item>, string_view>, set<Lr1Item>> transitions)
     -> pair<map<pair<size_t, string_view>, Action>, map<pair<size_t, string_view>, size_t>>
 {
     map<pair<size_t, string_view>, Action> actions;
@@ -574,7 +399,5 @@ auto FillActionGotoTable(string_view startSymbol, vector<Grammar> const& grammar
 
 export
 {
-    auto Starts(string_view startSymbol, vector<Grammar> const& grammars) -> vector<vector<set<string_view>>>;
-    auto LeftFactor(Grammar grammar) -> pair<Grammar, vector<Grammar>>;
-    auto RemoveIndirectLeftRecur(String startSymbol, vector<Grammar> grammars) -> vector<Grammar>;
+    auto Starts(string_view startSymbol, vector<SimpleGrammar> const& grammars) -> vector<vector<set<string_view>>>;
 }
