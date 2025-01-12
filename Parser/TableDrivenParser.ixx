@@ -103,7 +103,7 @@ public:
     auto operator= (TableDrivenParser&& that) -> TableDrivenParser& = default;
 
     template <IToken Tok>
-    auto Parse(Stream<Tok> auto stream) -> ParserResult<AstNode<Tok>>
+    auto Parse(Stream<Tok> auto stream) -> ParserResult<SyntaxTreeNode<Tok>>
     {
         using std::ranges::to;
         using std::ranges::views::reverse;
@@ -134,8 +134,8 @@ public:
         symbolStack.push(String(eof));
         symbolStack.push(startSymbol);
         auto word = stream.NextItem();
-        AstNode<Tok> root{ .Name = "root", .ChildSymbols = { startSymbol } }; // TODO why "root" is shown as "???" in VS debugger
-        stack<AstNode<Tok>*> workingNodes;
+        SyntaxTreeNode<Tok> root{ .Name = "root", .ChildSymbols = { startSymbol } }; // TODO why "root" is shown as "???" in VS debugger
+        stack<SyntaxTreeNode<Tok>*> workingNodes;
         workingNodes.push(&root);
 
         while (true)
@@ -144,15 +144,15 @@ public:
 
             if (focus.IsEof() and MatchTerminal(focus, word))
             {
-                return ParseSuccessResult<AstNode<Tok>>{ .Result = move(root), .Remain = "" };
+                return ParseSuccessResult<SyntaxTreeNode<Tok>>{ .Result = move(root), .Remain = "" };
             }
             else if (IsTerminal(focus) or focus.IsEof())
             {
                 if (MatchTerminal(focus, word))
                 {
                     symbolStack.pop();
-                    // combine focus info and word info into AstNode
-                    // validate the token here with the info in AstNode
+                    // combine focus info and word info into SyntaxTreeNode
+                    // validate the token here with the info in SyntaxTreeNode
                     workingNodes.top()->Children.push_back(word);
                     word = stream.NextItem();
                 }
@@ -169,8 +169,8 @@ public:
                     auto [i, j] = parseTable[dest];
                     symbolStack.pop();
                     auto const& rule = grammars[i].second[j];
-                    workingNodes.top()->Children.push_back(AstNode<Tok>{.Name = grammars[i].first, .ChildSymbols = rule, .Children = {} });
-                    workingNodes.push(&std::get<AstNode<Tok>>(workingNodes.top()->Children.back()));
+                    workingNodes.top()->Children.push_back(SyntaxTreeNode<Tok>{.Name = grammars[i].first, .ChildSymbols = rule, .Children = {} });
+                    workingNodes.push(&std::get<SyntaxTreeNode<Tok>>(workingNodes.top()->Children.back()));
                 PopAllFilledNodes:
                     if (not workingNodes.empty())
                     {
