@@ -131,6 +131,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Ast.ixx" />
     <ClCompile Include="Main.ixx" />
   </ItemGroup>
   <ItemGroup>

@@ -18,6 +18,9 @@
     <ClCompile Include="Main.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Ast.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CopyFileToFolders Include="vba.abnf" />
