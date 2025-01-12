@@ -111,7 +111,7 @@ struct std::formatter<TokType, char>
             s = "Terminal";
             break;
         case TokType::QutotedDigitOrAlphabet:
-            s = "DigitOrAlphabet";
+            s = "QutotedDigitOrAlphabet";
             break;
         }
         return std::format_to(fc.out(), "{}", s);
@@ -178,10 +178,10 @@ int main()
             { },
         }},
         { "newlines", {
-            { "newline", "more-newlines"},
+            { "newline", "more-newlines" },
         }},
         { "more-newlines", {
-            { "newline", "more-newlines"},
+            { "newline", "more-newlines" },
             { },
         }},
         { "productions", {
