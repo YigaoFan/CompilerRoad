@@ -5,6 +5,34 @@ import Base;
 
 using std::vector;
 using std::unique_ptr;
+using std::index_sequence;
+
+struct Node
+{
+
+    template <typename... Args>
+    auto Invoke(vector<Node*> children) -> Node*
+    {
+        auto argIndexs = std::index_sequence_for<Args...>{};
+        return DoInvoke<Args...>(move(children), argIndexs); // need specify Self template arg?
+    }
+
+    template <typename... Args, std::size_t... idxs>
+    auto DoInvoke(this auto&& self, vector<Node*> children, index_sequence<idxs...>)
+    {
+        using std::apply;
+        using std::bind_front;
+        using Self = decltype(self);
+        auto args = std::make_tuple(static_cast<Args>(children[idxs])...);
+        return apply(bind_front(&Self::Construct, self), args);
+    }
+
+    // subclass should implement
+    auto Construct()
+    {
+
+    }
+};
 
 struct Item
 {
@@ -115,23 +143,29 @@ struct List : Cons<T, List<Ts...>>
 
 };
 
-using list = List<Pair<"Production", Production>, Pair<"Grammar", Grammar>>;
-list::Head::Value p;
-//template <typename T0, typename T1, typename... Ts>
-//auto Func(int i, Cons<T0, T1> typeMap, vector<std::string> rule, std::tuple<Ts...> args, auto visitor) -> std::variant<Ts...> // Ts in return value may not correct
-//{
-//    if (i == rule.size())
-//    {
-//        visitor.Invoke(args);
-//    }
-//    using Item = Cons<T0, T1>;
-//    // iterate map items
-//    if (rule[i] == Item::Head)
-//    {
-//        // map A into a type, so A must be a compile time string
-//        Func(i + 1, rule, tuple(/*append casted item to args*/), visitor);
-//    }
-//}
+struct Nil
+{
+};
+
+template <typename T>
+struct List<T> : Cons<T, Nil>
+{
+
+};
+
+using typelist = List<Pair<"Production", Production>, Pair<"Grammar", Grammar>>;
+
+auto Func()
+{
+    typelist::Head::Key;
+}
+
+template <typename T>
+concept IList = requires ()
+{
+    T::Head;
+    T::Tail;
+};
 
 export
 {
