@@ -63,16 +63,17 @@ export
         { t.Value } -> std::convertible_to<string>;
         { t.IsEof() } -> std::same_as<bool>;
     };
-    template <IToken Token>
+    template <IToken Token, typename Result>
     struct SyntaxTreeNode
     {
         String Name;
         vector<String> const ChildSymbols;
         vector<variant<Token, SyntaxTreeNode>> Children;
+        Result Result;
     };
 
-    template <IToken Token>
-    struct std::formatter<SyntaxTreeNode<Token>, char>
+    template <IToken Token, typename Result>
+    struct std::formatter<SyntaxTreeNode<Token, Result>, char>
     {
         constexpr auto parse(std::format_parse_context& ctx)
         {
@@ -87,7 +88,7 @@ export
         }
 
         template <class FormatContext>
-        constexpr auto format(SyntaxTreeNode<Token> const& t, FormatContext& fc) const
+        constexpr auto format(SyntaxTreeNode<Token, Result> const& t, FormatContext& fc) const
         {
             using std::back_inserter;
             using std::format_to;
@@ -100,7 +101,7 @@ export
             struct
             {
                 auto operator()(Token tok) -> string { return format("{}\n", tok); }
-                auto operator()(SyntaxTreeNode<Token> const& ast) -> string { return format("{}", ast); }
+                auto operator()(SyntaxTreeNode<Token, Result> const& ast) -> string { return format("{}", ast); }
             } fmt;
 
             if (t.Children.empty())
