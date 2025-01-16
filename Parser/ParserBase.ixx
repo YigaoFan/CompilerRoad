@@ -11,6 +11,7 @@ using std::vector;
 using std::pair;
 using std::variant;
 using std::size_t;
+using std::stack;
 
 template <typename A, typename B>
 concept ExplicitConvertibleTo = requires (A a) { static_cast<B>(a); };
@@ -87,37 +88,76 @@ export
             return it;
         }
 
+        template<class... Ts>
+        struct overloads : Ts... { using Ts::operator()...; };
+
         template <class FormatContext>
         constexpr auto format(SyntaxTreeNode<Token, Result> const& t, FormatContext& fc) const
         {
+            // TODO too many stack here, limit the stack depth
             using std::back_inserter;
             using std::format_to;
             using std::format;
+            using std::holds_alternative;
+            using std::get;
+            using std::ranges::views::reverse;
 
+            stack<variant<Token, SyntaxTreeNode<Token, Result>> const*> workings;
             string s;
+
             format_to(back_inserter(s), "{{\n");
             format_to(back_inserter(s), "Name: {}\n", t.Name);
-
-            struct
-            {
-                auto operator()(Token tok) -> string { return format("{}\n", tok); }
-                auto operator()(SyntaxTreeNode<Token, Result> const& ast) -> string { return format("{}", ast); }
-            } fmt;
-
             if (t.Children.empty())
             {
-                format_to(back_inserter(s), "Children: []\n");
+                format_to(back_inserter(s), "Children: [");
             }
             else
             {
                 format_to(back_inserter(s), "Children: [\n");
-                for (auto& i : t.Children) // no specialization formatter<variant>, so we need to do it manually
+                workings.push(nullptr); // to notify encounter current children's end
+                for (auto& i : reverse(t.Children))
                 {
-                    format_to(back_inserter(s), "{}", std::visit(fmt, i));
+                    workings.push(&i);
                 }
-                format_to(back_inserter(s), "]\n");
             }
+            for (; not workings.empty();)
+            {
+                variant<Token, SyntaxTreeNode<Token, Result>> const* working = workings.top();
+                workings.pop();
+                if (working == nullptr)
+                {
+                    format_to(back_inserter(s), "]\n");
+                    format_to(back_inserter(s), "}}\n");
+                }
+                else if (holds_alternative<Token>(*working))// no specialization formatter<variant>, so we need to do it manually
+                {
+                    format_to(back_inserter(s), "{}\n", get<0>(*working));
+                }
+                else if (holds_alternative<SyntaxTreeNode<Token, Result>>(*working))
+                {
+                    auto& node = get<1>(*working);
+                    format_to(back_inserter(s), "{{\n");
+                    format_to(back_inserter(s), "Name: {}\n", node.Name);
+                    if (node.Children.empty())
+                    {
+                        format_to(back_inserter(s), "Children: []\n");
+                        format_to(back_inserter(s), "}}\n");
+                    }
+                    else
+                    {
+                        format_to(back_inserter(s), "Children: [\n");
+                        workings.push(nullptr);
+                        for (auto& i : reverse(node.Children))
+                        {
+                            workings.push(&i);
+                        }
+                    }
+                }
+            }
+            // enclosing for the entire object
+            format_to(back_inserter(s), "]\n");
             format_to(back_inserter(s), "}}\n");
+
             return std::format_to(fc.out(), "{}", s);
         }
     };
