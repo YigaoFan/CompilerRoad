@@ -83,6 +83,7 @@ struct AstNode
     virtual ~AstNode() = default;
 };
 
+// TODO fix production
 template <typename T>
 auto GetResultOfAstChildAs(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, int i) -> shared_ptr<T>
 {
@@ -133,7 +134,11 @@ struct Production : public AstNode
         case 0:
             return Production({});
         case 2:
-            return Production({ GetResultOfAstChildAs<Item>(node, 0) }); // TODO
+        {
+            vector is{ GetResultOfAstChildAs<Item>(node, 0) };
+            is.append_range(GetResultOfAstChildAs<MoreItems>(node, 1)->Items);
+            return Production(move(is));
+        }
         }
     }
 
@@ -336,10 +341,12 @@ struct Grammars : public AstNode
 
 struct AstFactory
 {
-    using TypeConfigs = List<Pair<"grammars", Grammars>>;
+    using TypeConfigs = List<Pair<"grammars", Grammars>, Pair<"grammar", Grammar>, Pair<"productions", Productions>, Pair<"production", Production>, Pair<"more-productions", MoreProductions>,
+        Pair<"production", Production>, Pair<"more-items", MoreItems>, Pair<"item", Item>, Pair<"item_0", BasicItem>>;
 
     static auto Create(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node) -> void
     {
+        std::println("AstFactory handle {}", node->Name);
         auto r = Iterate(TypeConfigs{}, node);
         node->Result = r;
     }
@@ -370,7 +377,10 @@ struct AstFactory
         {
             return r;
         }
-        return make_shared<Object>(move(r));
+        else
+        {
+            return make_shared<Object>(move(r));
+        }
     }
 };
 
