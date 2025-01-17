@@ -68,7 +68,7 @@ export
     struct SyntaxTreeNode
     {
         String Name;
-        vector<String> const ChildSymbols;
+        vector<String> ChildSymbols;
         vector<variant<Token, SyntaxTreeNode>> Children;
         Result Result;
     };
@@ -94,7 +94,6 @@ export
         template <class FormatContext>
         constexpr auto format(SyntaxTreeNode<Token, Result> const& t, FormatContext& fc) const
         {
-            // TODO too many stack here, limit the stack depth
             using std::back_inserter;
             using std::format_to;
             using std::format;

@@ -149,6 +149,9 @@ struct Production : public AstNode
 struct Productions;
 struct MoreProductions : public AstNode
 {
+    /// <summary>
+    /// Attention: it's possible nullptr
+    /// </summary>
     shared_ptr<Productions> Productions;
 
     static auto Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node) -> MoreProductions
@@ -180,7 +183,10 @@ struct Productions : public AstNode
         case 2:
         {
             vector ps{ GetResultOfAstChildAs<Production>(node, 0) };
-            ps.append_range(GetResultOfAstChildAs<MoreProductions>(node, 1)->Productions->Items);
+            if (auto mps = GetResultOfAstChildAs<MoreProductions>(node, 1)->Productions; mps != nullptr)
+            {
+                ps.append_range(mps->Items);
+            }
             return Productions(move(ps));
         }
         }
@@ -245,21 +251,19 @@ struct Duplicate : public Item
 
 auto Item::Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node) -> shared_ptr<Item>
 {
-    if (node->ChildSymbols.front() == "num")
+    switch (node->ChildSymbols.size())
     {
-        switch (node->ChildSymbols.size())
-        {
-        case 3:
-            return make_shared<Duplicate>(std::stoul(GetResultOfTokChildAs(node, 0).Value), std::numeric_limits<unsigned>::max(), GetResultOfAstChildAs<BasicItem>(node, 3));
-        case 4:
-            return make_shared<Duplicate>(std::stoul(GetResultOfTokChildAs(node, 0).Value), std::stoul(GetResultOfTokChildAs(node, 2).Value), GetResultOfAstChildAs<BasicItem>(node, 3));
-        }
+    case 1:
+        return GetResultOfAstChildAs<BasicItem>(node, 0);
+    case 2:
+        return make_shared<Duplicate>(0, std::numeric_limits<unsigned>::max(), GetResultOfAstChildAs<BasicItem>(node, 1));
+    case 3:
+        return make_shared<Duplicate>(std::stoul(GetResultOfTokChildAs(node, 0).Value), std::numeric_limits<unsigned>::max(), GetResultOfAstChildAs<BasicItem>(node, 2));
+    case 4:
+        return make_shared<Duplicate>(std::stoul(GetResultOfTokChildAs(node, 0).Value), std::stoul(GetResultOfTokChildAs(node, 2).Value), GetResultOfAstChildAs<BasicItem>(node, 3));
+    default:
+        throw logic_error(format("not handled BasicItem Item symbols {}", node->ChildSymbols));
     }
-    else if (node->ChildSymbols.front() == "*")
-    {
-        return BasicItem::Construct(node);
-    }
-    throw logic_error(format("not handled BasicItem Item symbols {}", node->ChildSymbols));
 }
 
 auto BasicItem::Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node) -> shared_ptr<BasicItem>

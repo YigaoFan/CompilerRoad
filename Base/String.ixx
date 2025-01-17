@@ -217,10 +217,8 @@ public:
             {
                 return true;
             }
-            else
-            {
-                return false;
-            }
+            // maybe this is <a"aaa"> (repeat string), and s is the first "a" which is out of range, below compare function is same.
+            // so we need recompare it
         }
         return Contains(static_cast<string_view>(s));
     }
@@ -228,6 +226,40 @@ public:
     auto Contains(string_view s) const -> bool
     {
         return static_cast<string_view>(*this).contains(s);
+    }
+
+    auto StartWith(String const& s) const -> bool
+    {
+        if (share == s.share)
+        {
+            if (s.start == start and s.end <= end)
+            {
+                return true;
+            }
+        }
+        return StartWith(static_cast<string_view>(s));
+    }
+
+    auto StartWith(string_view s) const -> bool
+    {
+        return static_cast<string_view>(*this).starts_with(s);
+    }
+
+    auto EndWith(String const& s) const -> bool
+    {
+        if (share == s.share)
+        {
+            if (s.end == end and s.start >= start)
+            {
+                return true;
+            }
+        }
+        return EndWith(static_cast<string_view>(s));
+    }
+
+    auto EndWith(string_view s) const -> bool
+    {
+        return static_cast<string_view>(*this).ends_with(s);
     }
 
     auto Empty() const -> bool

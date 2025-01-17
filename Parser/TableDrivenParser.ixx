@@ -15,6 +15,7 @@ using std::pair;
 using std::logic_error;
 using std::stack;
 using std::set;
+using std::variant;
 using std::move;
 using std::format;
 using std::println;
@@ -65,7 +66,7 @@ public:
         grammars.append_range(move(newAddGrammars));
         //std::println("after left refactor: {}", grammars);
         map<pair<String, int>, pair<int, int>> parseTable;
-        grammars = RemoveIndirectLeftRecur(startSymbol, move(grammars));
+        //grammars = RemoveIndirectLeftRecur(startSymbol, move(grammars));
         auto starts = Starts(startSymbol, grammars); // string_view here is from grammar
         //std::println("after remove left recur grammar: {}", grammars);
 
@@ -143,13 +144,33 @@ public:
         SyntaxTreeNode<Tok, Result> root{ .Name = "root", .ChildSymbols = { startSymbol } }; // TODO why "root" is shown as "???" in VS debugger
         stack<SyntaxTreeNode<Tok, Result>*> workingNodes;
         workingNodes.push(&root);
+        auto PopAllFilledNodes = [&workingNodes, &callback]()
+        {
+            while (not workingNodes.empty())
+            {
+                if (auto working = workingNodes.top(); working->Children.size() == working->ChildSymbols.size())
+                {
+                    TryRemoveChildrenCausedByLeftFactor(working);
+                    if (not working->Name.EndWith(leftFactorSuffix))
+                    {
+                        callback(working);
+                    }
 
+                    workingNodes.pop();
+                }
+                else
+                {
+                    break;
+                }
+            }
+        };
         while (true)
         {
             auto const& focus = symbolStack.top();
 
             if (focus.IsEof() and MatchTerminal(focus, word))
             {
+                // why workingNodes is not empty now? check the symbolStack, too. maybe workingNodes has issue
                 return ParseSuccessResult<SyntaxTreeNode<Tok, Result>>{ .Result = move(root), .Remain = "" };
             }
             else if (IsTerminal(focus) or focus.IsEof())
@@ -160,6 +181,7 @@ public:
                     // combine focus info and word info into SyntaxTreeNode
                     // validate the token here with the info in SyntaxTreeNode
                     workingNodes.top()->Children.push_back(word);
+                    PopAllFilledNodes();
                     word = stream.NextItem();
                 }
                 else
@@ -175,18 +197,9 @@ public:
                     auto [i, j] = parseTable[dest];
                     symbolStack.pop();
                     auto const& rule = grammars[i].second[j];
-                    workingNodes.top()->Children.push_back(SyntaxTreeNode<Tok, Result>{.Name = grammars[i].first, .ChildSymbols = rule, .Children = {} });
+                    workingNodes.top()->Children.push_back(SyntaxTreeNode<Tok, Result>{ .Name = grammars[i].first, .ChildSymbols = rule, .Children = {} });
                     workingNodes.push(&std::get<SyntaxTreeNode<Tok, Result>>(workingNodes.top()->Children.back()));
-                PopAllFilledNodes:
-                    if (not workingNodes.empty())
-                    {
-                        if (auto working = workingNodes.top(); working->Children.size() == working->ChildSymbols.size())
-                        {
-                            callback(working);
-                            workingNodes.pop();
-                            goto PopAllFilledNodes;
-                        }
-                    }
+                    PopAllFilledNodes();
 
                     if (not rule.empty())
                     {
@@ -202,7 +215,37 @@ public:
                 }
             }
         }
+    }
 
+private:
+    template <typename Tok, typename Result>
+    static auto TryRemoveChildrenCausedByLeftFactor(SyntaxTreeNode<Tok, Result>* node) -> void
+    {
+        vector<String> symbols;
+        vector<variant<Tok, SyntaxTreeNode<Tok, Result>>> children;
+        auto expanded = false;
+        for (size_t i = 0; i < node->ChildSymbols.size(); ++i)
+        {
+            if (node->ChildSymbols[i].StartWith(node->Name) and node->ChildSymbols[i].EndWith(leftFactorSuffix))
+            {
+                expanded = true;
+                auto& n = std::get<1>(node->Children[i]);
+                symbols.append_range(move(n.ChildSymbols));
+                children.append_range(move(n.Children));
+            }
+            else
+            {
+                symbols.push_back(move(node->ChildSymbols[i]));
+                children.push_back(move(node->Children[i]));
+            }
+        }
+        node->ChildSymbols = move(symbols);
+        node->Children = move(children);
+
+        if (expanded)
+        {
+            return TryRemoveChildrenCausedByLeftFactor(node);
+        }
     }
 };
 

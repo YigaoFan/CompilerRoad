@@ -143,6 +143,8 @@ auto RemoveIndirectLeftRecur(String startSymbol, vector<SimpleGrammar> grammars)
     return grammars | filter([&](auto x) -> bool { return x.first == startSymbol or usingNonTerms.contains(x.first); }) | to<vector<SimpleGrammar>>();
 }
 
+export constexpr auto leftFactorSuffix = "suffix";
+
 /// <returns>.first is original noterminal, .second is new nonterminal</returns>
 auto LeftFactor(SimpleGrammar grammar) -> pair<SimpleGrammar, optional<vector<SimpleGrammar>>>
 {
@@ -164,7 +166,7 @@ auto LeftFactor(SimpleGrammar grammar) -> pair<SimpleGrammar, optional<vector<Si
     vector<SimpleGrammar> newGrammars;
     for (auto& [prefix, ids] : prefix2Indexes | filter([](auto& i) { return i.second.size() > 1; }))
     {
-        auto suffixOfCommon = String(format("{}-{}-suffix", grammar.first, prefix));
+        auto suffixOfCommon = String(format("{}-{}-{}", grammar.first, prefix, leftFactorSuffix));
         SimpleGrammar suffixGrammar{ suffixOfCommon, {} };
         // keep the first item of ids in grammar.second
         // drop the remain items
