@@ -66,6 +66,7 @@ public:
         grammars.append_range(move(newAddGrammars));
         //std::println("after left refactor: {}", grammars);
         map<pair<String, int>, pair<int, int>> parseTable;
+        // TODO recover
         //grammars = RemoveIndirectLeftRecur(startSymbol, move(grammars));
         auto starts = Starts(startSymbol, grammars); // string_view here is from grammar
         //std::println("after remove left recur grammar: {}", grammars);
@@ -170,7 +171,6 @@ public:
 
             if (focus.IsEof() and MatchTerminal(focus, word))
             {
-                // why workingNodes is not empty now? check the symbolStack, too. maybe workingNodes has issue
                 return ParseSuccessResult<SyntaxTreeNode<Tok, Result>>{ .Result = move(root), .Remain = "" };
             }
             else if (IsTerminal(focus) or focus.IsEof())
