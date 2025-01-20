@@ -151,7 +151,7 @@ public:
                 if (auto working = workingNodes.top(); working->Children.size() == working->ChildSymbols.size())
                 {
                     TryRemoveChildrenCausedByLeftFactor(working);
-                    if (not working->Name.EndWith(leftFactorSuffix))
+                    if (not (working->Name.EndWith(leftFactorSuffix) or working->Name.EndWith(rightRecurSuffix)))
                     {
                         callback(working);
                     }
@@ -247,6 +247,60 @@ private:
         }
     }
 };
+
+/// <summary>
+/// invoke callback inner
+/// </summary>
+// TODO rename method
+template <typename Tok, typename Result>
+static auto TryRecoverChildrenCausedByRemoveLeftRecursive(SyntaxTreeNode<Tok, Result>* node, auto&& callback, map<size_t, map<size_t, stack<pair<size_t, size_t>>>> replaceHistory) -> void
+{
+    vector<String> symbols;
+    vector<variant<Tok, SyntaxTreeNode<Tok, Result>>> children;
+    auto expanded = false;
+    if (not node->ChildSymbols.empty())
+    {
+        // make sure it's the right side which is after remove direct left recursive
+        if (node->ChildSymbols.back().StartWith(node->Name) and node->ChildSymbols.back().EndWith(rightRecurSuffix))// might end with multiple times rightRecurSuffix
+        {
+            node->ChildSymbols.pop_back();
+            auto remain = move(node->Children.back());
+            node->Children.pop_back();
+            callback(node);
+            // save and pop the last item, and insert above item in symbol and children
+            // "a"(repeat item) may not one item TODO check
+            auto action = [](this auto self, SyntaxTreeNode<Tok, Result>* node, SyntaxTreeNode<Tok, Result>* child)
+            {
+                // restrict the node->Name to right recursive symbol name
+                node->Name = "TODO left recur name";
+                node->ChildSymbols.pop_back();
+                auto r = move(node->Children.back());
+                node->Children.pop_back();
+                node->ChildSymbols.push_back("left recur name");
+                node->Children.push_back(*child);// TODO not use pointer here
+                callback(node);
+                self.action(&r, node);// correct?
+            };
+        }
+    }
+
+    // handle indirect left recursive
+    //for (size_t i = 0; i < node->ChildSymbols.size(); ++i)
+    //{
+    //    if (node->ChildSymbols[i].StartWith(node->Name) and node->ChildSymbols[i].EndWith(rightRecurSuffix))
+    //    {
+    //        expanded = true;
+    //        auto& n = std::get<1>(node->Children[i]);
+    //        symbols.append_range(move(n.ChildSymbols));
+    //        children.append_range(move(n.Children));
+    //    }
+    //    else
+    //    {
+    //        symbols.push_back(move(node->ChildSymbols[i]));
+    //        children.push_back(move(node->Children[i]));
+    //    }
+    //}
+}
 
 class LrTableDrivenParser
 {
