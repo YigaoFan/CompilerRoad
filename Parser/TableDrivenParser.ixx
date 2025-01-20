@@ -66,10 +66,9 @@ public:
         grammars.append_range(move(newAddGrammars));
         //std::println("after left refactor: {}", grammars);
         map<pair<String, int>, pair<int, int>> parseTable;
-        // TODO recover
-        //grammars = RemoveIndirectLeftRecur(startSymbol, move(grammars));
-        auto starts = Starts(startSymbol, grammars); // string_view here is from grammar
-        //std::println("after remove left recur grammar: {}", grammars);
+        grammars = RemoveIndirectLeftRecur(startSymbol, move(grammars));
+        auto starts = Starts(startSymbol, grammars); // string_view here is from grammars
+        std::println("after remove left recur grammar: {}", grammars);
 
         // handle e-production, focus <- pop() TODO
         for (auto i = 0; auto const& g : grammars)

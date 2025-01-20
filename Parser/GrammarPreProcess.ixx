@@ -10,6 +10,7 @@ using std::map;
 using std::set;
 using std::variant;
 using std::optional;
+using std::stack;
 using std::move;
 using std::ranges::to;
 using std::ranges::views::filter;
@@ -18,13 +19,15 @@ using std::ranges::views::drop;
 using std::ranges::views::reverse;
 using std::format;
 
+export constexpr auto rightRecurSuffix = "'";
+
 /// <returns>.first is original noterminal, .second is new nonterminal</returns>
 auto DirectLeftRecur2RightRecur(SimpleGrammar grammar) -> pair<bool, pair<SimpleGrammar, SimpleGrammar>>
 {
     auto const& left = grammar.first;
     vector<SimpleRightSide> rightRecurs;
     vector<SimpleRightSide> originalRss;
-    auto rightRecurNonTerm = left + '\'';
+    auto rightRecurNonTerm = left + rightRecurSuffix;
     auto leftRecursive = false;
 
     for (auto rs : grammar.second)
@@ -64,52 +67,44 @@ auto DirectLeftRecur2RightRecur(SimpleGrammar grammar) -> pair<bool, pair<Simple
         };
     }
 }
-
+/// <summary>
+/// also handle the direct left recursive
+/// </summary>
 auto RemoveIndirectLeftRecur(String startSymbol, vector<SimpleGrammar> grammars) -> vector<SimpleGrammar>
 {
-    using std::ranges::views::zip;
-    using std::ranges::views::iota;
-    using std::ranges::fold_left;
-
     auto nontermins = Nontermins(grammars) | to<vector<String>>();
-    for (size_t i = 0; i < nontermins.size(); ++i)
+    map<size_t, map<size_t, stack<pair<size_t, size_t>>>> replaceHistory;
+    map<String, size_t> previousNontermins;
+
+    for (size_t i = 0; i < nontermins.size(); previousNontermins.insert({ nontermins[i], i }), ++i)
     {
         auto& focus = grammars[i];
-        auto first2Indexes = fold_left(
-            zip(focus.second, iota(0))
-            | filter([](auto i) -> bool { return not std::get<0>(i).empty(); })
-            | transform([](auto i) -> pair<String, int> { return { std::get<0>(i).front(), std::get<1>(i) }; }),
-            map<String, vector<int>>{}, [](map<String, vector<int>> result, pair<String, int> item) -> map<String, vector<int>> { result[item.first].push_back(item.second); return result; });
-
-        vector<int> laterRemoves;
-        for (size_t s = 0; s < i; ++s) // grammar[i] will be changed multiple times
+        vector<SimpleRightSide> newRss;
+        for (auto& x : focus.second)
         {
-            auto&& searchFirst = nontermins[s];
-            // find grammars[i].first -> grammars[s].first xxx form
-            if (first2Indexes.contains(searchFirst))
+            if ((not x.empty()) and previousNontermins.contains(x.front()))
             {
-                for (auto j : first2Indexes[searchFirst])
+                // expand items into RightSides
+                auto postfix = move(x);
+                auto first = move(postfix.front());
+                postfix.erase(postfix.begin());
+                auto expandGrammarIndex = previousNontermins.at(first);
+                auto const& expandGrammar = grammars[expandGrammarIndex];
+                for (size_t k = 0; k < expandGrammar.second.size(); ++k)
                 {
-                    if (not grammars[s].second.empty()) // TODO need to handle when false?
-                    {
-                        auto postfix = focus.second[j];
-                        postfix.erase(postfix.begin());
-                        vector<SimpleRightSide> newRs;
-                        for (auto copy : grammars[s].second)
-                        {
-                            copy.append_range(postfix);
-                            newRs.push_back(move(copy));
-                        }
-                        focus.second.append_range(move(newRs));
-                    }
+                    auto copy = expandGrammar.second[k];
+                    copy.append_range(postfix);
+                    replaceHistory[i][newRss.size()].push({ expandGrammarIndex, k });// because here use .size() as index, so it should before below push_back
+                    newRss.push_back(move(copy));
                 }
-                laterRemoves.append_range(move(first2Indexes[searchFirst]));
+            }
+            else
+            {
+                newRss.push_back(move(x));
             }
         }
-        for (auto j : reverse(laterRemoves))
-        {
-            focus.second.erase(focus.second.begin() + j);
-        }
+        focus.second = move(newRss);
+        
         auto [recursive, gs] = DirectLeftRecur2RightRecur(move(focus));
         auto&& [original, newNontermin] = gs;
         focus = move(original);
@@ -118,29 +113,27 @@ auto RemoveIndirectLeftRecur(String startSymbol, vector<SimpleGrammar> grammars)
             grammars.push_back(move(newNontermin));
         }
     }
-
-    set<String> usingNonTerms;
-    for (auto const& oldNonTers : Nontermins(grammars))
+    for (auto& [i, subHistory] : replaceHistory)
     {
-        for (auto const& g : grammars)
+        // it expand original grammar in the past, when we rollback, we need merge same rhs
+        for (auto& [j, replaceOps] : subHistory)
         {
-            for (auto const& rs : g.second)
+            if (auto& rhs = grammars[i].second[j]; not rhs.back().EndWith(rightRecurSuffix))
             {
-                for (auto const& x : rs)
+                for (; not replaceOps.empty(); replaceOps.pop())
                 {
-                    if (x == oldNonTers)
-                    {
-                        usingNonTerms.insert(oldNonTers);
-                        goto NextNonTers;
-                    }
+                    auto const& op = replaceOps.top();
+                    rhs.erase(rhs.begin(), rhs.begin() + grammars[op.first].second[op.second].size()); // if it's possible the op item is also replaced
+                    rhs.insert(rhs.begin(), grammars[op.first].first);
                 }
             }
         }
-    NextNonTers:
-        continue;
+        using std::make_move_iterator;
+        auto& rss = grammars[i].second;
+        auto s = set(make_move_iterator(rss.begin()), make_move_iterator(rss.end()));// remove duplicate, maybe remove above calculate directly in the future
+        grammars[i].second = vector(make_move_iterator(s.begin()), make_move_iterator(s.end()));
     }
-
-    return grammars | filter([&](auto x) -> bool { return x.first == startSymbol or usingNonTerms.contains(x.first); }) | to<vector<SimpleGrammar>>();
+    return grammars;
 }
 
 export constexpr auto leftFactorSuffix = "suffix";
