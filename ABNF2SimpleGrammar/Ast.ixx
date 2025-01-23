@@ -82,7 +82,6 @@ struct AstNode
     virtual ~AstNode() = default;
 };
 
-// TODO fix production
 template <typename T>
 auto GetResultOfAstChildAs(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, int i) -> shared_ptr<T>
 {
@@ -247,7 +246,6 @@ struct Duplicate : public Item
     { }
 };
 
-
 auto Item::Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node) -> shared_ptr<Item>
 {
     switch (node->ChildSymbols.size())
@@ -391,4 +389,15 @@ export
 {
     struct AstFactory;
     struct AstNode;
+    struct Grammar;
+    struct Grammars;
+    struct BasicItem;
+    struct Duplicate;
+    struct Combine;
+    struct Optional;
+    struct DataRange;
+    struct Symbol;
+    struct Terminal;
+    struct Productions;
+    struct Production;
 }

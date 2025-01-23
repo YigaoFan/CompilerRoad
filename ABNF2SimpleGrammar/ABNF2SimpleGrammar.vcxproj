@@ -134,6 +134,7 @@
     <ClCompile Include="Ast.ixx" />
     <ClCompile Include="Main.ixx" />
     <ClCompile Include="TokType.ixx" />
+    <ClCompile Include="Transformer.ixx" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Base\Base.vcxproj">

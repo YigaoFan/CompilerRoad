@@ -39,6 +39,12 @@ public:
     {
     }
 
+    String(char ch)
+        : share(new Share{ .Str = new char[1], .RefCount = 1, .Releasable = true}), start(0), end(1)
+    {
+        const_cast<char* const>(share->Str)[0] = ch;
+    }
+
     explicit String(string_view s)
         : share(new Share{ .Str = new char[s.size()], .RefCount = 1, .Releasable = true }), start(0), end(s.size())
     {

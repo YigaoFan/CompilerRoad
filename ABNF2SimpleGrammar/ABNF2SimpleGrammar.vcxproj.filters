@@ -24,6 +24,9 @@
     <ClCompile Include="TokType.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Transformer.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CopyFileToFolders Include="vba.abnf" />
