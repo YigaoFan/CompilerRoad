@@ -263,12 +263,12 @@ static auto ReconstructSyntaxTreeAffectedByRemoveLeftRecursive(SyntaxTreeNode<To
             node.ChildSymbols.pop_back();
             auto remain = move(node.Children.back());
             node.Children.pop_back();
-            callback(node);
+            callback(&node);
+            
             // save and pop the last item, and insert above item in symbol and children
             // "a"(repeat item) may not one item TODO check
-            auto action = [leftRecurName=node.Name](this auto&& self, SyntaxTreeNode<Tok, Result> node, SyntaxTreeNode<Tok, Result> toAddChild)
+            auto recurToBottom = [leftRecurName=node.Name, &callback](this auto&& self, SyntaxTreeNode<Tok, Result> node, SyntaxTreeNode<Tok, Result> toAddChild)
             {
-                // condition correct?
                 if (node.ChildSymbols.back().StartWith(node.Name) and node.ChildSymbols.back().EndWith(rightRecurSuffix))// might end with multiple times rightRecurSuffix
                 {
                     // restrict the node->Name to right recursive symbol name
@@ -278,12 +278,18 @@ static auto ReconstructSyntaxTreeAffectedByRemoveLeftRecursive(SyntaxTreeNode<To
                     node.Children.pop_back();
 
                     node.ChildSymbols.insert(node.ChildSymbols.begin(), self.leftRecurName);
-                    node.Children.insert(node.Children.begin(), move(child));
+                    node.Children.insert(node.Children.begin(), move(toAddChild));
                     callback(&node);
                     self(move(remain), move(node));
                 }
+                else
+                {
+                    node.ChildSymbols.insert(node.ChildSymbols.begin(), self.leftRecurName);
+                    node.Children.insert(node.Children.begin(), move(toAddChild));
+                    callback(&node);
+                }
             };
-            action()
+            recurToBottom(move(remain), move(node));
         }
     }
 
