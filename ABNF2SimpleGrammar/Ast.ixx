@@ -50,7 +50,8 @@ struct Pair
 };
 
 template <typename...>
-struct List;
+struct List
+{ };
 
 template <typename T, typename... Ts>
 struct List<T, Ts...> : Cons<T, List<Ts...>>
@@ -93,9 +94,27 @@ auto GetResultOfTokChildAs(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* 
     return std::get<0>(node->Children[i]);
 }
 
+struct Terminal;
+struct Symbol;
+struct DataRange;
+struct Optional;
+struct Combine;
+struct Combine;
+struct Duplicate;
+struct IVisitor
+{
+    virtual auto Visit(Terminal*) -> void = 0;
+    virtual auto Visit(Symbol*) -> void = 0;
+    virtual auto Visit(DataRange*) -> void = 0;
+    virtual auto Visit(Optional*) -> void = 0;
+    virtual auto Visit(Combine*) -> void = 0;
+    virtual auto Visit(Duplicate*) -> void = 0;
+};
+
 struct Item : public AstNode
 {
     static auto Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node) -> shared_ptr<Item>;
+    virtual void Visit(IVisitor* visitor) = 0;
 };
 
 struct MoreItems : public AstNode
@@ -204,6 +223,11 @@ struct Terminal : public BasicItem
     String Value;
     Terminal(String value) : Value(move(value))
     { }
+
+    void Visit(IVisitor* visitor) override
+    {
+        visitor->Visit(this);
+    }
 };
 
 struct Symbol : public BasicItem
@@ -211,6 +235,11 @@ struct Symbol : public BasicItem
     String Value;
     Symbol(String value) : Value(move(value))
     { }
+
+    void Visit(IVisitor* visitor) override
+    {
+        visitor->Visit(this);
+    }
 };
 
 struct DataRange : public BasicItem
@@ -219,6 +248,11 @@ struct DataRange : public BasicItem
     int Right;
     DataRange(int left, int right) : Left(left), Right(right)
     { }
+
+    void Visit(IVisitor* visitor) override
+    {
+        visitor->Visit(this);
+    }
 };
 
 struct Optional : public BasicItem
@@ -226,6 +260,11 @@ struct Optional : public BasicItem
     shared_ptr<Productions> Productions;
     Optional(shared_ptr<::Productions> productions) : Productions(move(productions))
     { }
+
+    void Visit(IVisitor* visitor) override
+    {
+        visitor->Visit(this);
+    }
 };
 
 struct Combine : public BasicItem
@@ -233,6 +272,11 @@ struct Combine : public BasicItem
     shared_ptr<Production> Production;
     Combine(shared_ptr<::Production> production) : Production(move(production))
     { }
+
+    void Visit(IVisitor* visitor) override
+    {
+        visitor->Visit(this);
+    }
 };
 
 struct Duplicate : public Item
@@ -244,6 +288,11 @@ struct Duplicate : public Item
     Duplicate(unsigned low, unsigned high, shared_ptr<::BasicItem> basicItem)
         : Low(low), High(high), BasicItem(move(basicItem))
     { }
+
+    void Visit(IVisitor* visitor) override
+    {
+        visitor->Visit(this);
+    }
 };
 
 auto Item::Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node) -> shared_ptr<Item>
@@ -367,6 +416,7 @@ struct AstFactory
         else
         {
             // not handle
+            return nullptr;
         }
     }
 
@@ -391,6 +441,7 @@ export
     struct AstNode;
     struct Grammar;
     struct Grammars;
+    struct Item;
     struct BasicItem;
     struct Duplicate;
     struct Combine;
@@ -400,4 +451,5 @@ export
     struct Terminal;
     struct Productions;
     struct Production;
+    struct IVisitor;
 }

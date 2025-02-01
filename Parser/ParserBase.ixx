@@ -40,20 +40,13 @@ export
     constexpr auto eof = "\0";
     //using Input = string; // TODO change
 
-    template <typename T>
-    struct ParseSuccessResult
-    {
-        T Result;
-        String Remain;
-    };
-
     struct ParseFailResult
     {
         // maybe add failed position later
         string Message;
     };
     template <typename T>
-    using ParserResult = expected<ParseSuccessResult<T>, ParseFailResult>;
+    using ParserResult = expected<T, ParseFailResult>;
     using LeftSide = String;
     using SimpleRightSide = vector<String>;
     using SimpleGrammar = pair<LeftSide, vector<SimpleRightSide>>;

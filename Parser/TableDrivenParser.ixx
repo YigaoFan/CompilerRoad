@@ -147,7 +147,7 @@ public:
         auto PopAllFilledNodes = [&workingNodes, &callback]()
         {
             while (not workingNodes.empty())
-            {
+            {   
                 if (auto working = workingNodes.top(); working->Children.size() == working->ChildSymbols.size())
                 {
                     TryRemoveChildrenCausedByLeftFactor(working);
@@ -170,7 +170,7 @@ public:
 
             if (focus.IsEof() and MatchTerminal(focus, word))
             {
-                return ParseSuccessResult<SyntaxTreeNode<Tok, Result>>{ .Result = move(root), .Remain = "" };
+                return root;
             }
             else if (IsTerminal(focus) or focus.IsEof())
             {

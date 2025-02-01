@@ -19,8 +19,132 @@ public:
         vector<SimpleGrammar> OtherGrammars;
         vector<String> Terminals;
         int Counter = 0;
+
+        auto AppendOnLastRule(String symbol) -> void
+        {
+            if (MainRights.empty())
+            {
+                MainRights.push_back({});
+            }
+            MainRights.back().push_back(symbol);
+        }
     };
-    auto Transform(Grammar const* grammar) -> vector<SimpleGrammar>
+    struct TransformVisitor : IVisitor
+    {
+        GrammarTransformInfo* Info;
+        TransformVisitor(GrammarTransformInfo* info) : Info(info)
+        { }
+
+        virtual auto Visit(Terminal* object) -> void
+        {
+            Transform(object, Info);
+        }
+
+        virtual auto Visit(Symbol* object) -> void
+        {
+            Transform(object, Info);
+        }
+
+        virtual auto Visit(DataRange* object) -> void
+        {
+            Transform(object, Info);
+        }
+
+        virtual auto Visit(Optional* object) -> void
+        {
+            Transform(object, Info);
+        }
+
+        virtual auto Visit(Combine* object) -> void
+        {
+            Transform(object, Info);
+        }
+
+        virtual auto Visit(Duplicate* object) -> void
+        {
+            Transform(object, Info);
+        }
+
+        auto Transform(Duplicate const* duplicate, GrammarTransformInfo* info) -> void
+        {
+            String basicItemGrammarName{ format("{}_dup_basicItem_{}", info->Left, info->Counter++) };
+            GrammarTransformInfo subInfo{ .Left = basicItemGrammarName, };
+            GrammarTransformer::Transform(duplicate->BasicItem.get(), &subInfo);
+
+            String auxGrammarName{ format("{}_dup_{}", info->Left, info->Counter++) };
+            vector<SimpleRightSide> rss;
+            // if max is int_max, use right recursive
+            if (duplicate->High == std::numeric_limits<unsigned>::max())
+            {
+                rss.push_back(vector(duplicate->Low, basicItemGrammarName));
+                rss.push_back({ basicItemGrammarName, auxGrammarName });
+            }
+            else
+            {
+                for (auto i = duplicate->Low; i <= duplicate->High; ++i)
+                {
+                    rss.push_back(vector(i, basicItemGrammarName));
+                }
+            }
+
+            info->OtherGrammars.push_back({ auxGrammarName, move(rss) });
+            info->OtherGrammars.push_back({ subInfo.Left, move(subInfo.MainRights) });
+            info->OtherGrammars.append_range(move(subInfo.OtherGrammars));
+            info->AppendOnLastRule(auxGrammarName);
+        }
+
+        auto Transform(Combine const* combine, GrammarTransformInfo* info) -> void
+        {
+            String auxGrammarName{ format("{}_com_{}", info->Left, info->Counter++) };
+            GrammarTransformInfo subInfo{ .Left = auxGrammarName, };
+            GrammarTransformer::Transform(combine->Production.get(), &subInfo);
+
+            info->OtherGrammars.push_back({ subInfo.Left, move(subInfo.MainRights) });
+            info->OtherGrammars.append_range(move(subInfo.OtherGrammars));
+            info->AppendOnLastRule(auxGrammarName);
+        }
+
+        auto Transform(Optional const* optional, GrammarTransformInfo* info) -> void
+        {
+            String auxGrammarName{ format("{}_op_{}", info->Left, info->Counter++) };
+            GrammarTransformInfo subInfo{ .Left = auxGrammarName, };
+            GrammarTransformer::Transform(optional->Productions.get(), &subInfo);
+            subInfo.MainRights.push_back({}); // make it optional
+
+            info->OtherGrammars.push_back({ subInfo.Left, move(subInfo.MainRights) });
+            info->OtherGrammars.append_range(move(subInfo.OtherGrammars));
+            info->AppendOnLastRule(auxGrammarName);
+        }
+
+        auto Transform(DataRange const* dataRange, GrammarTransformInfo* info) -> void
+        {
+            String auxGrammarName{ format("{}_dr_{}", info->Left, info->Counter++) };
+            vector<SimpleRightSide> rss;
+            for (auto i = dataRange->Left; i <= dataRange->Right; ++i)
+            {
+                String s{ static_cast<char>(i) };
+                info->AppendOnLastRule(s);
+                info->Terminals.push_back(s);
+                rss.push_back({ s });
+            }
+            info->OtherGrammars.push_back({ auxGrammarName, move(rss) });
+            info->AppendOnLastRule(auxGrammarName);
+        }
+
+        auto Transform(Symbol const* symbol, GrammarTransformInfo* info) -> void
+        {
+            info->AppendOnLastRule(symbol->Value);
+        }
+
+        auto Transform(Terminal const* terminal, GrammarTransformInfo* info) -> void
+        {
+            // TODO remove quote
+            info->AppendOnLastRule(terminal->Value);
+            info->Terminals.push_back(terminal->Value);
+        }
+    };
+
+    static auto Transform(Grammar const* grammar) -> vector<SimpleGrammar>
     {
         GrammarTransformInfo info{ .Left = grammar->Left };
         Transform(grammar->Productions.get(), &info);
@@ -30,7 +154,7 @@ public:
         return result;
     }
 
-    auto Transform(Grammars const* grammars) -> vector<SimpleGrammar>
+    static auto Transform(Grammars const* grammars) -> vector<SimpleGrammar>
     {
         vector<SimpleGrammar> result;
         for (auto const& g : grammars->Items)
@@ -40,92 +164,34 @@ public:
         return result;
     }
 
-    auto Transform(Duplicate const* duplicate, GrammarTransformInfo* info) -> void
+    static auto Transform(Item* item, GrammarTransformInfo* info) -> void
     {
-        String basicItemGrammarName{ format("{}_dup_basicItem_{}", info->Left, info->Counter++) };
-        GrammarTransformInfo subInfo{ .Left = basicItemGrammarName, };
-        Transform(duplicate->BasicItem.get(), &subInfo);
+        TransformVisitor v(info);
+        item->Visit(&v);
+    }
 
-        String auxGrammarName{ format("{}_dup_{}", info->Left, info->Counter++) };
-        vector<SimpleRightSide> rss;
-        // if max is int_max, use left recursive
-        if (duplicate->High == std::numeric_limits<unsigned>::max())
+    static auto Transform(Productions const* productions, GrammarTransformInfo* info) -> void
+    {
+        for (auto const& p : productions->Items)
         {
-            rss.push_back({ auxGrammarName });
+            GrammarTransformInfo subInfo{ .Left = info->Left, };
+            Transform(p.get(), &subInfo);
+            info->MainRights.append_range(move(subInfo.MainRights));
+            info->OtherGrammars.append_range(move(subInfo.OtherGrammars));
+            info->Terminals.append_range(move(subInfo.Terminals));
         }
-        else
+    }
+
+    static auto Transform(Production const* production, GrammarTransformInfo* info) -> void
+    {
+        for (auto const& item : production->Items)
         {
-            for (auto i = duplicate->Low; i <= duplicate->High; ++i)
-            {
-                rss.push_back(vector(i, basicItemGrammarName));
-            }
+            Transform(item.get(), info);
         }
-
-        info->OtherGrammars.push_back({ auxGrammarName, move(rss) });
-        info->OtherGrammars.push_back({ subInfo.Left, move(subInfo.MainRights) });
-        info->OtherGrammars.append_range(move(subInfo.OtherGrammars));
-        info->MainRights.back().push_back(auxGrammarName);
-    }
-
-    auto Transform(Combine const* combine, GrammarTransformInfo* info) -> void
-    {
-        String auxGrammarName{ format("{}_com_{}", info->Left, info->Counter++) };
-        GrammarTransformInfo subInfo{ .Left = auxGrammarName, };
-        Transform(combine->Production.get(), &subInfo);
-
-        info->OtherGrammars.push_back({ subInfo.Left, move(subInfo.MainRights) });
-        info->OtherGrammars.append_range(move(subInfo.OtherGrammars));
-        info->MainRights.back().push_back(auxGrammarName);
-    }
-
-    auto Transform(Optional const* optional, GrammarTransformInfo* info) -> void
-    {
-        String auxGrammarName{ format("{}_op_{}", info->Left, info->Counter++) };
-        GrammarTransformInfo subInfo{ .Left = auxGrammarName, .MainRights = {{}} };
-        Transform(optional->Productions.get(), &subInfo);
-
-        info->OtherGrammars.push_back({ subInfo.Left, move(subInfo.MainRights) });
-        info->OtherGrammars.append_range(move(subInfo.OtherGrammars));
-        info->MainRights.back().push_back(auxGrammarName);
-    }
-
-    auto Transform(DataRange const* dataRange, GrammarTransformInfo* info) -> void
-    {
-        String auxGrammarName{ format("{}_dr_{}", info->Left, info->Counter++) };
-        vector<SimpleRightSide> rss;
-        for (auto i = dataRange->Left; i <= dataRange->Right; ++i)
-        {
-            String s{ static_cast<char>(i) };
-            info->Terminals.push_back(s);
-            rss.push_back({ s });
-        }
-        info->OtherGrammars.push_back({ auxGrammarName, move(rss) });
-        info->MainRights.back().push_back(auxGrammarName);
-    }
-
-    auto Transform(Symbol const* symbol, GrammarTransformInfo* info) -> void
-    {
-        info->MainRights.back().push_back(symbol->Value);
-    }
-
-    auto Transform(Terminal const* terminal, GrammarTransformInfo* info) -> void
-    {
-        // TODO remove quote
-        info->Terminals.push_back(terminal->Value);
-    }
-
-    auto Transform(BasicItem const* basicItem, GrammarTransformInfo* info) -> void
-    {
-
-    }
-
-    auto Transform(Productions const* productions, GrammarTransformInfo* info) -> void
-    {
-
-    }
-
-    auto Transform(Production const* production, GrammarTransformInfo* info) -> void
-    {
-
     }
 };
+
+export
+{
+    class GrammarTransformer;
+}

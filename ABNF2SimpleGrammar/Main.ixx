@@ -3,6 +3,7 @@ import Lexer;
 import Parser;
 import TokType;
 import Ast;
+import Transformer;
 
 using std::string;
 using std::pair;
@@ -144,10 +145,15 @@ int main()
         file.close();
         auto toks = l.Lex(content) | filter([](auto& x) -> bool { return x.Type != TokType::Whitespace; }) | to<vector<Token<TokType>>>();
         toks.push_back({ .Type = TokType::EOF, .Value = "" }); // add eof
-        auto ast = p.Parse<Token<TokType>, shared_ptr<AstNode>>(VectorStream{ .Tokens = move(toks) }, AstFactory::Create);
-        if (ast.has_value())
+        auto st = p.Parse<Token<TokType>, shared_ptr<AstNode>>(VectorStream{ .Tokens = move(toks) }, AstFactory::Create);
+        if (st.has_value())
         {
-            std::println("ast: {}", ast.value().Result);
+            using std::dynamic_pointer_cast;
+
+            std::println("ast: {}", st.value());
+            auto ast = dynamic_pointer_cast<Grammars>(std::get<1>(st.value().Children.front()).Result);
+            auto sgs = GrammarTransformer::Transform(ast.get());
+            std::println("simple grammar: {}", sgs);
         }
     }
     else
