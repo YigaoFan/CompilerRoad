@@ -97,7 +97,7 @@ public:
         {
             String auxGrammarName{ format("{}_com_{}", info->Left, info->Counter++) };
             GrammarTransformInfo subInfo{ .Left = auxGrammarName, };
-            GrammarTransformer::Transform(combine->Production.get(), &subInfo);
+            GrammarTransformer::Transform(combine->Productions.get(), &subInfo);
 
             info->OtherGrammars.push_back({ subInfo.Left, move(subInfo.MainRights) });
             info->OtherGrammars.append_range(move(subInfo.OtherGrammars));

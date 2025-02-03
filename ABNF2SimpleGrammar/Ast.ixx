@@ -99,7 +99,6 @@ struct Symbol;
 struct DataRange;
 struct Optional;
 struct Combine;
-struct Combine;
 struct Duplicate;
 struct IVisitor
 {
@@ -269,8 +268,8 @@ struct Optional : public BasicItem
 
 struct Combine : public BasicItem
 {
-    shared_ptr<Production> Production;
-    Combine(shared_ptr<::Production> production) : Production(move(production))
+    shared_ptr<Productions> Productions;
+    Combine(shared_ptr<::Productions> productions) : Productions(move(productions))
     { }
 
     void Visit(IVisitor* visitor) override
@@ -338,7 +337,7 @@ auto BasicItem::Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* n
         }
         else if (node->ChildSymbols.front() == "(")
         {
-            return make_shared<Combine>(GetResultOfAstChildAs<Production>(node, 1));
+            return make_shared<Combine>(GetResultOfAstChildAs<Productions>(node, 1));
         }
         break;
     }
@@ -360,6 +359,35 @@ struct Grammar : public AstNode
     { }
 };
 
+struct MoreGrammars : public AstNode
+{
+    vector<shared_ptr<Grammar>> Items;
+
+    static auto Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node) -> MoreGrammars
+    {
+        switch (node->ChildSymbols.size())
+        {
+        case 0:
+        case 1:
+            return MoreGrammars({});
+        case 3:
+        {
+            vector gs{ GetResultOfAstChildAs<Grammar>(node, 1) };
+            gs.append_range(GetResultOfAstChildAs<MoreGrammars>(node, 2)->Items);
+            return MoreGrammars(move(gs));
+        }
+        default:
+            throw std::logic_error(format("MoreGrammars not support {}", node->ChildSymbols.size()));
+        }
+    }
+
+    MoreGrammars(vector<shared_ptr<Grammar>> grammars) : Items(move(grammars))
+    {
+    }
+
+    ~MoreGrammars() override = default;
+};
+
 struct Grammars : public AstNode
 {
     vector<shared_ptr<Grammar>> Items;
@@ -370,12 +398,10 @@ struct Grammars : public AstNode
         {
         case 0:
             return Grammars({});
-        case 1:
-            return Grammars(vector{ GetResultOfAstChildAs<Grammar>(node, 0) });
         case 3:
         {
-            vector gs{ GetResultOfAstChildAs<Grammar>(node, 0) };
-            gs.append_range(GetResultOfAstChildAs<Grammars>(node, 2)->Items);
+            vector gs{ GetResultOfAstChildAs<Grammar>(node, 1) };
+            gs.append_range(GetResultOfAstChildAs<MoreGrammars>(node, 2)->Items);
             return Grammars(move(gs));
         }
         default:
@@ -391,7 +417,7 @@ struct Grammars : public AstNode
 
 struct AstFactory
 {
-    using TypeConfigs = List<Pair<"grammars", Grammars>, Pair<"grammar", Grammar>, Pair<"productions", Productions>, Pair<"production", Production>, Pair<"more-productions", MoreProductions>,
+    using TypeConfigs = List<Pair<"grammars", Grammars>, Pair<"more-grammars", MoreGrammars>, Pair<"grammar", Grammar>, Pair<"productions", Productions>, Pair<"production", Production>, Pair<"more-productions", MoreProductions>,
         Pair<"production", Production>, Pair<"more-items", MoreItems>, Pair<"item", Item>, Pair<"item_0", BasicItem>>;
 
     static auto Create(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node) -> void

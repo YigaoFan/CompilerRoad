@@ -89,7 +89,7 @@ public:
                 stack.push_back({ move(s), i });
                 if (++i < code.length())
                 {
-                    std::println("run state {} by {}", nextState, i);
+                    //std::println("run state {} by {}", nextState, i);
                     r = dfa.Run(nextState, code[i]);
                     goto CheckState;
                 }

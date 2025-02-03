@@ -45,26 +45,26 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
     auto output = vector<char>();
     auto operators = vector<char>();
     auto AddOperator = [&](char op) -> void
+    {
+        for (;;)
         {
-            for (;;)
+            if (not operators.empty())
             {
-                if (not operators.empty())
+                if (auto lastOp = operators.back(); lastOp != '(' and lastOp != '[')
                 {
-                    if (auto lastOp = operators.back(); lastOp != '(' and lastOp != '[')
+                    if (Priority(op) <= Priority(lastOp))
                     {
-                        if (Priority(op) <= Priority(lastOp))
-                        {
-                            output.push_back(lastOp);
-                            operators.pop_back();
-                            continue;
-                        }
+                        output.push_back(lastOp);
+                        operators.pop_back();
+                        continue;
                     }
                 }
-
-                operators.push_back(op);
-                break;
             }
-        };
+
+            operators.push_back(op);
+            break;
+        }
+    };
 
     for (size_t i = 0, len = regExp.length(); i < len; i++)
     {

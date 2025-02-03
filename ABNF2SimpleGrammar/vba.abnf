@@ -1,3 +1,10 @@
+; TODO add logical line grammar and separator and special token
+WSC -> tab-char | eom-char | space-char | DBCS-whitespace | most-Unicode-class-Zs
+tab-char -> "" ; TODO how to type tab
+eom-char -> "" ; TODO
+space-char -> " "
+
+; capitalize the first char of grammar part as below
 Integer -> integer-literal [ "%" | "&" | "^" ]
 integer-literal -> decimal-literal | octal-literal | hex-literal
 decimal-literal -> 1*decimal-digit
@@ -6,3 +13,33 @@ hex-literal -> "&" ["h" | "H"] 1*hex-digit
 octal-digit -> '0'-'7'
 decimal-digit -> octal-digit | "8" | "9"
 hex-digit -> decimal-digit | 'A'-'F' | 'a'-'f'
+
+Float -> (floating-point-literal [floating-point-type-suffix]) | (decimal-literal floating-point-type-suffix)
+floating-point-literal -> (integer-digits exponent) | (integer-digits "." [fractional-digits] [exponent]) | ("." fractional-digits [exponent])
+integer-digits -> decimal-literal
+fractional-digits -> decimal-literal
+exponent -> exponent-letter [sign] decimal-literal
+exponent-letter -> "D" | "E" | "d" | "e"
+sign -> "+" | "-"
+floating-point-type-suffix -> "!" | "#" | "@"
+
+Date-or-time -> (date-value 1*WSC time-value) | date-value | time-value
+date-value -> left-date-value date-separator middle-date-value [date-separator right-date-value]
+left-date-value -> decimal-literal | month-name
+middle-date-value -> decimal-literal | month-name
+right-date-value -> decimal-literal | month-name
+date-separator -> 1*WSC | (*WSC ("/" | "-" | ",") *WSC)
+month-name -> english-month-name | english-month-abbreviation
+english-month-name -> "january" | "february" | "march" | "april" | "may" | "june" | "july" | "august" | "september" | "october" | "november" | "december"
+english-month-abbreviation -> "jan" | "feb" | "mar" | "apr" | "jun" | "jul" | "aug" | "sep" | "oct" | "nov" | "dec"
+time-value -> (hour-value ampm) | (hour-value time-separator minute-value [time-separator second-value] [ampm])
+hour-value -> decimal-literal
+minute-value -> decimal-literal
+second-value -> decimal-literal
+time-separator -> *WSC (":" | ".") *WSC
+ampm -> *WSC ("am" | "pm" | "a" | "p")
+
+;TODO support escape char in terminal
+String -> double-quote *string-char (double-quote | line-continuation | LINE-END)
+double-quote -> "\""
+string-char -> NO-LINE-CONTINUATION ((double-quote double-quote) | non-line-termination-char)

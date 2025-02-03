@@ -47,20 +47,24 @@ int main()
         pair<string, TokType>{ " ", TokType::Whitespace },
         pair<string, TokType>{ "[a-zA-Z][a-zA-Z0-9_\\-]*", TokType::Symbol },
         pair<string, TokType>{ "[1-9][0-9]*", TokType::Number },
-        pair<string, TokType>{ ";[^\n]*\n", TokType::Comment },
+        pair<string, TokType>{ ";[^\n]*", TokType::Comment },
         pair<string, TokType>{ "\\-", TokType::Hyphen },
         pair<string, TokType>{ "\\(", TokType::LeftParen },
         pair<string, TokType>{ "\\)", TokType::RightParen },
         pair<string, TokType>{ "\n", TokType::Newline },
-        pair<string, TokType>{ "\"[^\"]*\"", TokType::Terminal },
+        pair<string, TokType>{ "\"((\\\\\")|[^\"\n])*\"", TokType::Terminal },
         pair<string, TokType>{ "'[a-zA-Z0-9]'", TokType::QutotedDigitOrAlphabet },
     };
     auto l = Lexer<TokType>::New(rules);
     auto p = TableDrivenParser::ConstructFrom("grammars",
     {// how to represent empty in current grammar
         { "grammars", {
-            { "grammar", "newlines", "grammars" },
-            { "grammar" },
+            { "optional-newlines", "grammar", "more-grammars", }, // TODO support newline after grammar
+            { },
+        }},
+        { "more-grammars", {
+            { "newlines", "grammar", "more-grammars"},
+            { "newlines" },
             { },
         }},
         { "grammar", {
@@ -68,6 +72,10 @@ int main()
         }},
         { "optional-comment", {
             { "comment" },
+            { },
+        }},
+        { "optional-newlines", {
+            { "newlines", },
             { },
         }},
         { "newlines", {
@@ -103,7 +111,7 @@ int main()
             { "sym" },
             { "digitOrAlphabet", "-", "digitOrAlphabet" },
             { "[", "productions", "]" },
-            { "(", "production", ")" },
+            { "(", "productions", ")" },
         }},
     },
     {
@@ -143,7 +151,7 @@ int main()
             content.push_back('\n');
         }
         file.close();
-        auto toks = l.Lex(content) | filter([](auto& x) -> bool { return x.Type != TokType::Whitespace; }) | to<vector<Token<TokType>>>();
+        auto toks = l.Lex(content) | filter([](auto& x) -> bool { return x.Type != TokType::Whitespace and x.Type != TokType::Comment; }) | to<vector<Token<TokType>>>();
         toks.push_back({ .Type = TokType::EOF, .Value = "" }); // add eof
         auto st = p.Parse<Token<TokType>, shared_ptr<AstNode>>(VectorStream{ .Tokens = move(toks) }, AstFactory::Create);
         if (st.has_value())
