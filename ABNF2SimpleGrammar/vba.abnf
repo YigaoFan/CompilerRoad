@@ -39,7 +39,68 @@ second-value -> decimal-literal
 time-separator -> *WSC (":" | ".") *WSC
 ampm -> *WSC ("am" | "pm" | "a" | "p")
 
-;TODO support escape char in terminal
 String -> double-quote *string-char (double-quote | line-continuation | LINE-END)
 double-quote -> "\""
 string-char -> NO-LINE-CONTINUATION ((double-quote double-quote) | non-line-termination-char)
+
+reserved-identifier -> statement-keyword | marker-keyword | operator-identifier | special-form | reserved-type-identifier | reserved-name | literal-identifier | rem-keyword | reserved-for-implementation-use | future-reserved
+Identifier -> <not reserved-identifier word> ; use regexp to solve this issue
+statement-keyword -> "Call" | "Case" |"Close" | "Const"| "Declare" | "DefBool" | "DefByte" | "DefCur" | "DefDate" | "DefDbl" | "DefInt" | "DefLng" | "DefLngLng" | "DefLngPtr" | "DefObj" | "DefSng" | "DefStr" | "DefVar" | "Dim" | "Do" | "Else" | "ElseIf" | "End" | "EndIf" | "Enum" | "Erase" | "Event" | "Exit" | "For" | "Friend" | "Function" | "Get" | "Global" | "GoSub" | "GoTo" | "If" | "Implements"| "Input" | "Let" | "Lock" | "Loop" | "LSet" | "Next" | "On" | "Open" | "Option" | "Print" | "Private" | "Public" | "Put" | "RaiseEvent" | "ReDim" | "Resume" | "Return" | "RSet" | "Seek" | "Select" | "Set" | "Static" | "Stop" | "Sub" | "Type" | "Unlock" | "Wend" | "While" | "With" | "Write" 
+rem-keyword -> "Rem" 
+marker-keyword -> "Any" | "As"| "ByRef" | "ByVal "|"Case" | "Each" | "Else" |"In"| "New" | "Shared" | "Until" | "WithEvents" | "Write" | "Optional" | "ParamArray" | "Preserve" | "Spc" | "Tab" | "Then" | "To" 
+operator-identifier -> "AddressOf" | "And" | "Eqv" | "Imp" | "Is" | "Like" | "New" | "Mod" | "Not" | "Or" | "TypeOf" | "Xor"
+reserved-name -> "Abs" | "CBool" | "CByte" | "CCur" | "CDate" | "CDbl" | "CDec" | "CInt" | "CLng" | "CLngLng" | "CLngPtr" | "CSng" | "CStr" | "CVar" | "CVErr" | "Date" | "Debug" | "DoEvents" | "Fix" | "Int" | "Len" | "LenB" | "Me" | "PSet" | "Scale" | "Sgn" | "String" 
+special-form -> "Array" | "Circle" | "Input" | "InputB" | "LBound" | "Scale" | "UBound" 
+reserved-type-identifier -> "Boolean" | "Byte" | "Currency" | "Date" | "Double" | "Integer" | "Long" | "LongLong" | "LongPtr" | "Single" | "String" | "Variant" 
+literal-identifier -> boolean-literal-identifier | object-literal-identifier | variant-literal-identifier 
+boolean-literal-identifier -> "true" | "false" 
+object-literal-identifier -> "nothing" 
+variant-literal-identifier -> "empty" | "null"  
+reserved-for-implementation-use -> "Attribute" | "LINEINPUT" | "VB_Base" | "VB_Control" | "VB_Creatable" | "VB_Customizable" | "VB_Description" | "VB_Exposed" | "VB_Ext_KEY " | "VB_GlobalNameSpace" | "VB_HelpID" | "VB_Invoke_Func" | "VB_Invoke_Property " | "VB_Invoke_PropertyPut" | "VB_Invoke_PropertyPutRef" | "VB_MemberFlags" | "VB_Name" | "VB_PredeclaredId" | "VB_ProcData" | "VB_TemplateDerived" | "VB_UserMemId" | "VB_VarDescription" | "VB_VarHelpID" | "VB_VarMemberFlags" | "VB_VarProcData " | "VB_VarUserMemId" 
+future-reserved -> "CDecl" | "Decimal" | "DefDec"
+
+Foreign-name -> "[" foreign-identifier "]" 
+foreign-identifier -> 1*non-line-termination-character ; TODO use regexp to implement
+
+Builtin-type -> reserved-type-identifier | ("[" reserved-type-identifier "]") | "object" | "[object]" 
+
+Typed-name -> Identifier type-suffix 
+type-suffix -> "%" | "&" | "^" | "!" | "#" | "@" | "$" 
+
+Conditional-module-body -> cc-block
+cc-block -> *(cc-const | cc-if-block | logical-line) 
+cc-const -> LINE-START "#" "const" cc-var-lhs "=" cc-expression cc-eol ;TODO ignore LINE-START and LINE-END in translation
+cc-var-lhs -> name 
+cc-eol -> [single-quote *non-line-termination-character] LINE-END
+cc-if-block -> cc-if cc-block *cc-elseif-block [cc-else-block] cc-endif 
+cc-if -> LINE-START "#" "if" cc-expression "then" cc-eol 
+cc-elseif-block -> cc-elseif cc-block 
+cc-elseif -> LINE-START "#" "elseif" cc-expression "then" cc-eol 
+cc-else-block -> cc-else cc-block 
+cc-else -> LINE-START "#" "else" cc-eol 
+cc-endif -> LINE-START "#" ("endif" | ("end" "if")) cc-eol 
+
+Procedural-module -> LINE-START procedural-module-header EOS LINE-START procedural-module-body 
+Class-module -> LINE-START class-module-header LINE-START class-module-body 
+procedural-module-header -> attribute "VB_Name" attr-eq quoted-identifier attr-end 
+class-module-header -> 1*class-attr 
+class-attr -> attribute "VB_Name" attr-eq quoted-identifier attr-end | attribute "VB_GlobalNameSpace" attr-eq "False" attr-end | attribute "VB_Creatable" attr-eq "False" attr-end | attribute "VB_PredeclaredId" attr-eq boolean-literal-identifier attr-end | attribute "VB_Exposed" attr-eq boolean-literal-identifier attr-end | attribute "VB_Customizable" attr-eq boolean-literal-identifier attr-end 
+attribute -> LINE-START "Attribute" 
+attr-eq -> "->"
+attr-end -> LINE-END
+quoted-identifier -> double-quote NO-WS IDENTIFIER NO-WS double-quote
+procedural-module-body -> LINE-START procedural-module-declaration-section LINE-START procedural-module-code-section 
+class-module-body -> LINE-START class-module-declaration-sect
+
+Unrestricted-name -> name | reserved-identifier 
+name -> untyped-name | Typed-name | file-number
+untyped-name -> Identifier | Foreign-name
+
+procedural-module-declaration-section -> [*(procedural-module-directive-element EOS) def-directive] *( procedural-module-declaration-element EOS) 
+class-module-declaration-section -> [*(class-module-directive-element EOS) def-directive] *(class-module-declaration-element EOS) 
+procedural-module-directive-element -> common-option-directive | option-private-directive | def-directive 
+procedural-module-declaration-element -> common-module-declaration-element | global-variable-declaration | public-const-declaration | public-type-declaration | public-external-procedure-declaration | global-enum-declaration | common-option-directive | option-private-directive
+class-module-directive-element -> common-option-directive | def-directive | implements-directive 
+class-module-declaration-element -> common-module-declaration-element | event-declaration | common-option-directive | implements-directive ;commonoption-directive in the doc
+common-option-directive -> option-compare-directive | option-base-directive | option-explicit-directive | rem-statement
+option-compare-directive -> "Option" "Compare" ( "Binary" | "Text")
