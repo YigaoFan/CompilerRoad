@@ -65,6 +65,22 @@ public:
             Transform(object, Info);
         }
 
+        auto Visit(Grammar*) -> void override
+        {
+        }
+
+        auto Visit(Grammars*) -> void override
+        {
+        }
+
+        auto Visit(Productions*) -> void override
+        {
+        }
+
+        auto Visit(Production*) -> void override
+        {
+        }
+
         auto Transform(Duplicate const* duplicate, GrammarTransformInfo* info) -> void
         {
             String basicItemGrammarName{ format("{}_dup_basicItem_{}", info->Left, info->Counter++) };

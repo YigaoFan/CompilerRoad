@@ -27,6 +27,9 @@
     <ClCompile Include="Transformer.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Checker.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CopyFileToFolders Include="vba.abnf" />

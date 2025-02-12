@@ -4,6 +4,7 @@ import Parser;
 import TokType;
 import Ast;
 import Transformer;
+import Checker;
 
 using std::string;
 using std::pair;
@@ -154,7 +155,11 @@ int main()
         auto toks = l.Lex(content) | filter([](auto& x) -> bool { return x.Type != TokType::Whitespace and x.Type != TokType::Comment; }) | to<vector<Token<TokType>>>();
         toks.push_back({ .Type = TokType::EOF, .Value = "" }); // add eof
         // add line and word info in toks
-        auto st = p.Parse<Token<TokType>, shared_ptr<AstNode>>(VectorStream{ .Tokens = move(toks) }, AstFactory::Create);
+        auto checker = Checker();
+        auto st = p.Parse<Token<TokType>, shared_ptr<AstNode>>(VectorStream{ .Tokens = move(toks) }, [&checker](auto n) -> void
+        {
+            AstFactory::Create(&checker, n);
+        }); // TODO std::bind(AstFactory::Create, &checker)
         if (st.has_value())
         {
             using std::dynamic_pointer_cast;
@@ -164,6 +169,7 @@ int main()
             auto sgs = GrammarTransformer::Transform(ast.get());
             std::println("simple grammar: {}", sgs);
         }
+        checker.Check();
     }
     else
     {

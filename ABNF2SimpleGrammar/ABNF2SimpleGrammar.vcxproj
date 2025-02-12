@@ -132,6 +132,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Ast.ixx" />
+    <ClCompile Include="Checker.ixx" />
     <ClCompile Include="Main.ixx" />
     <ClCompile Include="TokType.ixx" />
     <ClCompile Include="Transformer.ixx" />
