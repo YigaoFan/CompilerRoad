@@ -94,7 +94,9 @@ export
             for (; not workingNodes.empty();)
             {
                 //println("working nodes size: {}", workingNodes.size());
-                for (auto& working = workingNodes.top(); not working.Children.empty(); working.Children.pop_back())
+                auto working = move(workingNodes.top());
+                workingNodes.pop();
+                for (; not working.Children.empty(); working.Children.pop_back())
                 {
                     auto& back = working.Children.back();
                     std::visit(overloads
@@ -103,7 +105,6 @@ export
                         [](Token) -> void {},
                     }, back);
                 }
-                workingNodes.pop();
             }
         }
     };
