@@ -12,6 +12,7 @@ using std::pair;
 using std::variant;
 using std::size_t;
 using std::stack;
+using std::move;
 
 template <typename A, typename B>
 concept ExplicitConvertibleTo = requires (A a) { static_cast<B>(a); };
@@ -32,6 +33,9 @@ struct ZeroOrMoreItems
 //{
 //
 //}
+
+template<class... Ts>
+struct overloads : Ts... { using Ts::operator()...; };
 
 export
 {
@@ -62,8 +66,46 @@ export
     {
         String Name;
         vector<String> ChildSymbols;
-        vector<variant<Token, SyntaxTreeNode>> Children;
+        vector<variant<Token, SyntaxTreeNode>> Children;// put all SyntaxTreeNode in a vector, here use raw pointer or deconstruct manually from bottom
         Result Result;
+
+        SyntaxTreeNode(String name, vector<String> childSymbols, vector<variant<Token, SyntaxTreeNode>> children = {})
+            : Name(move(name)), ChildSymbols(move(childSymbols)), Children(move(children)), Result() // typo here, Kern invoke me
+        { }
+
+        SyntaxTreeNode(SyntaxTreeNode&& that)
+            : Name(move(that.Name)), ChildSymbols(move(that.ChildSymbols)), Children(move(that.Children)), Result(move(that.Result))
+        { }
+
+        ~SyntaxTreeNode()
+        {
+            using std::println;
+            stack<SyntaxTreeNode> workingNodes;
+            for (; not Children.empty(); Children.pop_back())
+            {
+                auto& back = Children.back();
+                std::visit(overloads
+                {
+                    [&workingNodes](SyntaxTreeNode& n) -> void { workingNodes.push(move(n)); },
+                    [](Token) -> void {},
+                }, back);
+            }
+
+            for (; not workingNodes.empty();)
+            {
+                //println("working nodes size: {}", workingNodes.size());
+                for (auto& working = workingNodes.top(); not working.Children.empty(); working.Children.pop_back())
+                {
+                    auto& back = working.Children.back();
+                    std::visit(overloads
+                    {
+                        [&workingNodes](SyntaxTreeNode& n) -> void { workingNodes.push(move(n)); },
+                        [](Token) -> void {},
+                    }, back);
+                }
+                workingNodes.pop();
+            }
+        }
     };
 
     template <IToken Token, typename Result>

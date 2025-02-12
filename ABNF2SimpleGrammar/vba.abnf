@@ -230,11 +230,11 @@ lifecycle-handler-name -> "Class_Initialize" | "Class_Terminate"
 procedure-body -> statement-block 
 
 statement-block -> *(block-statement EOS)
-block-statement -> statement-label-definition | rem-statement | statement | attributestatement
+block-statement -> statement-label-definition | rem-statement | statement | attribute-statement
 attribute-statement -> attribute [IDENTIFIER "."] reserved-for-implementation-use attr-eq [quoted-identifier | boolean-literal-identifier]
 statement -> control-statement | data-manipulation-statement | error-handling-statement | file-statement
 
-statement-label-definition -> LINE-START ((identifier-statement-label ":") | (line-numberlabel [":"] ))
+statement-label-definition -> LINE-START ((identifier-statement-label ":") | (line-number-label [":"] ))
 statement-label -> identifier-statement-label | line-number-label
 statement-label-list -> statement-label ["," statement-label]
 identifier-statement-label -> IDENTIFIER
@@ -253,7 +253,7 @@ nested-for-statement -> explicit-for-statement | explicit-for-each-statement
 for-clause -> "For" bound-variable-expression "=" start-value "To" end-value [step-clause]
 start-value -> expression
 end-value -> expression
-step-clause -> Step" step-increment
+step-clause -> "Step" step-increment
 step-increment -> expression
 for-each-statement -> simple-for-each-statement | explicit-for-each-statement
 simple-for-each-statement -> for-each-clause EOS statement-block "Next"
@@ -329,7 +329,7 @@ let-statement -> ["Let"] l-expression "=" expression
 set-statement -> "Set" l-expression "=" expression 
 error-handling-statement -> on-error-statement | resume-statement | error-statement
 on-error-statement -> "On" "Error" error-behavior
-error-behavior -> ("Resume" "Next") | ("GoTo" (statement-label | -1)) 
+error-behavior -> ("Resume" "Next") | ("GoTo" (statement-label | "0")) ; TODO I don't know why use -1 here after reading related doc, so I fix it to 0
 resume-statement -> "Resume" [("Next" | statement-label)] 
 Error-statement -> "Error" error-number 
 error-number -> integer-expression
@@ -389,13 +389,13 @@ typeof-is-expression -> "typeof" expression "is" type-expression
 new-expression -> "New" type-expression 
 ; TODO operator priority
 operator-expression -> arithmetic-operator-expression | concatenation-operator-expression | relational-operator-expression | like-operator-expression | is-operator-expression | logicaloperator-expression
-arithmetic-operator-expression -> unary-minus-operator-expression | addition-operatorexpression | subtraction-operator-expression | multiplication-operator-expression | divisionoperator-expression | integer-division-operator-expression | modulo-operator-expression | exponentiation-operator-expression
+arithmetic-operator-expression -> unary-minus-operator-expression | addition-operator-expression | subtraction-operator-expression | multiplication-operator-expression | divisionoperator-expression | integer-division-operator-expression | modulo-operator-expression | exponentiation-operator-expression
 unary-minus-operator-expression -> "-" expression
 addition-operator-expression -> expression "+" expression
 subtraction-operator-expression -> expression "-" expression 
 multiplication-operator-expression -> expression "*" expression
 division-operator-expression -> expression "/" expression
-integer-division-operator-expression -> expression "\" expression
+integer-division-operator-expression -> expression "\\" expression
 modulo-operator-expression -> expression "mod" expression 
 exponentiation-operator-expression -> expression "^" expression
 concatenation-operator-expression -> expression "&" expression

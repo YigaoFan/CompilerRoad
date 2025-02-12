@@ -141,7 +141,7 @@ public:
         symbolStack.push(String(eof));
         symbolStack.push(startSymbol);
         auto word = stream.NextItem();
-        SyntaxTreeNode<Tok, Result> root{ .Name = "root", .ChildSymbols = { startSymbol } }; // TODO why "root" is shown as "???" in VS debugger
+        SyntaxTreeNode<Tok, Result> root{ "root", { startSymbol } }; // TODO why "root" is shown as "???" in VS debugger
         stack<SyntaxTreeNode<Tok, Result>*> workingNodes;
         workingNodes.push(&root);
         auto PopAllFilledNodes = [&workingNodes, &callback]()
@@ -196,7 +196,7 @@ public:
                     auto [i, j] = parseTable[dest];
                     symbolStack.pop();
                     auto const& rule = grammars[i].second[j];
-                    workingNodes.top()->Children.push_back(SyntaxTreeNode<Tok, Result>{ .Name = grammars[i].first, .ChildSymbols = rule, .Children = {} });
+                    workingNodes.top()->Children.push_back(SyntaxTreeNode<Tok, Result>{ grammars[i].first, rule, });
                     workingNodes.push(&std::get<SyntaxTreeNode<Tok, Result>>(workingNodes.top()->Children.back()));
                     PopAllFilledNodes();
 
@@ -228,9 +228,10 @@ private:
             if (node->ChildSymbols[i].StartWith(node->Name) and node->ChildSymbols[i].EndWith(leftFactorSuffix))
             {
                 expanded = true;
-                auto& n = std::get<1>(node->Children[i]);
+                SyntaxTreeNode<Tok, Result>& n = std::get<1>(node->Children[i]);
                 symbols.append_range(move(n.ChildSymbols));
-                children.append_range(move(n.Children));
+                move(n.Children.begin(), n.Children.end(), std::back_inserter(children));
+                //children.append_range(move(n.Children)); why this trigger copy constructor which affect performance
             }
             else
             {

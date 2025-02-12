@@ -44,7 +44,7 @@ int main()
         pair<string, TokType>{ "}", TokType::RightBracket },
         pair<string, TokType>{ "\\*", TokType::StarMark },
         pair<string, TokType>{ "\\|", TokType::PipeMark },
-        pair<string, TokType>{ " ", TokType::Whitespace },
+        pair<string, TokType>{ " |\t", TokType::Whitespace },
         pair<string, TokType>{ "[a-zA-Z][a-zA-Z0-9_\\-]*", TokType::Symbol },
         pair<string, TokType>{ "[1-9][0-9]*", TokType::Number },
         pair<string, TokType>{ ";[^\n]*", TokType::Comment },
@@ -52,7 +52,7 @@ int main()
         pair<string, TokType>{ "\\(", TokType::LeftParen },
         pair<string, TokType>{ "\\)", TokType::RightParen },
         pair<string, TokType>{ "\n", TokType::Newline },
-        pair<string, TokType>{ "\"((\\\\\")|[^\"\n])*\"", TokType::Terminal },
+        pair<string, TokType>{ "\"((\\\\[\"\\\\])|[^\"\n])*\"", TokType::Terminal },
         pair<string, TokType>{ "'[a-zA-Z0-9]'", TokType::QutotedDigitOrAlphabet },
     };
     auto l = Lexer<TokType>::New(rules);
@@ -153,6 +153,7 @@ int main()
         file.close();
         auto toks = l.Lex(content) | filter([](auto& x) -> bool { return x.Type != TokType::Whitespace and x.Type != TokType::Comment; }) | to<vector<Token<TokType>>>();
         toks.push_back({ .Type = TokType::EOF, .Value = "" }); // add eof
+        // add line and word info in toks
         auto st = p.Parse<Token<TokType>, shared_ptr<AstNode>>(VectorStream{ .Tokens = move(toks) }, AstFactory::Create);
         if (st.has_value())
         {
