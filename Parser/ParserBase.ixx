@@ -77,6 +77,12 @@ export
             : Name(move(that.Name)), ChildSymbols(move(that.ChildSymbols)), Children(move(that.Children)), Result(move(that.Result))
         { }
 
+        /// <summary>
+        /// due to this is recursive data structure, copy directly will cause deep recursive call in actual usage.
+        /// so delete it explicitly
+        /// </summary>
+        SyntaxTreeNode(SyntaxTreeNode const& that) = delete;
+
         ~SyntaxTreeNode()
         {
             using std::println;
