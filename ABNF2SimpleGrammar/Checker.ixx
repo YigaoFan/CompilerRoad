@@ -43,10 +43,7 @@ struct Checker : IVisitor
 
     virtual auto Visit(Grammar* object) -> void
     {
-        if (symbols.contains(object->Left))
-        {
-            ++symbols[object->Left];
-        }
+        ++symbols[object->Left];
     }
 
     virtual auto Visit(Grammars* object) -> void

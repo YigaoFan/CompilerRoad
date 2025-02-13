@@ -4,6 +4,14 @@ tab-char -> "" ; TODO how to type tab
 eom-char -> "" ; TODO
 space-char -> " "
 
+special-token -> "," | "." | "!" | "#" | "&" | "(" | ")" | "*" | "+" | "-" | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "\\" | "^" 
+;NO-WS -> <no whitespace characters allowed here> 
+;NO-LINE-CONTINUATION -> <a line-continuation is not allowed here> 
+EOL -> [WS] LINE-END | single-quote comment-body 
+EOS -> *(EOL | ":") ;End Of Statement 
+single-quote -> "'" 
+comment-body -> *(line-continuation | non-line-termination-character) LINE-END 
+
 ; capitalize the first char of grammar part as below
 Integer -> integer-literal [ "%" | "&" | "^" ]
 integer-literal -> decimal-literal | octal-literal | hex-literal
@@ -88,11 +96,11 @@ class-attr -> attribute "VB_Name" attr-eq quoted-identifier attr-end | attribute
 attribute -> LINE-START "Attribute" 
 attr-eq -> "->"
 attr-end -> LINE-END
-quoted-identifier -> double-quote NO-WS IDENTIFIER NO-WS double-quote
+quoted-identifier -> double-quote NO-WS Identifier NO-WS double-quote
 procedural-module-body -> LINE-START procedural-module-declaration-section LINE-START procedural-module-code-section 
-class-module-body -> LINE-START class-module-declaration-sect
+class-module-body -> LINE-START class-module-declaration-section
 
-Unrestricted-name -> name | reserved-identifier 
+unrestricted-name -> name | reserved-identifier 
 name -> untyped-name | Typed-name | file-number
 untyped-name -> Identifier | Foreign-name
 
@@ -118,9 +126,10 @@ first-letter -> Identifier
 last-letter -> Identifier
 def-type -> "DefBool" | "DefByte" | "DefCur" | "DefDate" | "DefDbl" | "DefInt" | "DefLng" | "DefLngLng" | "DefLngPtr" | "DefObj" | "DefSng" | "DefStr" | "DefVar" 
 common-module-declaration-element -> module-variable-declaration | private-const-declaration | private-type-declaration | public-type-declaration| public-enum-declaration | private-enum-declaration | private-external-procedure-declaration | attribute-statement
+module-variable-declaration -> public-variable-declaration | private-variable-declaration
 global-variable-declaration -> "Global" variable-declaration-list
 public-variable-declaration -> "Public" ["Shared"] module-variable-declaration-list
-private-variable-declaration -> ("Private" | "Dim") ["Shared"] module-variable-declarationlist
+private-variable-declaration -> ("Private" | "Dim") ["Shared"] module-variable-declaration-list
 module-variable-declaration-list -> (withevents-variable-dcl | variable-dcl) *( "," (withevents-variable-dcl | variable-dcl))
 variable-declaration-list -> variable-dcl *("," variable-dcl)
 variable-dcl -> typed-variable-dcl | untyped-variable-dcl
@@ -147,9 +156,9 @@ module-const-declaration -> const-declaration
 const-declaration -> "Const" const-item-list
 const-item-list -> const-item *[ "," const-item]
 const-item -> typed-name-const-item  | untyped-name-const-item
-typed-name-const-item -> TYPED-NAME "=" constant-expression
-untyped-name-const-item -> IDENTIFIER [const-as-clause] "=" constant-expression
-const-as-clause -> "as" BUILTIN-TYPE
+typed-name-const-item -> Typed-name "=" constant-expression
+untyped-name-const-item -> Identifier [const-as-clause] "=" constant-expression
+const-as-clause -> "as" Builtin-type
 
 public-type-declaration -> ["global"  | "public"] udt-declaration
 private-type-declaration -> "private" udt-declaration
@@ -157,10 +166,10 @@ udt-declaration -> "type" untyped-name EOS udt-member-list EOS "end" "type"
 udt-member-list -> udt-element *[EOS udt-element]
 udt-element -> rem-statement  | udt-member
 udt-member -> reserved-name-member-dcl  | untyped-name-member-dcl
-untyped-name-member-dcl -> IDENTIFIER optional-array-clause
+untyped-name-member-dcl -> Identifier optional-array-clause
 reserved-name-member-dcl -> reserved-member-name as-clause
 optional-array-clause -> [array-dim] as-clause
-reserved-member-name -> statement-keyword  | marker-keyword  | operator-identifier  | specialform  | reserved-name  | literal-identifier  | reserved-for-implementation-use  | future-reserved
+reserved-member-name -> statement-keyword  | marker-keyword  | operator-identifier  | special-form  | reserved-name  | literal-identifier  | reserved-for-implementation-use  | future-reserved
 
 global-enum-declaration -> "global" enum-declaration
 public-enum-declaration -> ["public"] enum-declaration
@@ -170,16 +179,17 @@ enum-member-list -> enum-element *[EOS enum-element]
 enum-element -> rem-statement  | enum-member
 enum-member -> untyped-name [ "=" constant-expression] 
 
+public-external-procedure-declaration -> ["public"] external-proc-dcl
 private-external-procedure-declaration -> "private" external-proc-dcl
 external-proc-dcl -> "declare" ["ptrsafe"] (external-sub  | external-function)
 external-sub -> "sub" subroutine-name lib-info [procedure-parameters]
-external-function -> "function" function-name lib-info [procedure-parameters] [functiontype]
+external-function -> "function" function-name lib-info [procedure-parameters] [function-type]
 lib-info -> lib-clause [alias-clause]
-lib-clause -> "lib" STRING
-alias-clause -> "alias" STRING 
+lib-clause -> "lib" String
+alias-clause -> "alias" String 
 
 implements-directive -> "Implements" class-type-name 
-event-declaration -> ["Public"] "Event" IDENTIFIER [event-parameter-list]
+event-declaration -> ["Public"] "Event" Identifier [event-parameter-list]
 event-parameter-list -> "(" [positional-parameters] ")" 
 
 procedural-module-code-section -> *( LINE-START procedural-module-code-element LINE-END)
@@ -187,7 +197,7 @@ class-module-code-section -> *( LINE-START class-module-code-element LINE-END)
 procedural-module-code-element -> common-module-code-element
 class-module-code-element -> common-module-code-element  | implements-directive
 common-module-code-element -> rem-statement  | procedure-declaration
-procedure-declaration -> subroutine-declaration  | function-declaration  | property-getdeclaration  | property-LHS-declaration 
+procedure-declaration -> subroutine-declaration  | function-declaration  | property-get-declaration  | property-lhs-declaration 
 
 subroutine-declaration -> procedure-scope [initial-static] "sub" subroutine-name [procedure-parameters] [trailing-static] EOS [procedure-body EOS] [end-label] "end" "sub" procedure-tail 
 function-declaration -> procedure-scope [initial-static] "function" function-name [procedure-parameters] [function-type] [trailing-static] EOS [procedure-body EOS] [end-label] "end" "function" procedure-tail
@@ -199,8 +209,8 @@ procedure-scope -> ["global" | "public" | "private" | "friend"]
 initial-static -> "static"
 trailing-static -> "static" 
 
-subroutine-name -> IDENTIFIER | prefixed-name
-function-name -> TYPED-NAME | subroutine-name
+subroutine-name -> Identifier | prefixed-name
+function-name -> Typed-name | subroutine-name
 prefixed-name -> event-handler-name | implemented-name | lifecycle-handler-name 
 
 function-type -> "as" type-expression [array-designator]
@@ -214,36 +224,36 @@ optional-parameters -> optional-param *("," optional-param)
 value-param -> positional-param
 positional-param -> [parameter-mechanism] param-dcl
 optional-param -> optional-prefix param-dcl [default-value]
-param-array -> "paramarray" IDENTIFIER "(" ")" ["as" ("variant" | "[variant]")]
+param-array -> "paramarray" Identifier "(" ")" ["as" ("variant" | "[variant]")]
 param-dcl -> untyped-name-param-dcl | typed-name-param-dcl
-untyped-name-param-dcl -> IDENTIFIER [parameter-type]
-typed-name-param-dcl -> TYPED-NAME [array-designator]
+untyped-name-param-dcl -> Identifier [parameter-type]
+typed-name-param-dcl -> Typed-name [array-designator]
 optional-prefix -> ("optional" [parameter-mechanism]) | ([parameter-mechanism] ("optional"))
 parameter-mechanism -> "byval" | " byref"
 parameter-type -> [array-designator] "as" (type-expression | "Any")
 default-value -> "=" constant-expression
 
-event-handler-name -> IDENTIFIER 
-implemented-name -> IDENTIFIER
+event-handler-name -> Identifier 
+implemented-name -> Identifier
 
 lifecycle-handler-name -> "Class_Initialize" | "Class_Terminate" 
 procedure-body -> statement-block 
 
 statement-block -> *(block-statement EOS)
 block-statement -> statement-label-definition | rem-statement | statement | attribute-statement
-attribute-statement -> attribute [IDENTIFIER "."] reserved-for-implementation-use attr-eq [quoted-identifier | boolean-literal-identifier]
+attribute-statement -> attribute [Identifier "."] reserved-for-implementation-use attr-eq [quoted-identifier | boolean-literal-identifier]
 statement -> control-statement | data-manipulation-statement | error-handling-statement | file-statement
 
 statement-label-definition -> LINE-START ((identifier-statement-label ":") | (line-number-label [":"] ))
 statement-label -> identifier-statement-label | line-number-label
 statement-label-list -> statement-label ["," statement-label]
-identifier-statement-label -> IDENTIFIER
-line-number-label -> INTEGER
+identifier-statement-label -> Identifier
+line-number-label -> Integer
 
 rem-statement -> "Rem" comment-body
 
 control-statement -> if-statement | control-statement-except-multiline-if
-control-statement-except-multiline-if -> call-statement | while-statement | for-statement | exit-for-statement | do-statement | exit-do-statement | single-line-if-statement | selectcase-statement |stop-statement | goto-statement | on-goto-statement | gosub-statement | return-statement | on-gosub-statement |for-each-statement | exit-sub-statement | exitfunction-statement | exit-property-statement | raiseevent-statement | with-statement | endstatement | assert-statement
+control-statement-except-multiline-if -> call-statement | while-statement | for-statement | exit-for-statement | do-statement | exit-do-statement | single-line-if-statement | select-case-statement |stop-statement | goto-statement | on-goto-statement | gosub-statement | return-statement | on-gosub-statement |for-each-statement | exit-sub-statement | exit-function-statement | exit-property-statement | raiseevent-statement | with-statement | end-statement | assert-statement
 call-statement -> ("Call" (simple-name-expression | member-access-expression | index-expression | with-expression)) | ((simple-name-expression | member-access-expression | with-expression) argument-list)
 while-statement -> "While" boolean-expression EOS statement-block "Wend"
 for-statement -> simple-for-statement | explicit-for-statement
@@ -270,7 +280,7 @@ if-statement -> LINE-START "If" boolean-expression "Then" EOL statement-block *[
 else-if-block -> (LINE-START "ElseIf" boolean-expression "Then" EOL LINE-START statement-block) | ("ElseIf" boolean-expression "Then" statement-block)
 else-block -> LINE-START "Else" statement-block
 single-line-if-statement -> if-with-non-empty-then | if-with-empty-then
-if-with-non-empty-then -> "If" boolean-expression "Then" list-or-label [single-line-elseclause]
+if-with-non-empty-then -> "If" boolean-expression "Then" list-or-label [single-line-else-clause]
 if-with-empty-then -> "If" boolean-expression "Then" single-line-else-clause
 single-line-else-clause -> "Else" [list-or-label]
 list-or-label -> (statement-label *[":" [same-line-statement]]) | ([":"] same-line-statement *[":" [same-line-statement]])
@@ -279,7 +289,6 @@ select-case-statement -> "Select" "Case" WS select-expression EOS *[case-clause]
 case-clause -> "Case" range-clause *("," range-clause) EOS statement-block
 case-else-clause -> "Case" "Else" EOS statement-block
 range-clause -> expression | (start-value "To" end-value) | (["Is"] comparison-operator expression)
-start-value -> expression
 end-value -> expression
 select-expression -> expression
 comparison-operator -> "=" | ("<" ">" ) | (">" "<") | "<" | ">" | (">" "=") | ("=" ">") | ("<" "=") | ("=" "<") 
@@ -292,20 +301,20 @@ on-gosub-statement -> "On" expression "GoSub" statement-label-list
 exit-sub-statement -> "Exit" "Sub" 
 exit-function-statement -> "Exit" "Function" 
 exit-property-statement -> "Exit" "Property" 
-raiseevent-statement -> "RaiseEvent" IDENTIFIER ["(" event-argument-list ")"]
+raiseevent-statement -> "RaiseEvent" Identifier ["(" event-argument-list ")"]
 event-argument-list -> [event-argument *("," event-argument)]
 event-argument -> expression 
 with-statement -> "With" expression EOS statement-block "End" "With" 
 end-statement -> "End"
 assert-statement -> "Debug" "." "Assert" boolean-expression
-Data-manipulation-statement -> local-variable-declaration | static-variable-declaration | local-const-declaration | redim-statement | erase-statement | mid-statement |rset-statement | lset-statement | let-statement | set-statement 
+data-manipulation-statement -> local-variable-declaration | static-variable-declaration | local-const-declaration | redim-statement | erase-statement | mid-statement | rset-statement | lset-statement | let-statement | set-statement 
 local-variable-declaration -> ("Dim" ["Shared"] variable-declaration-list)
 static-variable-declaration -> "Static" variable-declaration-list 
 local-const-declaration -> const-declaration
 redim-statement -> "Redim" ["Preserve"] redim-declaration-list
 redim-declaration-list -> redim-variable-dcl *("," redim-variable-dcl)
 redim-variable-dcl -> redim-typed-variable-dcl | redim-untyped-dcl | with-expression-dcl | member-access-expression-dcl
-redim-typed-variable-dcl -> TYPED-NAME dynamic-array-dim
+redim-typed-variable-dcl -> Typed-name dynamic-array-dim
 redim-untyped-dcl -> untyped-name dynamic-array-clause
 with-expression-dcl -> with-expression dynamic-array-clause
 member-access-expression-dcl -> member-access-expression dynamic-array-clause
@@ -331,10 +340,10 @@ error-handling-statement -> on-error-statement | resume-statement | error-statem
 on-error-statement -> "On" "Error" error-behavior
 error-behavior -> ("Resume" "Next") | ("GoTo" (statement-label | "0")) ; TODO I don't know why use -1 here after reading related doc, so I fix it to 0
 resume-statement -> "Resume" [("Next" | statement-label)] 
-Error-statement -> "Error" error-number 
+error-statement -> "Error" error-number 
 error-number -> integer-expression
-file-statement -> open-statement | close-statement | seek-statement | lock-statement | unlockstatement | line-input-statement | width-statement | print-statement | write-statement | input-statement | put-statement | get-statement 
-open-statement -> "Open" path-name [mode-clause] [access-clause] [lock] "As" file-number [lenclause]
+file-statement -> open-statement | close-statement | seek-statement | lock-statement | unlock-statement | line-input-statement | width-statement | print-statement | write-statement | input-statement | put-statement | get-statement 
+open-statement -> "Open" path-name [mode-clause] [access-clause] [lock] "As" file-number [len-clause]
 path-name -> expression
 mode-clause -> "For" mode
 mode -> "Append" | "Binary" | "Input" | "Output" | "Random"
@@ -383,13 +392,13 @@ variable -> variable-expression
 expression -> value-expression | l-expression
 value-expression -> literal-expression | parenthesized-expression | typeof-is-expression | new-expression | operator-expression
 l-expression -> simple-name-expression | instance-expression | member-access-expression | index-expression | dictionary-access-expression | with-expression 
-literal-expression -> INTEGER | FLOAT | DATE | STRING | (literal-identifier [type-suffix])
+literal-expression -> Integer | Float | DATE | String | (literal-identifier [type-suffix])
 parenthesized-expression -> "(" expression ")" 
 typeof-is-expression -> "typeof" expression "is" type-expression
 new-expression -> "New" type-expression 
 ; TODO operator priority
-operator-expression -> arithmetic-operator-expression | concatenation-operator-expression | relational-operator-expression | like-operator-expression | is-operator-expression | logicaloperator-expression
-arithmetic-operator-expression -> unary-minus-operator-expression | addition-operator-expression | subtraction-operator-expression | multiplication-operator-expression | divisionoperator-expression | integer-division-operator-expression | modulo-operator-expression | exponentiation-operator-expression
+operator-expression -> arithmetic-operator-expression | concatenation-operator-expression | relational-operator-expression | like-operator-expression | is-operator-expression | logical-operator-expression
+arithmetic-operator-expression -> unary-minus-operator-expression | addition-operator-expression | subtraction-operator-expression | multiplication-operator-expression | division-operator-expression | integer-division-operator-expression | modulo-operator-expression | exponentiation-operator-expression
 unary-minus-operator-expression -> "-" expression
 addition-operator-expression -> expression "+" expression
 subtraction-operator-expression -> expression "-" expression 
@@ -399,7 +408,7 @@ integer-division-operator-expression -> expression "\\" expression
 modulo-operator-expression -> expression "mod" expression 
 exponentiation-operator-expression -> expression "^" expression
 concatenation-operator-expression -> expression "&" expression
-relational-operator-expression -> equality-operator-expression | inequality-operatorexpression | less-than-operator-expression | greater-than-operator-expression | less-thanequal-operator-expression | greater-than-equal-operator-expression
+relational-operator-expression -> equality-operator-expression | inequality-operator-expression | less-than-operator-expression | greater-than-operator-expression | less-than-equal-operator-expression | greater-than-equal-operator-expression
 equality-operator-expression -> expression "=" expression 
 inequality-operator-expression -> expression ( "<"">" | ">""<" ) expression
 less-than-operator-expression -> expression "<" expression
@@ -416,7 +425,7 @@ like-pattern-charlist-element -> like-pattern-charlist-char | like-pattern-charl
 like-pattern-charlist-range -> like-pattern-charlist-char "-" like-pattern-charlist-char
 ; TODO like-pattern-charlist-char -> <Any character except "-" and "]">
 is-operator-expression -> expression "is" expression
-logical-operator-expression -> not-operator-expression | and-operator-expression | oroperator-expression | xor-operator-expression | imp-operator-expression | eqv-operatorexpression 
+logical-operator-expression -> not-operator-expression | and-operator-expression | or-operator-expression | xor-operator-expression | imp-operator-expression | eqv-operator-expression 
 not-operator-expression -> "not" expression 
 and-operator-expression -> expression "and" expression
 or-operator-expression -> expression "or" expression 
@@ -444,6 +453,7 @@ boolean-expression -> expression
 integer-expression -> expression
 variable-expression -> l-expression 
 bound-variable-expression -> l-expression 
-type-expression -> BUILTIN-TYPE | defined-type-expression
+type-expression -> Builtin-type | defined-type-expression
 defined-type-expression -> simple-name-expression | member-access-expression
+addressof-expression -> "addressof" procedure-pointer-expression
 procedure-pointer-expression -> simple-name-expression | member-access-expression 
