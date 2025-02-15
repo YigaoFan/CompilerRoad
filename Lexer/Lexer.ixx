@@ -95,6 +95,10 @@ public:
                     r = dfa.Run(nextState, code[i], get<2>(stack.back()));
                     goto CheckState;
                 }
+                else
+                {
+                    stack.push_back({ move(s), i, 0 });
+                }
             }
         RollBack2RetryOtherStep:
             if (stack.empty())
