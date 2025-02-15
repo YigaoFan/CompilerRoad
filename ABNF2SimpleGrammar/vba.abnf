@@ -1,8 +1,3 @@
-; TODO add logical line grammar and separator and special token
-WSC -> tab-char | eom-char | space-char | DBCS-whitespace | most-Unicode-class-Zs
-tab-char -> "" ; TODO how to type tab
-eom-char -> "" ; TODO
-space-char -> " "
 
 special-token -> "," | "." | "!" | "#" | "&" | "(" | ")" | "*" | "+" | "-" | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "\\" | "^" 
 ;NO-WS -> <no whitespace characters allowed here> 
@@ -52,7 +47,7 @@ double-quote -> "\""
 string-char -> NO-LINE-CONTINUATION ((double-quote double-quote) | non-line-termination-char)
 
 reserved-identifier -> statement-keyword | marker-keyword | operator-identifier | special-form | reserved-type-identifier | reserved-name | literal-identifier | rem-keyword | reserved-for-implementation-use | future-reserved
-; TODO Identifier -> <not reserved-identifier word> ; use regexp to solve this issue
+Identifier -> r"\"((\\\\[\"\\\\])|[^\"\n])*\""
 statement-keyword -> "Call" | "Case" |"Close" | "Const"| "Declare" | "DefBool" | "DefByte" | "DefCur" | "DefDate" | "DefDbl" | "DefInt" | "DefLng" | "DefLngLng" | "DefLngPtr" | "DefObj" | "DefSng" | "DefStr" | "DefVar" | "Dim" | "Do" | "Else" | "ElseIf" | "End" | "EndIf" | "Enum" | "Erase" | "Event" | "Exit" | "For" | "Friend" | "Function" | "Get" | "Global" | "GoSub" | "GoTo" | "If" | "Implements"| "Input" | "Let" | "Lock" | "Loop" | "LSet" | "Next" | "On" | "Open" | "Option" | "Print" | "Private" | "Public" | "Put" | "RaiseEvent" | "ReDim" | "Resume" | "Return" | "RSet" | "Seek" | "Select" | "Set" | "Static" | "Stop" | "Sub" | "Type" | "Unlock" | "Wend" | "While" | "With" | "Write" 
 rem-keyword -> "Rem" 
 marker-keyword -> "Any" | "As"| "ByRef" | "ByVal "|"Case" | "Each" | "Else" |"In"| "New" | "Shared" | "Until" | "WithEvents" | "Write" | "Optional" | "ParamArray" | "Preserve" | "Spc" | "Tab" | "Then" | "To" 
@@ -289,7 +284,6 @@ select-case-statement -> "Select" "Case" WS select-expression EOS *[case-clause]
 case-clause -> "Case" range-clause *("," range-clause) EOS statement-block
 case-else-clause -> "Case" "Else" EOS statement-block
 range-clause -> expression | (start-value "To" end-value) | (["Is"] comparison-operator expression)
-end-value -> expression
 select-expression -> expression
 comparison-operator -> "=" | ("<" ">" ) | (">" "<") | "<" | ">" | (">" "=") | ("=" ">") | ("<" "=") | ("=" "<") 
 stop-statement -> "Stop" 
@@ -419,11 +413,11 @@ like-operator-expression -> expression "like" like-pattern-expression
 like-pattern-expression -> expression 
 like-pattern-string -> *like-pattern-element
 like-pattern-element -> like-pattern-char | "?" | "#" | "*" | like-pattern-charlist
-; TODO like-pattern-char -> <Any character except "?", "#", "*" and "[" >
+like-pattern-char -> r"[^?#\*\[]" ;<Any character except "?", "#", "*" and "[" >
 like-pattern-charlist -> "[" ["!"] ["-"] *like-pattern-charlist-element ["-"] "]"
 like-pattern-charlist-element -> like-pattern-charlist-char | like-pattern-charlist-range
 like-pattern-charlist-range -> like-pattern-charlist-char "-" like-pattern-charlist-char
-; TODO like-pattern-charlist-char -> <Any character except "-" and "]">
+like-pattern-charlist-char -> r"[^\-\]]" ;<Any character except "-" and "]">
 is-operator-expression -> expression "is" expression
 logical-operator-expression -> not-operator-expression | and-operator-expression | or-operator-expression | xor-operator-expression | imp-operator-expression | eqv-operator-expression 
 not-operator-expression -> "not" expression 
