@@ -40,6 +40,11 @@ public:
             Transform(object, Info);
         }
 
+        virtual auto Visit(RegExp* object) -> void
+        {
+            // TODO
+        }
+
         virtual auto Visit(Symbol* object) -> void
         {
             Transform(object, Info);

@@ -55,6 +55,7 @@ int main()
         pair<string, TokType>{ "\n", TokType::Newline },
         pair<string, TokType>{ "\"((\\\\[\"\\\\])|[^\"\n])*\"", TokType::Terminal },
         pair<string, TokType>{ "'[a-zA-Z0-9]'", TokType::QutotedDigitOrAlphabet },
+        pair<string, TokType>{ "r\"((\\\\[\"\\\\])|[^\"\n])*\"", TokType::RegularExpression },
     };
     auto l = Lexer<TokType>::New(rules);
     auto p = TableDrivenParser::ConstructFrom("grammars",
@@ -108,6 +109,7 @@ int main()
             { "num", "*", "item_0" },
         }},
         { "item_0", {
+            { "regExp" },
             { "terminal" },
             { "sym" },
             { "digitOrAlphabet", "-", "digitOrAlphabet" },
@@ -136,6 +138,7 @@ int main()
         { "newline" , static_cast<int>(TokType::Newline) },
         { "terminal" , static_cast<int>(TokType::Terminal) },
         { "digitOrAlphabet" , static_cast<int>(TokType::QutotedDigitOrAlphabet) },
+        { "regExp" , static_cast<int>(TokType::RegularExpression) },
     });
 
     auto filename = "vba.abnf";

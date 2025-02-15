@@ -104,6 +104,7 @@ struct Optional;
 struct DataRange;
 struct Symbol;
 struct Terminal;
+struct RegExp;
 struct Productions;
 struct Production;
 struct IVisitor
@@ -117,6 +118,7 @@ struct IVisitor
     virtual auto Visit(DataRange*) -> void = 0;
     virtual auto Visit(Symbol*) -> void = 0;
     virtual auto Visit(Terminal*) -> void = 0;
+    virtual auto Visit(RegExp*) -> void = 0;
     virtual auto Visit(Productions*) -> void = 0;
     virtual auto Visit(Production*) -> void = 0;
 };
@@ -264,6 +266,19 @@ struct Terminal : public BasicItem
     }
 };
 
+struct RegExp : public BasicItem
+{
+    String Value;
+    RegExp(String value) : Value(move(value))
+    {
+    }
+
+    auto Visit(IVisitor* visitor) -> void override
+    {
+        visitor->Visit(this);
+    }
+};
+
 struct Symbol : public BasicItem
 {
     String Value;
@@ -358,6 +373,10 @@ auto BasicItem::Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* n
         else if (node->ChildSymbols.front() == "sym")
         {
             return ApplyVisitor(make_shared<Symbol>(String(GetResultOfTokChildAs(node, 0).Value)), visitor);
+        }
+        else if (node->ChildSymbols.front() == "regExp")
+        {
+            return ApplyVisitor(make_shared<RegExp>(String(GetResultOfTokChildAs(node, 0).Value)), visitor);
         }
         break;
     case 3:
@@ -514,6 +533,7 @@ export
     struct DataRange;
     struct Symbol;
     struct Terminal;
+    struct RegExp;
     struct Productions;
     struct Production;
     struct IVisitor;

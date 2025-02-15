@@ -20,6 +20,7 @@ enum class TokType : int
     PipeMark,
     Hyphen,
     Whitespace,
+    RegularExpression,
     QutotedDigitOrAlphabet,
     Terminal,
     Symbol,

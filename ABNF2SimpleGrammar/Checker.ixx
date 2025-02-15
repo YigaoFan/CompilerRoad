@@ -17,6 +17,10 @@ struct Checker : IVisitor
     {
     }
 
+    virtual auto Visit(RegExp* object) -> void
+    {
+    }
+
     virtual auto Visit(Symbol* object) -> void
     {
         if (not symbols.contains(object->Value))
