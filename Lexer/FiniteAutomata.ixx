@@ -18,6 +18,7 @@ using std::logic_error;
 using std::back_inserter;
 using std::move;
 using std::format;
+using std::ranges::views::drop;
 
 enum class Strategy : int
 {
@@ -227,66 +228,68 @@ public:
     {
     }
 
-    auto RunFromStart(char input) const -> optional<pair<State, optional<AcceptStateResult>>>
+    auto RunFromStart(char input, unsigned& stepCounter) const -> optional<pair<State, optional<AcceptStateResult>>>
     {
-        return Run(StartState, input);
+        return Run(StartState, input, stepCounter);
     }
 
     template <typename InputLike>
-    auto Run(State from, InputLike input) const -> optional<pair<State, optional<AcceptStateResult>>>
+    auto Run(State from, InputLike input, unsigned& stepCounter) const -> optional<pair<State, optional<AcceptStateResult>>>
     {
-        auto& steps = transitionTable.OutStepsOf(from);
-        optional<State> resultState;
-        // temp not implement roll back in different steps
-        for (auto& p : steps)
+        auto HandleResult = [&](State s)
         {
-            Step<Input> const & step = p.first;
+            if (acceptState2Result.contains(s))
+            {
+                return pair<State, optional<AcceptStateResult>>{ move(s), acceptState2Result.at(s) };
+            }
+            else
+            {
+                return pair<State, optional<AcceptStateResult>>{ move(s), {} };
+            }
+        };
+        auto& steps = transitionTable.OutStepsOf(from);
+        // temp not implement roll back in different steps
+        for (auto& p : steps | drop(stepCounter))
+        {
+            ++stepCounter;
+            if (stepCounter == steps.size())
+            {
+                stepCounter = std::numeric_limits<unsigned>::max();
+            }
+            Step<Input> const& step = p.first;
             // PassXXX first in order of steps which is ensured by Step::operator<'s result
             switch (step.Signal)
             {
             case Strategy::PassOne:
                 if (step.Data == input)
                 {
-                    resultState = p.second;
-                    goto HandleResult;
+                    return HandleResult(p.second);
                 }
                 break;
             case Strategy::PassRange:
                 if (input >= step.Left and input <= step.Right)
                 {
-                    resultState = p.second;
-                    goto HandleResult;
+                    return HandleResult(p.second);
                 }
                 break;
             case Strategy::BlockOne:
                 if (input != step.Data)
                 {
-                    resultState = p.second;
-                    goto HandleResult;
+                    return HandleResult(p.second);
                 }
                 break;
             case Strategy::BlockRange:
                 if (input < step.Left or input > step.Right)
                 {
-                    resultState = p.second;
-                    goto HandleResult;
+                    return HandleResult(p.second);
                 }
                 break;
             default:
                 throw logic_error(format("not handled Strategy {}", static_cast<int>(step.Signal)));
             }
         }
+        stepCounter = std::numeric_limits<unsigned>::max();
         return {};
-
-    HandleResult:
-        if (auto s = resultState.value(); acceptState2Result.contains(s))
-        {
-            return pair<State, optional<AcceptStateResult>>{ move(s), acceptState2Result.at(s) };
-        }
-        else
-        {
-            return pair<State, optional<AcceptStateResult>>{ move(s), {} };
-        }
     }
 };
 
