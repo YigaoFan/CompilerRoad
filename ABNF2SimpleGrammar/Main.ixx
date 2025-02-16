@@ -5,6 +5,7 @@ import TokType;
 import Ast;
 import Transformer;
 import Checker;
+import Formatter; // affect the bottom format code
 
 using std::string;
 using std::pair;
@@ -171,6 +172,8 @@ int main()
             auto ast = dynamic_pointer_cast<Grammars>(std::get<1>(st.value().Children.front()).Result);
             auto sgs = GrammarTransformer::Transform(ast.get());
             std::println("simple grammar: {}", sgs);
+            std::ofstream codeFile{ "vba-spec.ixx" };
+            std::print(codeFile, "{}", sgs);
         }
         checker.Check();
     }

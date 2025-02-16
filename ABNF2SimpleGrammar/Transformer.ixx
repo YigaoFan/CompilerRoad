@@ -17,7 +17,7 @@ public:
         String Left;
         vector<SimpleRightSide> MainRights;
         vector<SimpleGrammar> OtherGrammars;
-        vector<String> Terminals;
+        vector<String> Terminals; // terminal also has priority, exact match is higher than others
         int Counter = 0;
 
         auto AppendOnLastRule(String symbol) -> void
@@ -160,8 +160,14 @@ public:
         auto Transform(Terminal const* terminal, GrammarTransformInfo* info) -> void
         {
             // TODO remove quote
-            info->AppendOnLastRule(terminal->Value);
+            info->AppendOnLastRule(String(format("terminal_{}", info->Counter++)));
             info->Terminals.push_back(terminal->Value);
+        }
+
+        auto Transform(RegExp const* regExp, GrammarTransformInfo* info) -> void
+        {
+            info->AppendOnLastRule(String(format("terminal_{}", info->Counter++)));
+            info->Terminals.push_back(regExp->Value);
         }
     };
 
