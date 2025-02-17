@@ -151,6 +151,8 @@ struct MoreItems : public AstNode
             is.append_range(GetResultOfAstChildAs<MoreItems>(node, 1)->Items);
             return make_shared<MoreItems>(move(is));
         }
+        default:
+            throw logic_error(format("not handled MoreItems Item symbols {}", node->ChildSymbols));
         }
     }
 
@@ -178,6 +180,8 @@ struct Production : public AstNode
             is.append_range(GetResultOfAstChildAs<MoreItems>(node, 1)->Items);
             return ApplyVisitor(make_shared<Production>(move(is)), visitor);
         }
+        default:
+            throw logic_error(format("not handled Production Item symbols {}", node->ChildSymbols));
         }
     }
 
@@ -206,6 +210,8 @@ struct MoreProductions : public AstNode
             return make_shared<MoreProductions>(nullptr);
         case 2:
             return make_shared<MoreProductions>(GetResultOfAstChildAs<::Productions>(node, 1));
+        default:
+            throw logic_error(format("not handled MoreProductions Item symbols {}", node->ChildSymbols));
         }
     }
 
@@ -237,6 +243,8 @@ struct Productions : public AstNode
             }
             return ApplyVisitor(make_shared<Productions>(move(ps)), visitor);
         }
+        default:
+            throw logic_error(format("not handled Productions Item symbols {}", node->ChildSymbols));
         }
     }
 
