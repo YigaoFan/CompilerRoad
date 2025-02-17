@@ -85,12 +85,12 @@ public:
                 if (++i < code.length())
                 {
                     //std::println("run state {} by {}", nextState, i);
-                    if (failed.contains({ s.first, i }))
+                    auto nextState = s.first;
+                    if (failed.contains({ nextState, i }))
                     {
                         std::println("no need to continue state {} at {}", s.first, i);
                         goto RollBack2RetryOtherStep;
                     }
-                    auto nextState = s.first;
                     stack.push_back({ move(s), i, 0 });
                     r = dfa.Run(nextState, code[i], get<2>(stack.back()));
                     goto CheckState;
@@ -115,7 +115,7 @@ public:
                     goto CheckState;
                 }
                 std::println("failed record: state {} at {}", state->first, get<1>(stack.back()));
-                failed.insert({ state->first, get<1>(stack.back()) });
+                failed.insert({ state->first, get<1>(stack.back()) }); // depend on last step result(state->second.has_value()) to store failed
             }
 
             if (auto& result = get<0>(stack.back()); result.second.has_value())
