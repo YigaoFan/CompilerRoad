@@ -17,36 +17,6 @@ struct CppCodeForm
     T Value;
 };
 
-auto Emit(vector<SimpleGrammar> const& grammars, ofstream& ostream) -> void
-{
-    struct OnlyOutFormatContext
-    {
-        ofstream& Output;
-        using iterator = std::ostream_iterator<char> ;
-        OnlyOutFormatContext(ofstream& output) : Output(output)
-        { }
-
-        auto out()
-        {
-            return std::ostream_iterator<char>(Output);
-        }
-    };
-    ostream << "{";
-    std::range_formatter<std::remove_cvref_t<std::ranges::range_reference_t<vector<SimpleRightSide>>>> rsFmt;
-    rsFmt.set_brackets("{", "}");
-    rsFmt.underlying().set_brackets("{", "}");
-    rsFmt.underlying();
-    for (auto& x : grammars)
-    {
-        ostream << format("{{ {:#}, }},\n", x.first);
-        //format("{}", rsFmt, x.second);
-        std::basic_format_context<std::ostream_iterator<char>, char>* fpc = nullptr;
-        auto fc = OnlyOutFormatContext{ ostream, };
-        rsFmt.format(x.second, fc);
-    }
-    ostream << "}";
-}
-
 template<>
 struct formatter<CppCodeForm<vector<SimpleGrammar>>, char>
 {
@@ -90,5 +60,4 @@ export
     struct std::formatter<CppCodeForm<vector<SimpleGrammar>>, char>;
     template <typename T>
     struct CppCodeForm;
-    auto Emit(vector<SimpleGrammar> const& grammars, ofstream& ostream) -> void;
 }
