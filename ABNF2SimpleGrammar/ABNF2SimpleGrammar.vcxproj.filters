@@ -30,7 +30,7 @@
     <ClCompile Include="Checker.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Formatter.ixx">
+    <ClCompile Include="CodeEmitter.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

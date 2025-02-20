@@ -171,9 +171,9 @@ int main()
             std::println("ast: {}", st.value());
             auto ast = dynamic_pointer_cast<Grammars>(std::get<1>(st.value().Children.front()).Result);
             auto sgs = GrammarTransformer::Transform(ast.get());
-            std::println("simple grammar: {}", sgs);
+            //std::println("simple grammar: {}", sgs);
             std::ofstream codeFile{ "vba-spec.ixx" };
-            std::print(codeFile, "{}", sgs);
+            std::print(codeFile, "{}", CppCodeForm{ .Value = sgs });
         }
         checker.Check();
     }
