@@ -22,7 +22,6 @@ struct formatter<CppCodeForm<vector<SimpleGrammar>>, char>
 {
     constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator
     {
-        //RangeFmt.underlying().parse(ctx);
         auto it = ctx.begin();
         return it;
     }
@@ -42,12 +41,12 @@ struct formatter<CppCodeForm<vector<SimpleGrammar>>, char>
         std::basic_format_parse_context<char> fpc{":#}"};
         rangeFmt.underlying().parse(fpc);
 
-        format_to(fc.out(), "{{");
+        format_to(fc.out(), "{{\n");
         for (auto const& x : t.Value)
         {
-            format_to(fc.out(), "{{ {:#}, ", x.first);
+            format_to(fc.out(), "    {{ {:#}, ", x.first);
             rangeFmt.format(x.second, fc);
-            format_to(fc.out(), "}},\n");
+            format_to(fc.out(), " }},\n");
         }
         format_to(fc.out(), "}}");
         return fc.out();
