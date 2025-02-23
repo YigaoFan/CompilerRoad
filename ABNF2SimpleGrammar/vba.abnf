@@ -1,7 +1,23 @@
+module-body-physical-structure -> *source-line [non-terminated-line] 
+source-line -> *non-line-termination-character line-terminator 
+non-terminated-line -> *non-line-termination-character 
+line-terminator -> "\r\n" | "\r" | "\n"
+non-line-termination-character -> r"[^\r\n]" 
 
+module-body-logical-structure -> *extended-line 
+extended-line -> *(line-continuation | non-line-termination-character) line-terminator 
+line-continuation -> 1*WSC underscore line-terminator 
+WSC -> (tab-character | space-character | DBCS-whitespace) 
+tab-character -> "\t"
+space-character -> " "
+underscore -> "_"
+DBCS-whitespace -> "%x3000"
+
+module-body-lines -> *logical-line 
+logical-line -> LINE-START *extended-line LINE-END
+
+WS -> 1*(WSC | line-continuation)
 special-token -> "," | "." | "!" | "#" | "&" | "(" | ")" | "*" | "+" | "-" | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "\\" | "^" 
-;NO-WS -> <no whitespace characters allowed here> 
-;NO-LINE-CONTINUATION -> <a line-continuation is not allowed here> 
 EOL -> [WS] LINE-END | single-quote comment-body 
 EOS -> *(EOL | ":") ;End Of Statement 
 single-quote -> "'" 
@@ -44,7 +60,7 @@ ampm -> *WSC ("am" | "pm" | "a" | "p")
 
 String -> double-quote *string-char (double-quote | line-continuation | LINE-END)
 double-quote -> "\""
-string-char -> NO-LINE-CONTINUATION ((double-quote double-quote) | non-line-termination-char)
+string-char -> ((double-quote double-quote) | non-line-termination-character)
 
 reserved-identifier -> statement-keyword | marker-keyword | operator-identifier | special-form | reserved-type-identifier | reserved-name | literal-identifier | rem-keyword | reserved-for-implementation-use | future-reserved
 Identifier -> r"\"((\\[\"\\])|[^\"\n])*\""
@@ -83,6 +99,8 @@ cc-else-block -> cc-else cc-block
 cc-else -> LINE-START "#" "else" cc-eol 
 cc-endif -> LINE-START "#" ("endif" | ("end" "if")) cc-eol 
 
+; above is lex rule
+
 Procedural-module -> LINE-START procedural-module-header EOS LINE-START procedural-module-body 
 Class-module -> LINE-START class-module-header LINE-START class-module-body 
 procedural-module-header -> attribute "VB_Name" attr-eq quoted-identifier attr-end 
@@ -91,7 +109,7 @@ class-attr -> attribute "VB_Name" attr-eq quoted-identifier attr-end | attribute
 attribute -> LINE-START "Attribute" 
 attr-eq -> "->"
 attr-end -> LINE-END
-quoted-identifier -> double-quote NO-WS Identifier NO-WS double-quote
+quoted-identifier -> double-quote Identifier double-quote
 procedural-module-body -> LINE-START procedural-module-declaration-section LINE-START procedural-module-code-section 
 class-module-body -> LINE-START class-module-declaration-section
 
@@ -386,7 +404,7 @@ variable -> variable-expression
 expression -> value-expression | l-expression
 value-expression -> literal-expression | parenthesized-expression | typeof-is-expression | new-expression | operator-expression
 l-expression -> simple-name-expression | instance-expression | member-access-expression | index-expression | dictionary-access-expression | with-expression 
-literal-expression -> Integer | Float | DATE | String | (literal-identifier [type-suffix])
+literal-expression -> Integer | Float | Date-or-time | String | (literal-identifier [type-suffix])
 parenthesized-expression -> "(" expression ")" 
 typeof-is-expression -> "typeof" expression "is" type-expression
 new-expression -> "New" type-expression 
@@ -428,7 +446,7 @@ eqv-operator-expression -> expression "eqv" expression
 imp-operator-expression -> expression "imp" expression 
 simple-name-expression -> name | special-form | reserved-name 
 instance-expression -> "me" 
-member-access-expression -> (l-expression NO-WS "." unrestricted-name) | (l-expression line-continuation "." unrestricted-name)
+member-access-expression -> (l-expression "." unrestricted-name) | (l-expression line-continuation "." unrestricted-name)
 index-expression -> l-expression "(" argument-list ")" 
 argument-list -> [positional-or-named-argument-list]
 positional-or-named-argument-list -> (*(positional-argument ",") required-positional-argument) | (*(positional-argument ",") named-argument-list)
@@ -437,7 +455,7 @@ required-positional-argument -> argument-expression
 named-argument-list -> named-argument *("," named-argument)
 named-argument -> unrestricted-name ":""=" argument-expression
 argument-expression -> (["byval"] expression) | addressof-expression 
-dictionary-access-expression -> (l-expression NO-WS "!" NO-WS unrestricted-name) | (l-expression line-continuation "!" NO-WS unrestricted-name) | (l-expression line-continuation "!" line-continuation unrestricted-name)
+dictionary-access-expression -> (l-expression "!" unrestricted-name) | (l-expression line-continuation "!" unrestricted-name) | (l-expression line-continuation "!" line-continuation unrestricted-name)
 with-expression -> with-member-access-expression | with-dictionary-access-expression
 with-member-access-expression -> "." unrestricted-name
 with-dictionary-access-expression -> "!" unrestricted-name
