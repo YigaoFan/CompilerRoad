@@ -170,10 +170,11 @@ int main()
 
             std::println("ast: {}", st.value());
             auto ast = dynamic_pointer_cast<Grammars>(std::get<1>(st.value().Children.front()).Result);
-            auto sgs = GrammarTransformer::Transform(ast.get());
-            //std::println("simple grammar: {}", sgs);
+            auto grammarsInfo = GrammarTransformer::Transform(ast.get());
+            //std::println("simple grammar: {}", grammarsInfo);
             std::ofstream codeFile{ "vba-spec.ixx" };
-            std::print(codeFile, "{}", CppCodeForm{ .Value = sgs });
+            std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Grammars });
+            std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Terminals });
         }
         checker.Check();
     }

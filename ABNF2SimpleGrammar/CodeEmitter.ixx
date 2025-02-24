@@ -7,7 +7,7 @@ import Parser;
 using std::vector;
 using std::ofstream;
 using std::formatter;
-using std::pair;
+using std::set;
 using std::format;
 using std::format_to;
 
@@ -24,12 +24,6 @@ struct formatter<CppCodeForm<vector<SimpleGrammar>>, char>
     {
         auto it = ctx.begin();
         return it;
-    }
-
-    template<class... Args>
-    static auto GetFormatString(std::format_string<Args...> fmt, Args&&... args) -> std::format_string<Args...>
-    {
-        return fmt;
     }
 
     template<class FormatContext>
@@ -53,10 +47,37 @@ struct formatter<CppCodeForm<vector<SimpleGrammar>>, char>
     }
 };
 
+template<>
+struct formatter<CppCodeForm<set<String>>, char>
+{
+    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator
+    {
+        auto it = ctx.begin();
+        return it;
+    }
+
+    template<class FormatContext>
+    constexpr auto format(CppCodeForm<set<String>> const& t, FormatContext& fc) const -> FormatContext::iterator
+    {
+        using std::string_view;
+
+        format_to(fc.out(), "{{\n");
+        for (auto i = 0; auto const& x : t.Value)
+        {
+            format_to(fc.out(), "    {{ {:#}, ", x);
+            format_to(fc.out(), "{} }},\n", i++);
+        }
+        format_to(fc.out(), "}}");
+        return fc.out();
+    }
+};
+
 export
 {
     template<>
     struct std::formatter<CppCodeForm<vector<SimpleGrammar>>, char>;
+    template<>
+    struct std::formatter<CppCodeForm<set<String>>, char>;
     template <typename T>
     struct CppCodeForm;
 }

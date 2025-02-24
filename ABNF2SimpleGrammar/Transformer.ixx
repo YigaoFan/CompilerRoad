@@ -7,11 +7,19 @@ import Ast;
 
 using std::vector;
 using std::string;
+using std::set;
+using std::pair;
 using std::format;
 
+// if name is occupied, append number which
 class GrammarTransformer
 {
 public:
+    struct SimpleGrammarsInfo
+    {
+        vector<SimpleGrammar> Grammars;
+        set<String> Terminals;
+    };
     struct GrammarTransformInfo
     {
         String Left;
@@ -171,24 +179,27 @@ public:
         }
     };
 
-    static auto Transform(Grammar const* grammar) -> vector<SimpleGrammar>
+    static auto Transform(Grammar const* grammar) -> SimpleGrammarsInfo
     {
         GrammarTransformInfo info{ .Left = grammar->Left };
         Transform(grammar->Productions.get(), &info);
         // TODO handle terminal
-        vector<SimpleGrammar> result{ { info.Left, move(info.MainRights) } };
-        result.append_range(move(info.OtherGrammars));
-        return result;
+        SimpleGrammarsInfo grammarsInfo{ .Grammars = pair{ info.Left, move(info.MainRights) } };
+        grammarsInfo.Grammars.append_range(move(info.OtherGrammars));
+        grammarsInfo.Terminals.insert_range(move(info.Terminals));
+        return grammarsInfo;
     }
 
-    static auto Transform(Grammars const* grammars) -> vector<SimpleGrammar>
+    static auto Transform(Grammars const* grammars) -> SimpleGrammarsInfo
     {
-        vector<SimpleGrammar> result;
+        SimpleGrammarsInfo grammarsInfo;
         for (auto const& g : grammars->Items)
         {
-            result.append_range(Transform(g.get()));
+            auto r = Transform(g.get());
+            grammarsInfo.Grammars.append_range(move(r.Grammars));
+            grammarsInfo.Terminals.insert_range(move(r.Terminals));
         }
-        return result;
+        return grammarsInfo;
     }
 
     static auto Transform(Item* item, GrammarTransformInfo* info) -> void
@@ -199,14 +210,17 @@ public:
 
     static auto Transform(Productions const* productions, GrammarTransformInfo* info) -> void
     {
+        auto counter = info->Counter;
         for (auto const& p : productions->Items)
         {
-            GrammarTransformInfo subInfo{ .Left = info->Left, };
+            GrammarTransformInfo subInfo{ .Left = info->Left, .Counter = counter };
             Transform(p.get(), &subInfo);
+            counter = subInfo.Counter;
             info->MainRights.append_range(move(subInfo.MainRights));
             info->OtherGrammars.append_range(move(subInfo.OtherGrammars));
             info->Terminals.append_range(move(subInfo.Terminals));
         }
+        info->Counter = counter;
     }
 
     static auto Transform(Production const* production, GrammarTransformInfo* info) -> void

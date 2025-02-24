@@ -86,12 +86,12 @@ struct AstNode
 };
 
 template <typename T>
-auto GetResultOfAstChildAs(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, int i) -> shared_ptr<T>
+auto GetAstOfChildAs(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, int i) -> shared_ptr<T>
 {
     return dynamic_pointer_cast<T>(std::get<1>(node->Children[i]).Result);
 }
 
-auto GetResultOfTokChildAs(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, int i) -> Token<TokType>
+auto GetTokChild(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, int i) -> Token<TokType>
 {
     return std::get<0>(node->Children[i]);
 }
@@ -147,8 +147,8 @@ struct MoreItems : public AstNode
             return make_shared<MoreItems>(vector<shared_ptr<Item>>{});
         case 2:
         {
-            vector is{ GetResultOfAstChildAs<Item>(node, 0) };
-            is.append_range(GetResultOfAstChildAs<MoreItems>(node, 1)->Items);
+            vector is{ GetAstOfChildAs<Item>(node, 0) };
+            is.append_range(GetAstOfChildAs<MoreItems>(node, 1)->Items);
             return make_shared<MoreItems>(move(is));
         }
         default:
@@ -176,8 +176,8 @@ struct Production : public AstNode
             return ApplyVisitor(make_shared<Production>(vector<shared_ptr<Item>>{}), visitor);
         case 2:
         {
-            vector is{ GetResultOfAstChildAs<Item>(node, 0) };
-            is.append_range(GetResultOfAstChildAs<MoreItems>(node, 1)->Items);
+            vector is{ GetAstOfChildAs<Item>(node, 0) };
+            is.append_range(GetAstOfChildAs<MoreItems>(node, 1)->Items);
             return ApplyVisitor(make_shared<Production>(move(is)), visitor);
         }
         default:
@@ -209,7 +209,7 @@ struct MoreProductions : public AstNode
         case 0:
             return make_shared<MoreProductions>(nullptr);
         case 2:
-            return make_shared<MoreProductions>(GetResultOfAstChildAs<::Productions>(node, 1));
+            return make_shared<MoreProductions>(GetAstOfChildAs<::Productions>(node, 1));
         default:
             throw logic_error(format("not handled MoreProductions Item symbols {}", node->ChildSymbols));
         }
@@ -236,8 +236,8 @@ struct Productions : public AstNode
             return ApplyVisitor(make_shared<Productions>(vector<shared_ptr<Production>>{}), visitor);
         case 2:
         {
-            vector ps{ GetResultOfAstChildAs<Production>(node, 0) };
-            if (auto mps = GetResultOfAstChildAs<MoreProductions>(node, 1)->Productions; mps != nullptr)
+            vector ps{ GetAstOfChildAs<Production>(node, 0) };
+            if (auto mps = GetAstOfChildAs<MoreProductions>(node, 1)->Productions; mps != nullptr)
             {
                 ps.append_range(mps->Items);
             }
@@ -357,13 +357,13 @@ auto Item::Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, 
     switch (node->ChildSymbols.size())
     {
     case 1:
-        return GetResultOfAstChildAs<BasicItem>(node, 0); // not invoke now
+        return GetAstOfChildAs<BasicItem>(node, 0); // not invoke now
     case 2:
-        return ApplyVisitor(make_shared<Duplicate>(0, std::numeric_limits<unsigned>::max(), GetResultOfAstChildAs<BasicItem>(node, 1)), visitor);
+        return ApplyVisitor(make_shared<Duplicate>(0, std::numeric_limits<unsigned>::max(), GetAstOfChildAs<BasicItem>(node, 1)), visitor);
     case 3:
-        return ApplyVisitor(make_shared<Duplicate>(std::stoul(GetResultOfTokChildAs(node, 0).Value), std::numeric_limits<unsigned>::max(), GetResultOfAstChildAs<BasicItem>(node, 2)), visitor);
+        return ApplyVisitor(make_shared<Duplicate>(std::stoul(GetTokChild(node, 0).Value), std::numeric_limits<unsigned>::max(), GetAstOfChildAs<BasicItem>(node, 2)), visitor);
     case 4:
-        return ApplyVisitor(make_shared<Duplicate>(std::stoul(GetResultOfTokChildAs(node, 0).Value), std::stoul(GetResultOfTokChildAs(node, 2).Value), GetResultOfAstChildAs<BasicItem>(node, 3)), visitor);
+        return ApplyVisitor(make_shared<Duplicate>(std::stoul(GetTokChild(node, 0).Value), std::stoul(GetTokChild(node, 2).Value), GetAstOfChildAs<BasicItem>(node, 3)), visitor);
     default:
         throw logic_error(format("not handled BasicItem Item symbols {}", node->ChildSymbols));
     }
@@ -376,30 +376,30 @@ auto BasicItem::Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* n
     case 1:
         if (node->ChildSymbols.front() == "terminal")
         {
-            return ApplyVisitor(make_shared<Terminal>(String(GetResultOfTokChildAs(node, 0).Value)), visitor);
+            return ApplyVisitor(make_shared<Terminal>(String(GetTokChild(node, 0).Value)), visitor);
         }
         else if (node->ChildSymbols.front() == "sym")
         {
-            return ApplyVisitor(make_shared<Symbol>(String(GetResultOfTokChildAs(node, 0).Value)), visitor);
+            return ApplyVisitor(make_shared<Symbol>(String(GetTokChild(node, 0).Value)), visitor);
         }
         else if (node->ChildSymbols.front() == "regExp")
         {
-            return ApplyVisitor(make_shared<RegExp>(String(GetResultOfTokChildAs(node, 0).Value)), visitor);
+            return ApplyVisitor(make_shared<RegExp>(String(GetTokChild(node, 0).Value)), visitor);
         }
         break;
     case 3:
     {
         if (node->ChildSymbols.front() == "digitOrAlphabet")
         {
-            return ApplyVisitor(make_shared<DataRange>(GetResultOfTokChildAs(node, 0).Value.front(), GetResultOfTokChildAs(node, 2).Value.front()), visitor);
+            return ApplyVisitor(make_shared<DataRange>(GetTokChild(node, 0).Value.front(), GetTokChild(node, 2).Value.front()), visitor);
         }
         else if (node->ChildSymbols.front() == "[")
         {
-            return ApplyVisitor(make_shared<Optional>(GetResultOfAstChildAs<Productions>(node, 1)), visitor);
+            return ApplyVisitor(make_shared<Optional>(GetAstOfChildAs<Productions>(node, 1)), visitor);
         }
         else if (node->ChildSymbols.front() == "(")
         {
-            return ApplyVisitor(make_shared<Combine>(GetResultOfAstChildAs<Productions>(node, 1)), visitor);
+            return ApplyVisitor(make_shared<Combine>(GetAstOfChildAs<Productions>(node, 1)), visitor);
         }
         break;
     }
@@ -414,7 +414,7 @@ struct Grammar : public AstNode
 
     static auto Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, IVisitor* visitor) -> shared_ptr<Grammar>
     {
-        return ApplyVisitor(make_shared<Grammar>(String(GetResultOfTokChildAs(node, 0).Value), GetResultOfAstChildAs<::Productions>(node, 2)), visitor);
+        return ApplyVisitor(make_shared<Grammar>(String(GetTokChild(node, 0).Value), GetAstOfChildAs<::Productions>(node, 2)), visitor);
     }
     
     Grammar(String left, shared_ptr<::Productions> productions) : Left(move(left)), Productions(move(productions))
@@ -439,8 +439,8 @@ struct MoreGrammars : public AstNode
             return make_shared<MoreGrammars>(vector<shared_ptr<Grammar>>{});
         case 3:
         {
-            vector gs{ GetResultOfAstChildAs<Grammar>(node, 1) };
-            gs.append_range(GetResultOfAstChildAs<MoreGrammars>(node, 2)->Items);
+            vector gs{ GetAstOfChildAs<Grammar>(node, 1) };
+            gs.append_range(GetAstOfChildAs<MoreGrammars>(node, 2)->Items);
             return make_shared<MoreGrammars>(move(gs));
         }
         default:
@@ -469,8 +469,8 @@ struct Grammars : public AstNode
             return ApplyVisitor(make_shared<Grammars>(vector<shared_ptr<Grammar>>{}), visitor);
         case 3:
         {
-            vector gs{ GetResultOfAstChildAs<Grammar>(node, 1) };
-            gs.append_range(GetResultOfAstChildAs<MoreGrammars>(node, 2)->Items);
+            vector gs{ GetAstOfChildAs<Grammar>(node, 1) };
+            gs.append_range(GetAstOfChildAs<MoreGrammars>(node, 2)->Items);
             return ApplyVisitor(make_shared<Grammars>(move(gs)), visitor);
         }
         default:
