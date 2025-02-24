@@ -316,15 +316,24 @@ std::ostream& operator<<(std::ostream& os, String const& s)
 export template<>
 struct std::formatter<String, char>
 {
+    bool quoted = false;
+
+    constexpr formatter() = default;
+
+    // use inheirit to implement this method
     constexpr auto parse(std::format_parse_context& ctx)
     {
-        // not implement
         auto it = ctx.begin();
         if (it == ctx.end())
+        {
             return it;
+        }
 
-        if (it != ctx.end() && *it != '}')
-            throw std::format_error("Invalid format args for QuotableString.");
+        if (*it == '#')
+        {
+            quoted = true;
+            ++it;
+        }
 
         return it;
     }
@@ -332,7 +341,14 @@ struct std::formatter<String, char>
     template<class FormatContext>
     constexpr auto format(String const& t, FormatContext& fc) const
     {
-        return std::format_to(fc.out(), "{}", static_cast<string_view>(t));
+        if (quoted)
+        {
+            return std::format_to(fc.out(), "{:?}", static_cast<string_view>(t));
+        }
+        else
+        {
+            return std::format_to(fc.out(), "{}", static_cast<string_view>(t));
+        }
     }
 };
 
