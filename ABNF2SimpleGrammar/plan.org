@@ -1,5 +1,5 @@
 * VBA2Python[0/3]
-** TODO Generate Cpp code to parse VBA in the future[0/2]
+** TODO Generate Cpp code to parse VBA in the future[0/3]
 *** TODO Generate lex code[1/2]
    - [X] add test for lex for future maintain[0/0]
      - understand the std::forward
@@ -8,8 +8,8 @@
      - [ ] construct wrong DFA which doesn't have state result to Terminal
        - found: when Freeze, it has multiple result states for one step
        - Minimize<true> merge wrongly [2025-02-24 Mon]
-*** TODO Generat parse code[0/1]
-**** TODO solve operator priority issue
+*** TODO Generat parse code[0/2]
+   - [ ] solve operator priority issue
 ** TODO Generate AST code
 ** TODO Write Transformer code to translate VBA to Python
 
