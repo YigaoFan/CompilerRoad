@@ -15,6 +15,7 @@ auto Assert(bool value, char const* message) -> void
 template <typename... Ts>
 auto Log(std::format_string<Ts...> const fmt, Ts&&... ts) -> void
 {
+    //std::cout << std::format(fmt, std::forward<Ts...>(ts...));
     std::cout << std::vformat(fmt.get(), std::make_format_args(ts...)) << std::endl;
 }
 
@@ -22,4 +23,5 @@ export
 {
     template <typename... Ts>
     auto Log(const std::format_string<Ts...> fmt, Ts&&... ts) -> void;
+    auto Assert(bool value, char const* message) -> void;
 }
