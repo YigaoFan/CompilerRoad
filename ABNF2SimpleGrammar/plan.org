@@ -1,0 +1,17 @@
+* VBA2Python[0/3]
+** TODO Generate Cpp code to parse VBA in the future[0/2]
+*** TODO Generate lex code[0/2]
+   - [ ] add test for lex for future maintain[0/3]
+     - [ ] understand the std::forward
+     - [ ] one project can export a header file, because there exists nameof(x) macro
+     - [ ] construct wrong DFA which doesn't have state result to Terminal
+       - found: when Freeze, it has multiple result states for one step
+       - Minimize<true> merge wrongly [2025-02-24 Mon]
+   - [ ] solve the conflict issue between TokType Terminal and RegularExpression
+*** TODO Generat parse code[0/1]
+**** TODO solve operator priority issue
+** TODO Generate AST code
+** TODO Write Transformer code to translate VBA to Python
+
+
+
