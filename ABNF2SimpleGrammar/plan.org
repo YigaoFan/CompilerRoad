@@ -1,13 +1,16 @@
 * VBA2Python[0/3]
 ** TODO Generate Cpp code to parse VBA in the future[0/3]
-*** TODO Generate lex code[1/2]
+*** TODO Generate lex code[2/2]
    - [X] add test for lex for future maintain[0/0]
      - understand the std::forward
      - one project can export a header file, because there exists nameof(x) macro
-   - [ ] solve the conflict issue between TokType Terminal and RegularExpression[0/1]
-     - [ ] construct wrong DFA which doesn't have state result to Terminal
+   - [X] solve the conflict issue between TokType Terminal and RegularExpression[1/1]
+     - [X] construct wrong DFA which doesn't have state result to Terminal
+       - fine the Step struct
        - found: when Freeze, it has multiple result states for one step
        - Minimize<true> merge wrongly [2025-02-24 Mon]
+       - fixed: in Minimize<true> worklist doesn't split accept states when specified <2025-02-25 Tue>
+       - +actually is NFA2DFA issue, because one state to different states with same step+
 *** TODO Generat parse code[0/2]
    - [ ] solve operator priority issue
 ** TODO Generate AST code

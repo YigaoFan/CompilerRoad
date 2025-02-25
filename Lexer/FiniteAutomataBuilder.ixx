@@ -396,9 +396,20 @@ auto Minimize(FiniteAutomataDraft<Input, Result> dfa) -> FiniteAutomataDraft<Inp
     }
     auto worklist = deque<set<State>>
     {
-        move(accepts),
         move(nonaccepts),
     };
+    if constexpr (DivideAccepts)
+    {
+        for (auto s : accepts)
+        {
+            worklist.push_front(set{ s });
+        }
+    }
+    else
+    {
+        worklist.push_front(move(accepts));
+    }
+    
     auto chars = dfa.transitionTable.AllPossibleInputs() | filter([](Step<Input> const& c) { return c != FiniteAutomataDraft<Input, Result>::epsilon; });
 
     for (; not worklist.empty();)
@@ -428,7 +439,7 @@ auto Minimize(FiniteAutomataDraft<Input, Result> dfa) -> FiniteAutomataDraft<Inp
                     {
                         partition.erase(q);
                         auto q1Set = set(q1.begin(), q1.end());
-                        partition.insert(q1Set);
+                        partition.insert(move(q1Set));
                         partition.insert(set(q2.begin(), q2.end()));
                         //transitionRecord[move(q1Set)].push_back({ s, c });
 

@@ -163,7 +163,14 @@ public:
             map<InputItem, State, StateComp> rh;
             for (auto& i : t.second)
             {
-                rh[i.first] = i.second;
+                if (not rh.contains(i.first))
+                {
+                    rh.insert(i);
+                }
+                else
+                {
+                    throw std::logic_error(std::format("already exist transition and its value {}", rh.at(i.first)));
+                }
             }
             transitionMap.insert({ t.first, move(rh) });
         }
