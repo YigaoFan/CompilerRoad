@@ -64,7 +64,7 @@ struct formatter<CppCodeForm<set<String>>, char>
         format_to(fc.out(), "{{\n");
         for (auto i = 0; auto const& x : t.Value)
         {
-            format_to(fc.out(), "    {{ {:#}, ", x);
+            format_to(fc.out(), "    {{ {}, ", x);
             format_to(fc.out(), "{} }},\n", i++);
         }
         format_to(fc.out(), "}}");

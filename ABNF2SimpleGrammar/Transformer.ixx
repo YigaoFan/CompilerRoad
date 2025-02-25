@@ -10,6 +10,7 @@ using std::string;
 using std::set;
 using std::pair;
 using std::format;
+using std::move;
 
 // if name is occupied, append number which
 class GrammarTransformer
@@ -148,15 +149,8 @@ public:
         auto Transform(DataRange const* dataRange, GrammarTransformInfo* info) -> void
         {
             String auxGrammarName{ format("{}_dr_{}", info->Left, info->Counter++) };
-            vector<SimpleRightSide> rss;
-            for (auto i = dataRange->Left; i <= dataRange->Right; ++i)
-            {
-                String s{ static_cast<char>(i) };
-                info->AppendOnLastRule(s);
-                info->Terminals.push_back(s);
-                rss.push_back({ s });
-            }
-            info->OtherGrammars.push_back({ auxGrammarName, move(rss) });
+            // use regular expression to express DataRange
+            info->Terminals.push_back(String(format("\"{}-{}\"", (char)dataRange->Left, (char)dataRange->Right)));
             info->AppendOnLastRule(auxGrammarName);
         }
 
@@ -167,15 +161,14 @@ public:
 
         auto Transform(Terminal const* terminal, GrammarTransformInfo* info) -> void
         {
-            // TODO remove quote
             info->AppendOnLastRule(String(format("terminal_{}", info->Counter++)));
             info->Terminals.push_back(terminal->Value);
         }
 
         auto Transform(RegExp const* regExp, GrammarTransformInfo* info) -> void
         {
-            info->AppendOnLastRule(String(format("terminal_{}", info->Counter++)));
-            info->Terminals.push_back(regExp->Value);
+            info->AppendOnLastRule(String(format("regExp_{}", info->Counter++)));
+            info->Terminals.push_back(regExp->Value.Substring(1));
         }
     };
 

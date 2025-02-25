@@ -1,6 +1,6 @@
 * VBA2Python[0/3]
 ** TODO Generate Cpp code to parse VBA in the future[0/3]
-*** TODO Generate lex code[3/4]
+*** TODO Generate lex code[3/5]
    - [X] add test for lex for future maintain[0/0]
      - understand the std::forward
      - one project can export a header file, because there exists nameof(x) macro
@@ -17,6 +17,11 @@
      - not expect behavior. Only allow escape one char.
      - fixed: "\"((\\\\[^\n])|[^\"\n])*\"", better with not match slash in the right part: "\"((\\\\[^\n])|[^\\\\\"\n])*\""
      - write correct regular expression is hard <2025-02-25 Tue>
+   - [-] fix generated code issue
+     - [X] handle string terminal and regular expression terminal print 
+     - [X] a alone quote char. Caused by wrong operation in AST construction
+     - [ ] use regular expression to represent DataRange
+     - [ ] escape the normal string to regular expression form
    - [ ] combine same terminal in generated code
 *** TODO Generat parse code[0/2]
    - [ ] solve operator priority issue

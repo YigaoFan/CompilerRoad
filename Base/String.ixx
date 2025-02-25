@@ -32,6 +32,9 @@ public:
         return String("");
     }
 
+    String() : String("")
+    { }
+
     template <size_t N>
     String(char const(&literal)[N])
         : share(new Share{ .Str = literal, .RefCount = 1, .Releasable = false }),
@@ -232,6 +235,12 @@ public:
     auto Contains(string_view s) const -> bool
     {
         return static_cast<string_view>(*this).contains(s);
+    }
+
+    template <size_t N>
+    auto Contains(char const(&literal)[N]) const -> bool
+    {
+        return Contains(string_view(literal));
     }
 
     auto StartWith(String const& s) const -> bool

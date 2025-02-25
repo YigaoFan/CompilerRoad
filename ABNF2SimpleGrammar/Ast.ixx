@@ -91,7 +91,7 @@ auto GetAstOfChildAs(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, 
     return dynamic_pointer_cast<T>(std::get<1>(node->Children[i]).Result);
 }
 
-auto GetTokChild(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, int i) -> Token<TokType>
+auto GetTokChild(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, int i) -> Token<TokType>&
 {
     return std::get<0>(node->Children[i]);
 }
@@ -391,7 +391,16 @@ auto BasicItem::Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* n
     {
         if (node->ChildSymbols.front() == "digitOrAlphabet")
         {
-            return ApplyVisitor(make_shared<DataRange>(GetTokChild(node, 0).Value.front(), GetTokChild(node, 2).Value.front()), visitor);
+            auto& left = GetTokChild(node, 0).Value;
+            auto& right = GetTokChild(node, 2).Value;
+            if (left.size() == 3 and right.size() == 3)
+            {
+                return ApplyVisitor(make_shared<DataRange>(left[1], right[1]), visitor);
+            }
+            else
+            {
+                throw std::out_of_range("DataRange only support three chars like 'x', there is invalid DataRange in code");
+            }
         }
         else if (node->ChildSymbols.front() == "[")
         {

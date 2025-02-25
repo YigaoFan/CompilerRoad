@@ -242,7 +242,7 @@ param-dcl -> untyped-name-param-dcl | typed-name-param-dcl
 untyped-name-param-dcl -> Identifier [parameter-type]
 typed-name-param-dcl -> Typed-name [array-designator]
 optional-prefix -> ("optional" [parameter-mechanism]) | ([parameter-mechanism] ("optional"))
-parameter-mechanism -> "byval" | " byref"
+parameter-mechanism -> "byval" | "byref"
 parameter-type -> [array-designator] "as" (type-expression | "Any")
 default-value -> "=" constant-expression
 
