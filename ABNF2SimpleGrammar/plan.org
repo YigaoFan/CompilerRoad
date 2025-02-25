@@ -20,7 +20,7 @@
    - [-] fix generated code issue
      - [X] handle string terminal and regular expression terminal print 
      - [X] a alone quote char. Caused by wrong operation in AST construction
-     - [ ] use regular expression to represent DataRange
+     - [X] use regular expression to represent DataRange
      - [ ] escape the normal string to regular expression form
    - [ ] combine same terminal in generated code
 *** TODO Generat parse code[0/2]
