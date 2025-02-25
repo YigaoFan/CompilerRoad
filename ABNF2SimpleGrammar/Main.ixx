@@ -5,7 +5,7 @@ import TokType;
 import Ast;
 import Transformer;
 import Checker;
-import Formatter; // affect the bottom format code
+import CodeEmitter; // affect the bottom format code
 
 using std::string;
 using std::pair;
@@ -54,9 +54,9 @@ int main()
         pair<string, TokType>{ "\\(", TokType::LeftParen },
         pair<string, TokType>{ "\\)", TokType::RightParen },
         pair<string, TokType>{ "\n", TokType::Newline },
-        pair<string, TokType>{ "\"((\\\\[\"\\\\])|[^\"\n])*\"", TokType::Terminal },
+        pair<string, TokType>{ "\"((\\\\[^\n])|[^\\\\\"\n])*\"", TokType::Terminal },
         pair<string, TokType>{ "'[a-zA-Z0-9]'", TokType::QutotedDigitOrAlphabet },
-        pair<string, TokType>{ "r\"((\\\\[\"\\\\])|[^\"\n])*\"", TokType::RegularExpression },
+        pair<string, TokType>{ "r\"((\\\\[^\n])|[^\\\\\"\n])*\"", TokType::RegularExpression },
     };
     auto l = Lexer<TokType>::New(rules);
     auto p = TableDrivenParser::ConstructFrom("grammars",

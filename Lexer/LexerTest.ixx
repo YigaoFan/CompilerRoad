@@ -141,9 +141,9 @@ auto Test() -> void
         pair<string, TokType>{ "\\(", TokType::LeftParen },
         pair<string, TokType>{ "\\)", TokType::RightParen },
         pair<string, TokType>{ "\n", TokType::Newline },
-        pair<string, TokType>{ "\"((\\\\\")|[^\"\n])*\"", TokType::Terminal },
+        pair<string, TokType>{ "\"((\\\\[^\n])|[^\\\\\"\n])*\"", TokType::Terminal },
         pair<string, TokType>{ "'[a-zA-Z0-9]'", TokType::QutotedDigitOrAlphabet },        
-        pair<string, TokType>{ "r\"((\\\\\")|[^\"\n])*\"", TokType::RegularExpression },
+        pair<string, TokType>{ "r\"((\\\\[^\n])|[^\\\\\"\n])*\"", TokType::RegularExpression },
 
     };
 
