@@ -16,7 +16,7 @@
      - in the 2nd one, it matches escaped char without length limit. For input: "\\" | "^", it will eat the second quote mark with previous slash, this is
      - not expect behavior. Only allow escape one char.
      - fixed: "\"((\\\\[^\n])|[^\"\n])*\"", better with not match slash in the right part: "\"((\\\\[^\n])|[^\\\\\"\n])*\""
-     - write correct regular expression is hard
+     - write correct regular expression is hard <2025-02-25 Tue>
    - [ ] combine same terminal in generated code
 *** TODO Generat parse code[0/2]
    - [ ] solve operator priority issue
