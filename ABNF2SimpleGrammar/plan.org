@@ -1,6 +1,6 @@
 * VBA2Python[0/3]
 ** TODO Generate Cpp code to parse VBA in the future[0/3]
-*** TODO Generate lex code[3/5]
+*** TODO Generate lex code[5/6]
    - [X] add test for lex for future maintain[0/0]
      - understand the std::forward
      - one project can export a header file, because there exists nameof(x) macro
@@ -17,12 +17,19 @@
      - not expect behavior. Only allow escape one char.
      - fixed: "\"((\\\\[^\n])|[^\"\n])*\"", better with not match slash in the right part: "\"((\\\\[^\n])|[^\\\\\"\n])*\""
      - write correct regular expression is hard <2025-02-25 Tue>
-   - [-] fix generated code issue
+   - [X] fix generated code issue
      - [X] handle string terminal and regular expression terminal print 
      - [X] a alone quote char. Caused by wrong operation in AST construction
      - [X] use regular expression to represent DataRange <2025-02-25 Tue>
-     - [ ] escape the normal string to regular expression form
-   - [ ] combine same terminal in generated code
+     - [X] escape the normal string to regular expression form
+     - [X] fix regular expression using in ABNF file
+     - [X] slash of regular expression in ABNF file need to be escaped in generated cpp code <2025-02-26 Wed>
+   - [X] combine same terminal in generated grammar code(when use set<String> to store, it's done)
+     - [X] give Terminal item with identical name in global scope
+     - [X] use reference to share Terminals between GrammarTransformInfo
+     - [X] should we share the OtherGrammars also? Yes, then we don't need many move code
+     - [X] sub GrammarTransformInfo should be constructed by parent GrammarTransformInfo, to let parent control the relationship between them <2025-02-26 Wed>
+   - [ ] check the generated grammar rule is correct 
 *** TODO Generat parse code[0/2]
    - [ ] solve operator priority issue
 ** TODO Generate AST code
