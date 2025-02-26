@@ -8,6 +8,7 @@ using std::vector;
 using std::ofstream;
 using std::formatter;
 using std::set;
+using std::map;
 using std::format;
 using std::format_to;
 
@@ -48,7 +49,7 @@ struct formatter<CppCodeForm<vector<SimpleGrammar>>, char>
 };
 
 template<>
-struct formatter<CppCodeForm<set<String>>, char>
+struct formatter<CppCodeForm<map<String, String>>, char>
 {
     constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator
     {
@@ -57,15 +58,15 @@ struct formatter<CppCodeForm<set<String>>, char>
     }
 
     template<class FormatContext>
-    constexpr auto format(CppCodeForm<set<String>> const& t, FormatContext& fc) const -> FormatContext::iterator
+    constexpr auto format(CppCodeForm<map<String, String>> const& t, FormatContext& fc) const -> FormatContext::iterator
     {
         using std::string_view;
 
         format_to(fc.out(), "{{\n");
         for (auto i = 0; auto const& x : t.Value)
         {
-            format_to(fc.out(), "    {{ {}, ", x);
-            format_to(fc.out(), "{} }},\n", i++);
+            format_to(fc.out(), "    {{ {}, ", x.first);
+            format_to(fc.out(), "{:#} }},\n", x.second);
         }
         format_to(fc.out(), "}}");
         return fc.out();

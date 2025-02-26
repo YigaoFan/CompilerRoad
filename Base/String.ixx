@@ -182,6 +182,11 @@ public:
         return String(newShare, 0, len);
     }
 
+    auto operator[] (unsigned i) const -> char
+    {
+        return share->Str[start + i];
+    }
+
     auto Substring(size_t start) const -> String
     {
         return Substring(start, Length());

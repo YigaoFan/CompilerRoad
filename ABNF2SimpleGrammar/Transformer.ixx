@@ -9,8 +9,109 @@ using std::vector;
 using std::string;
 using std::set;
 using std::pair;
+using std::string_view;
+using std::map;
 using std::format;
 using std::move;
+
+auto AppendCppStringLiteralSlash(string& str) -> void
+{
+    str.append("\\\\");
+}
+
+// sub String assign back to original String variable, will have issue
+auto Escape2RegExp(String normalString) -> String
+{
+    string regExp = "\"";
+    regExp.reserve(normalString.Length());
+
+    string_view operators = "*+|-[^]()";
+    auto s = string_view(normalString);
+    for (size_t i = 1, validLen = s.size() - 1; i < validLen; ++i) // ignore the first and last double quote
+    {
+        switch (auto c = s[i]; c)
+        {
+        case '\\':
+            if (i + 1 >= validLen)
+            {
+                throw std::runtime_error("syntax error: only slash in the string, not escape anything");
+            }
+            else
+            {
+                ++i;
+                auto nextCh = s[i];
+                if (nextCh == '\\')
+                {
+                    AppendCppStringLiteralSlash(regExp);
+                    AppendCppStringLiteralSlash(regExp);
+                }
+                else
+                {
+                    regExp.push_back('\\');
+                    regExp.push_back(nextCh);
+                }
+            }
+            break;
+        default:
+            if (operators.contains(c))
+            {
+                AppendCppStringLiteralSlash(regExp);
+            }
+            regExp.push_back(c);
+            break;
+        }
+    }
+    regExp.push_back('"');
+    return String(regExp);
+}
+
+auto Escape2StringLiteral(String regExpInAbnf) -> String
+{
+    string regExp = "\"";
+    regExp.reserve(regExpInAbnf.Length());
+    auto s = string_view(regExpInAbnf);
+    for (size_t i = 2, validLen = s.size() - 1; i < validLen; ++i) // ignore the first(r") and last double quote
+    {
+        switch (auto c = s[i]; c)
+        {
+        case '\\':
+            if (i + 1 >= validLen)
+            {
+                throw std::runtime_error("syntax error: only slash in the string, not escape anything");
+            }
+            else
+            {
+                ++i;
+                // handle \\, \r\n, \-\[
+                string_view operators = "*+|-[^]()";
+                switch (auto nextCh = s[i]; nextCh)
+                {
+                case '\\':
+                    AppendCppStringLiteralSlash(regExp);
+                    AppendCppStringLiteralSlash(regExp);
+                    break;
+                default:
+                    if (operators.contains(nextCh))
+                    {
+                        AppendCppStringLiteralSlash(regExp);
+                        regExp.push_back(nextCh);
+                    }
+                    else
+                    {
+                        regExp.push_back('\\');
+                        regExp.push_back(nextCh);
+                    }
+                }
+            }
+            break;
+        default:
+            regExp.push_back(c);
+            break;
+        }
+    }
+    regExp.push_back('"');
+    return String(regExp);
+}
 
 // if name is occupied, append number which
 class GrammarTransformer
@@ -19,14 +120,15 @@ public:
     struct SimpleGrammarsInfo
     {
         vector<SimpleGrammar> Grammars;
-        set<String> Terminals;
+        map<String, String> Terminals;
     };
     struct GrammarTransformInfo
     {
         String Left;
         vector<SimpleRightSide> MainRights;
-        vector<SimpleGrammar> OtherGrammars;
-        vector<String> Terminals; // terminal also has priority, exact match is higher than others
+        // use below 3 items to share some grammars construct, which should not be clear in low level, only allow to add
+        vector<SimpleGrammar>& OtherGrammars;
+        map<String, String>& Terminals; // terminal also has priority, exact match is higher than others
         int& Counter;
 
         auto AppendOnLastRule(String symbol) -> void
@@ -36,6 +138,27 @@ public:
                 MainRights.push_back({});
             }
             MainRights.back().push_back(symbol);
+        }
+
+        auto RegisterTerminalName(String terminalValue) -> String
+        {
+            if (Terminals.contains(terminalValue))
+            {
+                return Terminals.at(terminalValue);
+            }
+            auto [it, _] = Terminals.insert({ move(terminalValue), String(format("terminal_{}", Terminals.size())) });
+            return it->second;
+        }
+
+        auto CreateSubInfo(String left = {}) const -> GrammarTransformInfo
+        {
+            return GrammarTransformInfo{ .Left = move(left), .OtherGrammars = OtherGrammars, .Terminals = Terminals, .Counter = Counter };
+        }
+
+        auto ResetCurrentGrammarInfo()
+        {
+            Left = String();
+            MainRights.clear();
         }
     };
     struct TransformVisitor : IVisitor
@@ -98,7 +221,7 @@ public:
         auto Transform(Duplicate const* duplicate, GrammarTransformInfo* info) -> void
         {
             String basicItemGrammarName{ format("{}_dup_basicItem_{}", info->Left, info->Counter++) };
-            GrammarTransformInfo subInfo{ .Left = basicItemGrammarName, .Counter = info->Counter };
+            GrammarTransformInfo subInfo = info->CreateSubInfo(basicItemGrammarName);
             GrammarTransformer::Transform(duplicate->BasicItem.get(), &subInfo);
 
             String auxGrammarName{ format("{}_dup_{}", info->Left, info->Counter++) };
@@ -119,30 +242,27 @@ public:
 
             info->OtherGrammars.push_back({ auxGrammarName, move(rss) });
             info->OtherGrammars.push_back({ subInfo.Left, move(subInfo.MainRights) });
-            info->OtherGrammars.append_range(move(subInfo.OtherGrammars));
             info->AppendOnLastRule(auxGrammarName);
         }
 
         auto Transform(Combine const* combine, GrammarTransformInfo* info) -> void
         {
             String auxGrammarName{ format("{}_com_{}", info->Left, info->Counter++) };
-            GrammarTransformInfo subInfo{ .Left = auxGrammarName, .Counter = info->Counter };
+            GrammarTransformInfo subInfo = info->CreateSubInfo(auxGrammarName);
             GrammarTransformer::Transform(combine->Productions.get(), &subInfo);
 
             info->OtherGrammars.push_back({ subInfo.Left, move(subInfo.MainRights) });
-            info->OtherGrammars.append_range(move(subInfo.OtherGrammars));
             info->AppendOnLastRule(auxGrammarName);
         }
 
         auto Transform(Optional const* optional, GrammarTransformInfo* info) -> void
         {
             String auxGrammarName{ format("{}_op_{}", info->Left, info->Counter++) };
-            GrammarTransformInfo subInfo{ .Left = auxGrammarName, .Counter = info->Counter };
+            GrammarTransformInfo subInfo = info->CreateSubInfo(auxGrammarName);
             GrammarTransformer::Transform(optional->Productions.get(), &subInfo);
             subInfo.MainRights.push_back({}); // make it optional
 
             info->OtherGrammars.push_back({ subInfo.Left, move(subInfo.MainRights) });
-            info->OtherGrammars.append_range(move(subInfo.OtherGrammars));
             info->AppendOnLastRule(auxGrammarName);
         }
 
@@ -150,7 +270,7 @@ public:
         {
             String auxGrammarName{ format("{}_dr_{}", info->Left, info->Counter++) };
             // use regular expression to express DataRange
-            info->Terminals.push_back(String(format("\"{}-{}\"", (char)dataRange->Left, (char)dataRange->Right)));
+            info->RegisterTerminalName(String(format("\"{}-{}\"", (char)dataRange->Left, (char)dataRange->Right)));
             info->AppendOnLastRule(auxGrammarName);
         }
 
@@ -161,44 +281,41 @@ public:
 
         auto Transform(Terminal const* terminal, GrammarTransformInfo* info) -> void
         {
-            info->AppendOnLastRule(String(format("terminal_{}", info->Counter++)));
-            info->Terminals.push_back(terminal->Value);
+            auto name = info->RegisterTerminalName(Escape2RegExp(terminal->Value));
+            info->AppendOnLastRule(name);
         }
 
         auto Transform(RegExp const* regExp, GrammarTransformInfo* info) -> void
         {
-            info->AppendOnLastRule(String(format("regExp_{}", info->Counter++)));
-            info->Terminals.push_back(regExp->Value.Substring(1));
+            auto name = info->RegisterTerminalName(Escape2StringLiteral(regExp->Value));
+            info->AppendOnLastRule(name);
         }
     };
 
     /// <param name="info">caller provide the info with counter set, other properties not set</param>
-    static auto Transform(Grammar const* grammar, GrammarTransformInfo* info) -> SimpleGrammarsInfo
+    static auto Transform(Grammar const* grammar, GrammarTransformInfo* info) -> SimpleGrammar
     {
         info->Left = grammar->Left;
         Transform(grammar->Productions.get(), info);
-        // TODO handle terminal
-        SimpleGrammarsInfo grammarsInfo{ .Grammars = pair{ info->Left, move(info->MainRights) } };
-        grammarsInfo.Grammars.append_range(move(info->OtherGrammars));
-        grammarsInfo.Terminals.insert_range(move(info->Terminals));
-        return grammarsInfo;
+        return { info->Left, move(info->MainRights) };
     }
 
     static auto Transform(Grammars const* grammars) -> SimpleGrammarsInfo
     {
         SimpleGrammarsInfo grammarsInfo;
         auto counter = 0;
-        GrammarTransformInfo subInfo{ .Counter = counter };
+        map<String, String> terminals;
+        vector<SimpleGrammar> otherGrammars;
+
+        GrammarTransformInfo rootInfo{ .OtherGrammars = otherGrammars, .Terminals = terminals, .Counter = counter, };
         for (auto const& g : grammars->Items)
         {
-            auto r = Transform(g.get(), &subInfo);
-            grammarsInfo.Grammars.append_range(move(r.Grammars));
-            grammarsInfo.Terminals.insert_range(move(r.Terminals));
-            subInfo.Left = String();
-            subInfo.MainRights.clear();
-            subInfo.OtherGrammars.clear();
-            subInfo.Terminals.clear();
+            auto sg = Transform(g.get(), &rootInfo);
+            grammarsInfo.Grammars.push_back(move(sg));
+            rootInfo.ResetCurrentGrammarInfo();
         }
+        grammarsInfo.Terminals.insert_range(move(terminals));
+        grammarsInfo.Grammars.append_range(move(otherGrammars));
         return grammarsInfo;
     }
 
@@ -212,11 +329,9 @@ public:
     {
         for (auto const& p : productions->Items)
         {
-            GrammarTransformInfo subInfo{ .Left = info->Left, .Counter = info->Counter };
+            auto subInfo = info->CreateSubInfo(info->Left);
             Transform(p.get(), &subInfo);
             info->MainRights.append_range(move(subInfo.MainRights));
-            info->OtherGrammars.append_range(move(subInfo.OtherGrammars));
-            info->Terminals.append_range(move(subInfo.Terminals));
         }
     }
 
