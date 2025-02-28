@@ -86,18 +86,18 @@ Builtin-type -> reserved-type-identifier | ("[" reserved-type-identifier "]") | 
 Typed-name -> Identifier type-suffix 
 type-suffix -> "%" | "&" | "^" | "!" | "#" | "@" | "$" 
 
-Conditional-module-body -> cc-block
-cc-block -> *(cc-const | cc-if-block | logical-line) 
-cc-const -> LINE-START "#" "const" cc-var-lhs "=" cc-expression cc-eol ;TODO ignore LINE-START and LINE-END in translation
-cc-var-lhs -> name 
-cc-eol -> [single-quote *non-line-termination-character] LINE-END
-cc-if-block -> cc-if cc-block *cc-elseif-block [cc-else-block] cc-endif 
-cc-if -> LINE-START "#" "if" cc-expression "then" cc-eol 
-cc-elseif-block -> cc-elseif cc-block 
-cc-elseif -> LINE-START "#" "elseif" cc-expression "then" cc-eol 
-cc-else-block -> cc-else cc-block 
-cc-else -> LINE-START "#" "else" cc-eol 
-cc-endif -> LINE-START "#" ("endif" | ("end" "if")) cc-eol 
+;Conditional-module-body -> cc-block
+;cc-block -> *(cc-const | cc-if-block | logical-line) 
+;cc-const -> LINE-START "#" "const" cc-var-lhs "=" cc-expression cc-eol ;TODO ignore LINE-START and LINE-END in translation
+;cc-var-lhs -> name 
+;cc-eol -> [single-quote *non-line-termination-character] LINE-END
+;cc-if-block -> cc-if cc-block *cc-elseif-block [cc-else-block] cc-endif 
+;cc-if -> LINE-START "#" "if" cc-expression "then" cc-eol 
+;cc-elseif-block -> cc-elseif cc-block 
+;cc-elseif -> LINE-START "#" "elseif" cc-expression "then" cc-eol 
+;cc-else-block -> cc-else cc-block 
+;cc-else -> LINE-START "#" "else" cc-eol 
+;cc-endif -> LINE-START "#" ("endif" | ("end" "if")) cc-eol 
 
 ; above is lex rule
 
