@@ -1,6 +1,6 @@
 * VBA2Python[0/3]
 ** TODO Generate Cpp code to parse VBA in the future[0/3]
-*** TODO Generate lex code[5/6]
+*** TODO Generate lex code[7/8]
    - [X] add test for lex for future maintain[0/0]
      - understand the std::forward
      - one project can export a header file, because there exists nameof(x) macro
@@ -29,6 +29,12 @@
      - [X] use reference to share Terminals between GrammarTransformInfo
      - [X] should we share the OtherGrammars also? Yes, then we don't need many move code
      - [X] sub GrammarTransformInfo should be constructed by parent GrammarTransformInfo, to let parent control the relationship between them <2025-02-26 Wed>
+   - [X] generate formal lex rules
+     - [X] generate TokType definition
+     - [X] not support conditional module
+     - [X] fix int to String implicitly <2025-02-27 Thu>
+   - [X] think how to lex using ABNF grammar and regular expression
+     - [X] transform simple ABNF grammar(without recursive) to regular expression <2025-02-28 Fri> basically complete
    - [ ] check the generated grammar rule is correct 
 *** TODO Generat parse code[0/2]
    - [ ] solve operator priority issue
