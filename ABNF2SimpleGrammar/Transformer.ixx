@@ -345,6 +345,132 @@ public:
     }
 };
 
+struct TransformVisitor : IVisitor
+{
+    string result;
+
+    TransformVisitor()
+    {
+    }
+
+    virtual auto Visit(Terminal* object) -> void
+    {
+        result = string(object->Value.Substring(1, object->Value.Length() - 2));
+    }
+
+    virtual auto Visit(RegExp* object) -> void
+    {
+        result = string(object->Value.Substring(2, object->Value.Length() - 3));
+    }
+
+    virtual auto Visit(Symbol* object) -> void
+    {
+        // Topological sort to visit each one, to check no recursive here
+    }
+
+    virtual auto Visit(DataRange* object) -> void
+    {
+        result = format("\"{}-{}\"", (char)object->Left, (char)object->Right);
+    }
+
+    virtual auto Visit(Optional* object) -> void
+    {
+        result = format("({})|[]", Transform(object->Productions.get())); // is it ok to write empty [] here TODO check
+    }
+
+    virtual auto Visit(Combine* object) -> void
+    {
+        result = format("({})", Transform(object->Productions.get()));
+    }
+
+    virtual auto Visit(Duplicate* object) -> void
+    {
+        auto item = Transform(object->BasicItem.get());
+        auto Dup = [&](unsigned n) -> string
+        {
+            string s;
+            for (auto i = 0; i < n; ++i)
+            {
+                s.append(format("({})", item));
+            }
+            return s;
+        };
+        if (object->High == std::numeric_limits<unsigned>::max())
+        {
+            result.append(format("({})", Dup(object->Low)));
+            result.append(format("({})*", item));
+            return;
+        }
+
+        for (auto i = object->Low; i <= object->High; ++i)
+        {
+            result.append(format("({})", Dup(i)));
+            result.push_back('|');
+        }
+        result.pop_back(); // remove the extra | char
+    }
+
+    auto Visit(Grammar*) -> void override
+    {
+    }
+
+    auto Visit(Grammars*) -> void override
+    {
+    }
+
+    auto Visit(Productions*) -> void override
+    {
+    }
+
+    auto Visit(Production*) -> void override
+    {
+    }
+
+    static auto Transform(Grammar const* grammar) -> string
+    {
+        return Transform(grammar->Productions.get());
+    }
+
+    static auto Transform(Grammars const* grammars) -> map<String, string>
+    {
+        map<String, string> regexps;
+
+        for (auto const& g : grammars->Items)
+        {
+            regexps.insert({ g->Left, Transform(g.get()) });
+        }
+        return regexps;
+    }
+
+    static auto Transform(Item* item) -> string
+    {
+        TransformVisitor v;
+        item->Visit(&v);
+        return v.result;
+    }
+
+    static auto Transform(Productions const* productions) -> string
+    {
+        string regexp;
+        for (auto const& p : productions->Items)
+        {
+            regexp.append(format("|({})", Transform(p.get())));
+        }
+        return regexp;
+    }
+
+    static auto Transform(Production const* production) -> string
+    {
+        string regexp;
+        for (auto const& item : production->Items)
+        {
+            regexp.append(format("{}", Transform(item.get())));
+        }
+        return regexp;
+    }
+};
+
+
 export
 {
     class GrammarTransformer;
