@@ -42,7 +42,7 @@ public:
     {
     }
 
-    String(char ch)
+    explicit String(char ch)
         : share(new Share{ .Str = new char[1], .RefCount = 1, .Releasable = true}), start(0), end(1)
     {
         const_cast<char* const>(share->Str)[0] = ch;

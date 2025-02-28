@@ -15,7 +15,7 @@ using std::format_to;
 template <typename T>
 struct CppCodeForm
 {
-    T Value;
+    T const& Value;
 };
 
 template<>
@@ -36,6 +36,7 @@ struct formatter<CppCodeForm<vector<SimpleGrammar>>, char>
         std::basic_format_parse_context<char> fpc{":#}"};
         rangeFmt.underlying().parse(fpc);
 
+        format_to(fc.out(), "vector<SimpleGrammar> grammars =\n");
         format_to(fc.out(), "{{\n");
         for (auto const& x : t.Value)
         {
@@ -43,13 +44,13 @@ struct formatter<CppCodeForm<vector<SimpleGrammar>>, char>
             rangeFmt.format(x.second, fc);
             format_to(fc.out(), " }},\n");
         }
-        format_to(fc.out(), "}}");
+        format_to(fc.out(), "}};");
         return fc.out();
     }
 };
 
 template<>
-struct formatter<CppCodeForm<map<String, String>>, char>
+struct formatter<CppCodeForm<map<String, int>>, char>
 {
     constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator
     {
@@ -58,17 +59,25 @@ struct formatter<CppCodeForm<map<String, String>>, char>
     }
 
     template<class FormatContext>
-    constexpr auto format(CppCodeForm<map<String, String>> const& t, FormatContext& fc) const -> FormatContext::iterator
+    constexpr auto format(CppCodeForm<map<String, int>> const& t, FormatContext& fc) const -> FormatContext::iterator
     {
         using std::string_view;
 
+        format_to(fc.out(), "enum class TokType : int\n");
         format_to(fc.out(), "{{\n");
         for (auto i = 0; auto const& x : t.Value)
         {
-            format_to(fc.out(), "    {{ {}, ", x.first);
-            format_to(fc.out(), "{:#} }},\n", x.second);
+            format_to(fc.out(), "    Terminal_{}, // {}\n", x.second, x.first);
         }
-        format_to(fc.out(), "}}");
+        format_to(fc.out(), "}};\n");
+        format_to(fc.out(), "map<string_view, int> terminal2IntTokenType =\n");
+        format_to(fc.out(), "{{\n");
+        for (auto i = 0; auto const& x : t.Value)
+        {
+            format_to(fc.out(), "    {{ {:?},", std::format("terminal_{}", x.second));
+            format_to(fc.out(), " static_cast<int>({}) }},\n", std::format("TokType::Terminal_{}", x.second));
+        }
+        format_to(fc.out(), "}};");
         return fc.out();
     }
 };

@@ -173,6 +173,12 @@ int main()
             auto grammarsInfo = GrammarTransformer::Transform(ast.get());
             //std::println("simple grammar: {}", grammarsInfo);
             std::ofstream codeFile{ "vba-spec.ixx" };
+            std::print(codeFile, "export module VbaSpec;\n");
+            std::print(codeFile, "import std;\n");
+            std::print(codeFile, "import Parser;\n");
+            std::print(codeFile, "using namespace std;\n");
+            std::print(codeFile, "\n");
+            std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Terminals });
             std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Grammars });
             std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Terminals });
         }
