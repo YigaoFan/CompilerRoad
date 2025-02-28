@@ -120,7 +120,7 @@ public:
     struct SimpleGrammarsInfo
     {
         vector<SimpleGrammar> Grammars;
-        map<String, String> Terminals;
+        map<String, int> Terminals;
     };
     struct GrammarTransformInfo
     {
@@ -128,7 +128,7 @@ public:
         vector<SimpleRightSide> MainRights;
         // use below 3 items to share some grammars construct, which should not be clear in low level, only allow to add
         vector<SimpleGrammar>& OtherGrammars;
-        map<String, String>& Terminals; // terminal also has priority, exact match is higher than others
+        map<String, int>& Terminals; // terminal also has priority, exact match is higher than others
         int& Counter;
 
         auto AppendOnLastRule(String symbol) -> void
@@ -144,10 +144,11 @@ public:
         {
             if (Terminals.contains(terminalValue))
             {
-                return Terminals.at(terminalValue);
+                return String(format("terminal_{}", Terminals.at(terminalValue)));
             }
-            auto [it, _] = Terminals.insert({ move(terminalValue), String(format("terminal_{}", Terminals.size())) });
-            return it->second;
+            auto i = Terminals.size();
+            auto [it, _] = Terminals.insert({ move(terminalValue), i });
+            return String(format("terminal_{}", i));
         }
 
         auto CreateSubInfo(String left = {}) const -> GrammarTransformInfo
@@ -304,7 +305,7 @@ public:
     {
         SimpleGrammarsInfo grammarsInfo;
         auto counter = 0;
-        map<String, String> terminals;
+        map<String, int> terminals;
         vector<SimpleGrammar> otherGrammars;
 
         GrammarTransformInfo rootInfo{ .OtherGrammars = otherGrammars, .Terminals = terminals, .Counter = counter, };
