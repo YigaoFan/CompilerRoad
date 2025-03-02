@@ -13,6 +13,7 @@ using std::string_view;
 using std::map;
 using std::format;
 using std::move;
+using std::println;
 
 auto AppendCppStringLiteralSlash(string& str) -> void
 {
@@ -113,6 +114,110 @@ auto Escape2StringLiteral(String regExpInAbnf) -> String
     return String(regExp);
 }
 
+template <typename T>
+struct DefaultVisitor : IVisitor
+{
+    T Result;
+    DefaultVisitor() : Result()
+    { }
+
+    auto Visit(Terminal* object) -> void override
+    {
+    }
+
+    auto Visit(RegExp* object) -> void override
+    {
+    }
+
+    auto Visit(Symbol* object) -> void override
+    {
+    }
+
+    auto Visit(DataRange* object) -> void override
+    {
+    }
+
+    auto Visit(Optional* object) -> void override
+    {
+    }
+
+    auto Visit(Combine* object) -> void override
+    {
+    }
+
+    auto Visit(Duplicate* object) -> void override
+    {
+    }
+
+    auto Visit(Grammar*) -> void override
+    {
+    }
+
+    auto Visit(Grammars*) -> void override
+    {
+    }
+
+    auto Visit(Productions*) -> void override
+    {
+    }
+
+    auto Visit(Production*) -> void override
+    {
+    }
+};
+
+template <>
+struct DefaultVisitor<void> : IVisitor
+{
+    DefaultVisitor()
+    {
+    }
+
+    auto Visit(Terminal* object) -> void override
+    {
+    }
+
+    auto Visit(RegExp* object) -> void override
+    {
+    }
+
+    auto Visit(Symbol* object) -> void override
+    {
+    }
+
+    auto Visit(DataRange* object) -> void override
+    {
+    }
+
+    auto Visit(Optional* object) -> void override
+    {
+    }
+
+    auto Visit(Combine* object) -> void override
+    {
+    }
+
+    auto Visit(Duplicate* object) -> void override
+    {
+    }
+
+    auto Visit(Grammar*) -> void override
+    {
+    }
+
+    auto Visit(Grammars*) -> void override
+    {
+    }
+
+    auto Visit(Productions*) -> void override
+    {
+    }
+
+    auto Visit(Production*) -> void override
+    {
+    }
+};
+
 // if name is occupied, append number which
 class GrammarTransformer
 {
@@ -162,61 +267,45 @@ public:
             MainRights.clear();
         }
     };
-    struct TransformVisitor : IVisitor
+    struct TransformVisitor : DefaultVisitor<void>
     {
         GrammarTransformInfo* Info;
         TransformVisitor(GrammarTransformInfo* info) : Info(info)
         { }
 
-        virtual auto Visit(Terminal* object) -> void
+        auto Visit(Terminal* object) -> void override
         {
             Transform(object, Info);
         }
 
-        virtual auto Visit(RegExp* object) -> void
+        auto Visit(RegExp* object) -> void override
         {
             Transform(object, Info);
         }
 
-        virtual auto Visit(Symbol* object) -> void
+        auto Visit(Symbol* object) -> void override
         {
             Transform(object, Info);
         }
 
-        virtual auto Visit(DataRange* object) -> void
+        auto Visit(DataRange* object) -> void override
         {
             Transform(object, Info);
         }
 
-        virtual auto Visit(Optional* object) -> void
+        auto Visit(Optional* object) -> void override
         {
             Transform(object, Info);
         }
 
-        virtual auto Visit(Combine* object) -> void
+        auto Visit(Combine* object) -> void override
         {
             Transform(object, Info);
         }
 
-        virtual auto Visit(Duplicate* object) -> void
+        auto Visit(Duplicate* object) -> void override
         {
             Transform(object, Info);
-        }
-
-        auto Visit(Grammar*) -> void override
-        {
-        }
-
-        auto Visit(Grammars*) -> void override
-        {
-        }
-
-        auto Visit(Productions*) -> void override
-        {
-        }
-
-        auto Visit(Production*) -> void override
-        {
         }
 
         auto Transform(Duplicate const* duplicate, GrammarTransformInfo* info) -> void
@@ -345,133 +434,252 @@ public:
     }
 };
 
-struct TransformVisitor : IVisitor
+struct LexRule2RegExpTransformer
 {
-    string result;
-
-    TransformVisitor()
+    struct ItemTransfomer : DefaultVisitor<string>
     {
-    }
+        map<String, string> const& OtherSymbolRegExps;
 
-    virtual auto Visit(Terminal* object) -> void
-    {
-        result = string(object->Value.Substring(1, object->Value.Length() - 2));
-    }
-
-    virtual auto Visit(RegExp* object) -> void
-    {
-        result = string(object->Value.Substring(2, object->Value.Length() - 3));
-    }
-
-    virtual auto Visit(Symbol* object) -> void
-    {
-        // Topological sort to visit each one, to check no recursive here
-    }
-
-    virtual auto Visit(DataRange* object) -> void
-    {
-        result = format("\"{}-{}\"", (char)object->Left, (char)object->Right);
-    }
-
-    virtual auto Visit(Optional* object) -> void
-    {
-        result = format("({})|[]", Transform(object->Productions.get())); // is it ok to write empty [] here TODO check
-    }
-
-    virtual auto Visit(Combine* object) -> void
-    {
-        result = format("({})", Transform(object->Productions.get()));
-    }
-
-    virtual auto Visit(Duplicate* object) -> void
-    {
-        auto item = Transform(object->BasicItem.get());
-        auto Dup = [&](unsigned n) -> string
+        ItemTransfomer(map<String, string> const& otherSymbolRegExps) : OtherSymbolRegExps(otherSymbolRegExps)
         {
-            string s;
-            for (auto i = 0; i < n; ++i)
+        }
+
+        auto Visit(Terminal* object) -> void override
+        {
+            Result = string(object->Value.Substring(1, object->Value.Length() - 2));
+        }
+
+        auto Visit(RegExp* object) -> void override
+        {
+            Result = string(object->Value.Substring(2, object->Value.Length() - 3));
+        }
+
+        auto Visit(Symbol* object) -> void override
+        {
+            if (OtherSymbolRegExps.contains(object->Value))
             {
-                s.append(format("({})", item));
+                Result = OtherSymbolRegExps.at(object->Value);
+                return;
             }
-            return s;
-        };
-        if (object->High == std::numeric_limits<unsigned>::max())
-        {
-            result.append(format("({})", Dup(object->Low)));
-            result.append(format("({})*", item));
-            return;
+            throw std::out_of_range(format("not regexp definition for {}", object->Value));
         }
 
-        for (auto i = object->Low; i <= object->High; ++i)
+        auto Visit(DataRange* object) -> void override
         {
-            result.append(format("({})", Dup(i)));
-            result.push_back('|');
+            Result = format("\"{}-{}\"", (char)object->Left, (char)object->Right);
         }
-        result.pop_back(); // remove the extra | char
-    }
 
-    auto Visit(Grammar*) -> void override
-    {
-    }
+        auto Visit(Optional* object) -> void override
+        {
+            Result = format("({})|[]", Transform(object->Productions.get(), OtherSymbolRegExps)); // is it ok to write empty [] here TODO check
+        }
 
-    auto Visit(Grammars*) -> void override
-    {
-    }
+        auto Visit(Combine* object) -> void override
+        {
+            Result = format("({})", Transform(object->Productions.get(), OtherSymbolRegExps));
+        }
 
-    auto Visit(Productions*) -> void override
-    {
-    }
+        auto Visit(Duplicate* object) -> void override
+        {
+            auto item = Transform(object->BasicItem.get(), OtherSymbolRegExps);
+            auto Dup = [&](unsigned n) -> string
+                {
+                    string s;
+                    for (unsigned i = 0; i < n; ++i)
+                    {
+                        s.append(format("({})", item));
+                    }
+                    return s;
+                };
+            if (object->High == std::numeric_limits<unsigned>::max())
+            {
+                Result.append(format("({})", Dup(object->Low)));
+                Result.append(format("({})*", item));
+                return;
+            }
 
-    auto Visit(Production*) -> void override
+            for (auto i = object->Low; i <= object->High; ++i)
+            {
+                Result.append(format("({})", Dup(i)));
+                Result.push_back('|');
+            }
+            Result.pop_back(); // remove the extra | char
+        }
+    };
+    struct SymbolCollector : DefaultVisitor<set<String>>
     {
-    }
+        String LeftOfCurrentGrammar;
 
-    static auto Transform(Grammar const* grammar) -> string
+        SymbolCollector(String leftOfCurrentGrammar) : LeftOfCurrentGrammar(leftOfCurrentGrammar)
+        {
+        }
+
+        auto Visit(Symbol* object) -> void override
+        {
+            if (object->Value == LeftOfCurrentGrammar)
+            {
+                throw std::invalid_argument(format("not support recur in lex grammar rule, found: {}", object->Value));
+            }
+            //println("using {}", object->Value);
+            Result.insert(object->Value);
+        }
+
+        auto Visit(Optional* object) -> void override
+        {
+            Visit(object->Productions.get());
+        }
+
+        auto Visit(Combine* object) -> void override
+        {
+            Visit(object->Productions.get());
+        }
+
+        auto Visit(Duplicate* object) -> void override
+        {
+            object->BasicItem->Visit(this);
+        }
+
+        auto Visit(Grammar* object) -> void override
+        {
+            Visit(object->Productions.get());
+        }
+
+        auto Visit(Productions* object) -> void override
+        {
+            for (auto const& p : object->Items)
+            {
+                Visit(p.get());
+            }
+        }
+
+        auto Visit(Production* object) -> void override
+        {
+            for (auto const& p : object->Items)
+            {
+                p->Visit(this);
+            }
+        }
+    };
+
+    static auto Transform(Grammar const* grammar, map<String, string> const& convertedRegExps) -> string
     {
-        return Transform(grammar->Productions.get());
+        return Transform(grammar->Productions.get(), convertedRegExps);
     }
 
     static auto Transform(Grammars const* grammars) -> map<String, string>
     {
-        map<String, string> regexps;
+        using std::tuple;
+        using std::queue;
+        using std::get;
+        using std::ranges::views::reverse;
 
+        auto ReferingIn = [](Grammar* grammar) -> set<String>
+        {
+            SymbolCollector collector{ grammar->Left };
+            grammar->Visit(&collector);
+            //println("using symbol collect: {}", collector.Result);
+            return collector.Result;
+        };
+
+        map<String, tuple<set<String>, int, Grammar const*>> refInfo;
+        auto InitIfNotExist = [&refInfo](String symbolName) -> tuple<set<String>, int, Grammar const*>&
+        {
+            if (not refInfo.contains(symbolName))
+            {
+                refInfo.insert({ symbolName, { {}, 0, nullptr } });
+            }
+            return refInfo.at(symbolName);
+        };
         for (auto const& g : grammars->Items)
         {
-            regexps.insert({ g->Left, Transform(g.get()) });
+            //println("analyse grammar: {}", g->Left);
+            get<2>(refInfo[g->Left]) = g.get();
+            auto refs = ReferingIn(g.get());
+            for (auto const& r : refs)
+            {
+                ++get<1>(refInfo[r]);
+            }
+            get<0>(refInfo[g->Left]) = move(refs);
         }
-        return regexps;
-    }
 
-    static auto Transform(Item* item) -> string
-    {
-        TransformVisitor v;
-        item->Visit(&v);
-        return v.result;
-    }
-
-    static auto Transform(Productions const* productions) -> string
-    {
-        string regexp;
-        for (auto const& p : productions->Items)
+        queue<String> workings;
+        for (auto const& x : refInfo)
         {
-            regexp.append(format("|({})", Transform(p.get())));
+            if (get<1>(x.second) == 0)
+            {
+                workings.push(x.first);
+            }
         }
-        return regexp;
+        vector<Grammar const*> ordereds; // higher first
+        while (not workings.empty())
+        {
+            auto symbol = move(workings.front());
+            workings.pop();
+            auto& info = refInfo.at(symbol);
+            ordereds.push_back(get<2>(info));
+
+            for (auto const& ref : get<0>(info))
+            {
+                auto refCount = --get<1>(refInfo.at(ref));
+                if (refCount == 0)
+                {
+                    workings.push(ref);
+                }
+            }
+        }
+
+        if (ordereds.size() < refInfo.size())
+        {
+            throw std::invalid_argument("there exists recur reference in lex rules");
+        }
+
+        map<String, string> regExps;
+
+        for (auto g : reverse(ordereds))
+        {
+            regExps.insert({ g->Left, Transform(g, regExps) });
+        }
+        return regExps;
     }
 
-    static auto Transform(Production const* production) -> string
+    static auto Transform(Item* item, map<String, string> const& convertedRegExps) -> string
     {
-        string regexp;
+        ItemTransfomer v{ convertedRegExps };
+        item->Visit(&v);
+        return v.Result;
+    }
+
+    static auto Transform(Productions const* productions, map<String, string> const& convertedRegExps) -> string
+    {
+        string regExp;
+        for (auto first = true; auto const& p : productions->Items)
+        {
+            if (first)
+            {
+                first = false;
+                regExp.append(format("({})", Transform(p.get(), convertedRegExps)));
+            }
+            else
+            {
+                regExp.append(format("|({})", Transform(p.get(), convertedRegExps)));
+            }
+        }
+        return regExp;
+    }
+
+    static auto Transform(Production const* production, map<String, string> const& convertedRegExps) -> string
+    {
+        string regExp;
         for (auto const& item : production->Items)
         {
-            regexp.append(format("{}", Transform(item.get())));
+            regExp.append(format("{}", Transform(item.get(), convertedRegExps)));
         }
-        return regexp;
+        return regExp;
     }
 };
-
 
 export
 {
     class GrammarTransformer;
+    struct LexRule2RegExpTransformer;
 }
