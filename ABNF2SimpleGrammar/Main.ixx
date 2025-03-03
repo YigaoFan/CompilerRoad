@@ -178,9 +178,9 @@ int main()
             std::print(codeFile, "import Parser;\n");
             std::print(codeFile, "using namespace std;\n");
             std::print(codeFile, "\n");
-            std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Terminals });
-            std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Grammars });
-            std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Terminals });
+            std::print(codeFile, "{}\n", CppCodeForm{ .Value = LexRule2RegExpTransformer::Transform(ast.get()) });
+            //std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Terminals });
+            //std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Grammars });
         }
         checker.Check();
     }

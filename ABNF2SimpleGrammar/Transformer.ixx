@@ -436,6 +436,10 @@ public:
 
 struct LexRule2RegExpTransformer
 {
+    /// <summary>
+    /// outside(ref place) is responsible for adding parentheses, inside not add
+    /// when ref other regExp, chose to add paren or not
+    /// </summary>
     struct ItemTransfomer : DefaultVisitor<string>
     {
         map<String, string> const& OtherSymbolRegExps;
@@ -466,7 +470,7 @@ struct LexRule2RegExpTransformer
 
         auto Visit(DataRange* object) -> void override
         {
-            Result = format("\"{}-{}\"", (char)object->Left, (char)object->Right);
+            Result = format("{}-{}", (char)object->Left, (char)object->Right);
         }
 
         auto Visit(Optional* object) -> void override
@@ -476,7 +480,7 @@ struct LexRule2RegExpTransformer
 
         auto Visit(Combine* object) -> void override
         {
-            Result = format("({})", Transform(object->Productions.get(), OtherSymbolRegExps));
+            Result = format("{}", Transform(object->Productions.get(), OtherSymbolRegExps));
         }
 
         auto Visit(Duplicate* object) -> void override
@@ -500,7 +504,7 @@ struct LexRule2RegExpTransformer
 
             for (auto i = object->Low; i <= object->High; ++i)
             {
-                Result.append(format("({})", Dup(i)));
+                Result.append(format("{}", Dup(i)));
                 Result.push_back('|');
             }
             Result.pop_back(); // remove the extra | char
@@ -572,6 +576,8 @@ struct LexRule2RegExpTransformer
         using std::queue;
         using std::get;
         using std::ranges::views::reverse;
+        using std::ranges::views::filter;
+        using std::ranges::to;
 
         auto ReferingIn = [](Grammar* grammar) -> set<String>
         {
@@ -639,7 +645,14 @@ struct LexRule2RegExpTransformer
         {
             regExps.insert({ g->Left, Transform(g, regExps) });
         }
-        return regExps;
+
+        auto debug = false;
+        if (debug)
+        {
+            return regExps;
+        }
+        // only reserve the capitalized first char one which is thought as final token type
+        return regExps | filter([](pair<String, string> const& x) -> bool { return std::isupper(x.first[0]); }) | to<map<String, string>>();
     }
 
     static auto Transform(Item* item, map<String, string> const& convertedRegExps) -> string
@@ -657,11 +670,11 @@ struct LexRule2RegExpTransformer
             if (first)
             {
                 first = false;
-                regExp.append(format("({})", Transform(p.get(), convertedRegExps)));
+                regExp.append(format("{}", Transform(p.get(), convertedRegExps)));
             }
-            else
+            else // option operator | is lowest priority operator, so we remove the parentheses which is used to assure order before
             {
-                regExp.append(format("|({})", Transform(p.get(), convertedRegExps)));
+                regExp.append(format("|{}", Transform(p.get(), convertedRegExps)));
             }
         }
         return regExp;
