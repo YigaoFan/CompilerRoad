@@ -1,7 +1,6 @@
 * VBA2Python[0/3]
 ** TODO Generate Cpp code to parse VBA in the future[0/3]
-*** TODO Generate lex code[6/8]
-   DEADLINE: <2025-03-09 Sun>
+*** TODO Generate lex code[5/7] DEADLINE: <2025-03-09 Sun>
    - [X] add test for lex for future maintain[0/0]
      - understand the std::forward
      - one project can export a header file, because there exists nameof(x) macro
@@ -30,17 +29,16 @@
      - [X] use reference to share Terminals between GrammarTransformInfo
      - [X] should we share the OtherGrammars also? Yes, then we don't need many move code
      - [X] sub GrammarTransformInfo should be constructed by parent GrammarTransformInfo, to let parent control the relationship between them <2025-02-26 Wed>
-   - [X] generate formal lex rules
+   - [-] generate formal lex rules
      - [X] generate TokType definition
      - [X] not support conditional module
      - [X] fix int to String implicitly <2025-02-27 Thu>
-   - [-] think how to lex using ABNF grammar and regular expression
-     - [X] transform simple ABNF grammar(without recursive) to regular expression <2025-02-28 Fri> basically complete <2025-03-02 Sun> complete
-     - [X] implement topological sort to plan the order to transform the ABNF grammar item which is used to lex
-       - [X] undertand topological sort will make higher level node first which is not referenced
-     - [X] fix the generated regular expression issue, like: space-character is "|( )" <2025-03-02 Sun>
+     - [X] think how to lex using ABNF grammar and regular expression
+       - [X] transform simple ABNF grammar(without recursive) to regular expression <2025-02-28 Fri> basically complete <2025-03-02 Sun> complete
+       - [X] implement topological sort to plan the order to transform the ABNF grammar item which is used to lex
+	 - [X] undertand topological sort will make higher level node first which is not referenced
+       - [X] fix the generated regular expression issue, like: space-character is "|( )" <2025-03-02 Sun>
      - [ ] not sure the new add rules for LINE-START and LINE-END is ok
-     - [ ] generate code for lex rules
      - [ ] make ABNF parser support to distinguish lex rules and parse rules in ABNF file
      - [ ] solve the wide space issue, "%x3000"
    - [ ] check the generated grammar rule is correct 
