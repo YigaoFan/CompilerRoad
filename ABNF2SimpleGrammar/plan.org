@@ -37,13 +37,22 @@
        - [X] transform simple ABNF grammar(without recursive) to regular expression <2025-02-28 Fri> basically complete <2025-03-02 Sun> complete
        - [X] implement topological sort to plan the order to transform the ABNF grammar item which is used to lex
          - [X] understand topological sort will make higher level node first which is not referenced
-     - [X] fix the generated regular expression issue, like: space-character is "|( )" <2025-03-02 Sun>
+     - [X] fix the generated regular expression format issue, like: space-character is "|( )" <2025-03-02 Sun>
+     - [X] fine generated enum value name with camel case
+     - [-] generate lex rules array
+       - [X] not escape special char like \n, \t
+       - [X] only generate selected token item definition, generate all definition when set to debug
+       - [X] redundant parentheses in generated regular expression.
+	  Maybe we can move regular expression -> DFA -> regular expression to simplify. Currently, I remove parens from some unnecessary places <2025-03-03 Mon>
+       - [ ] solve the alternative presentation issue or empty representation
+       - [ ] clear about where the chars from in regular expression
      - [ ] not sure the new add rules for LINE-START and LINE-END is ok
      - [ ] make ABNF parser support to distinguish lex rules and parse rules in ABNF file
      - [ ] solve the wide space issue, "%x3000"
      - [ ] check the generated grammar rule is correct 
 *** TODO Generate parse code[0/2]
    - [ ] solve operator priority issue
+   - [ ] solve the Reserved-identifier and Identifier corporation
 ** TODO Generate AST code
 ** TODO Write Transformer code to translate VBA to Python
 
