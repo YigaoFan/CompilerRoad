@@ -45,6 +45,7 @@
        - [X] redundant parentheses in generated regular expression. Maybe we can move regular expression -> DFA -> regular expression to simplify. Currently, I remove parens from some unnecessary places <2025-03-03 Mon>
        - [ ] solve the alternative presentation issue or empty representation
        - [ ] clear about where the chars from in regular expression
+     - [ ] in enum definition, keep the order in ABNF file to identical to the Token priority
      - [ ] not sure the new add rules for LINE-START and LINE-END is ok
      - [ ] make ABNF parser support to distinguish lex rules and parse rules in ABNF file
      - [ ] solve the wide space issue, "%x3000"
