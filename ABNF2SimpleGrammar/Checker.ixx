@@ -6,20 +6,12 @@ import Ast;
 
 using std::map;
 
-struct Checker : IVisitor
+struct Checker : DefaultVisitor<void>
 {
     map<String, unsigned> symbols;
 
-    Checker() : symbols()
+    Checker() : DefaultVisitor(), symbols()
     { }
-
-    virtual auto Visit(Terminal* object) -> void
-    {
-    }
-
-    virtual auto Visit(RegExp* object) -> void
-    {
-    }
 
     virtual auto Visit(Symbol* object) -> void
     {
@@ -29,40 +21,9 @@ struct Checker : IVisitor
         }
     }
 
-    virtual auto Visit(DataRange* object) -> void
-    {
-    }
-
-    virtual auto Visit(Optional* object) -> void
-    {
-    }
-
-    virtual auto Visit(Combine* object) -> void
-    {
-    }
-
-    virtual auto Visit(Duplicate* object) -> void
-    {
-    }
-
     virtual auto Visit(Grammar* object) -> void
     {
         ++symbols[object->Left];
-    }
-
-    virtual auto Visit(Grammars* object) -> void
-    {
-
-    }
-
-    virtual auto Visit(Production* object) -> void
-    {
-
-    }
-
-    virtual auto Visit(Productions* object) -> void
-    {
-
     }
 
     auto Check() -> void

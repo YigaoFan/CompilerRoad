@@ -98,6 +98,7 @@ auto GetTokChild(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, int 
 
 struct Grammar;
 struct Grammars;
+struct AllGrammars;
 struct Duplicate;
 struct Combine;
 struct Optional;
@@ -112,6 +113,7 @@ struct IVisitor
     // not support Visit Item and BasicItem now
     virtual auto Visit(Grammar*) -> void = 0;
     virtual auto Visit(Grammars*) -> void = 0;
+    virtual auto Visit(AllGrammars*) -> void = 0;
     virtual auto Visit(Duplicate*) -> void = 0;
     virtual auto Visit(Combine*) -> void = 0;
     virtual auto Visit(Optional*) -> void = 0;
@@ -121,6 +123,71 @@ struct IVisitor
     virtual auto Visit(RegExp*) -> void = 0;
     virtual auto Visit(Productions*) -> void = 0;
     virtual auto Visit(Production*) -> void = 0;
+};
+
+template <typename T>
+struct DefaultVisitor;
+
+template <>
+struct DefaultVisitor<void> : IVisitor
+{
+    DefaultVisitor()
+    {
+    }
+
+    auto Visit(Terminal* object) -> void override
+    {
+    }
+
+    auto Visit(RegExp* object) -> void override
+    {
+    }
+
+    auto Visit(Symbol* object) -> void override
+    {
+    }
+
+    auto Visit(DataRange* object) -> void override
+    {
+    }
+
+    auto Visit(Optional* object) -> void override
+    {
+    }
+
+    auto Visit(Combine* object) -> void override
+    {
+    }
+
+    auto Visit(Duplicate* object) -> void override
+    {
+    }
+
+    auto Visit(Grammar*) -> void override
+    {
+    }
+
+    auto Visit(Grammars*) -> void override
+    {
+    }
+
+    auto Visit(AllGrammars*) -> void override
+    {
+    }
+
+    auto Visit(Productions*) -> void override
+    {
+    }
+
+    auto Visit(Production*) -> void override
+    {
+    }
+};
+
+template <typename T>
+struct DefaultVisitor : DefaultVisitor<void>
+{
+    T Result;
 };
 
 template <typename T>
@@ -496,9 +563,37 @@ struct Grammars : public AstNode
     }
 };
 
+struct AllGrammars : public AstNode
+{
+    shared_ptr<Grammars> LexRules;
+    shared_ptr<Grammars> ParseRules;
+
+    static auto Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, IVisitor* visitor) -> shared_ptr<AllGrammars>
+    {
+        switch (node->ChildSymbols.size())
+        {
+        case 0:
+            return ApplyVisitor(make_shared<AllGrammars>(nullptr, nullptr), visitor);
+        case 4:
+            return ApplyVisitor(make_shared<AllGrammars>(GetAstOfChildAs<Grammars>(node, 1), GetAstOfChildAs<Grammars>(node, 3)), visitor);
+        default:
+            throw std::logic_error(format("Grammars not support {}", node->ChildSymbols.size()));
+        }
+    }
+
+    AllGrammars(shared_ptr<Grammars> lexRules, shared_ptr<Grammars> parseRules) : LexRules(move(lexRules)), ParseRules(move(parseRules))
+    {
+    }
+
+    auto Visit(IVisitor* visitor) -> void override
+    {
+        visitor->Visit(this);
+    }
+};
+
 struct AstFactory
 {
-    using TypeConfigs = List<Pair<"grammars", Grammars>, Pair<"more-grammars", MoreGrammars>, Pair<"grammar", Grammar>, Pair<"productions", Productions>, Pair<"production", Production>, Pair<"more-productions", MoreProductions>,
+    using TypeConfigs = List<Pair<"all-grammars", AllGrammars>, Pair<"grammars", Grammars>, Pair<"more-grammars", MoreGrammars>, Pair<"grammar", Grammar>, Pair<"productions", Productions>, Pair<"production", Production>, Pair<"more-productions", MoreProductions>,
         Pair<"production", Production>, Pair<"more-items", MoreItems>, Pair<"item", Item>, Pair<"item_0", BasicItem>>;
 
     static auto Create(IVisitor* visitor, SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node) -> void
@@ -542,6 +637,7 @@ export
     struct AstNode;
     struct Grammar;
     struct Grammars;
+    struct AllGrammars;
     struct Item;
     struct BasicItem;
     struct Duplicate;
@@ -554,4 +650,6 @@ export
     struct Productions;
     struct Production;
     struct IVisitor;
+    template <typename T>
+    struct DefaultVisitor;
 }

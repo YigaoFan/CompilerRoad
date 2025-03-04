@@ -20,10 +20,10 @@ auto AppendCppStringLiteralSlash(string& str) -> void
     str.append("\\\\");
 }
 
-// sub String assign back to original String variable, will have issue
-auto Escape2RegExp(String normalString) -> String
+/// <returns>without quote around</returns>
+auto NormalEscape2RegExpAsPrintLiteral(String normalString) -> String
 {
-    string regExp = "\"";
+    string regExp;
     regExp.reserve(normalString.Length());
 
     string_view operators = "*+|-[^]()";
@@ -62,13 +62,13 @@ auto Escape2RegExp(String normalString) -> String
             break;
         }
     }
-    regExp.push_back('"');
     return String(regExp);
 }
 
-auto Escape2StringLiteral(String regExpInAbnf) -> String
+/// <returns>without quote around</returns>
+auto RegExpEscape2PrintLiteral(String regExpInAbnf) -> String
 {
-    string regExp = "\"";
+    string regExp;
     regExp.reserve(regExpInAbnf.Length());
     auto s = string_view(regExpInAbnf);
     for (size_t i = 2, validLen = s.size() - 1; i < validLen; ++i) // ignore the first(r") and last double quote
@@ -110,113 +110,8 @@ auto Escape2StringLiteral(String regExpInAbnf) -> String
             break;
         }
     }
-    regExp.push_back('"');
     return String(regExp);
 }
-
-template <typename T>
-struct DefaultVisitor : IVisitor
-{
-    T Result;
-    DefaultVisitor() : Result()
-    { }
-
-    auto Visit(Terminal* object) -> void override
-    {
-    }
-
-    auto Visit(RegExp* object) -> void override
-    {
-    }
-
-    auto Visit(Symbol* object) -> void override
-    {
-    }
-
-    auto Visit(DataRange* object) -> void override
-    {
-    }
-
-    auto Visit(Optional* object) -> void override
-    {
-    }
-
-    auto Visit(Combine* object) -> void override
-    {
-    }
-
-    auto Visit(Duplicate* object) -> void override
-    {
-    }
-
-    auto Visit(Grammar*) -> void override
-    {
-    }
-
-    auto Visit(Grammars*) -> void override
-    {
-    }
-
-    auto Visit(Productions*) -> void override
-    {
-    }
-
-    auto Visit(Production*) -> void override
-    {
-    }
-};
-
-template <>
-struct DefaultVisitor<void> : IVisitor
-{
-    DefaultVisitor()
-    {
-    }
-
-    auto Visit(Terminal* object) -> void override
-    {
-    }
-
-    auto Visit(RegExp* object) -> void override
-    {
-    }
-
-    auto Visit(Symbol* object) -> void override
-    {
-    }
-
-    auto Visit(DataRange* object) -> void override
-    {
-    }
-
-    auto Visit(Optional* object) -> void override
-    {
-    }
-
-    auto Visit(Combine* object) -> void override
-    {
-    }
-
-    auto Visit(Duplicate* object) -> void override
-    {
-    }
-
-    auto Visit(Grammar*) -> void override
-    {
-    }
-
-    auto Visit(Grammars*) -> void override
-    {
-    }
-
-    auto Visit(Productions*) -> void override
-    {
-    }
-
-    auto Visit(Production*) -> void override
-    {
-    }
-};
 
 // if name is occupied, append number which
 class GrammarTransformer
@@ -249,11 +144,11 @@ public:
         {
             if (Terminals.contains(terminalValue))
             {
-                return String(format("terminal_{}", Terminals.at(terminalValue)));
+                return String(format("terminal-{}", Terminals.at(terminalValue)));
             }
             auto i = Terminals.size();
-            auto [it, _] = Terminals.insert({ move(terminalValue), i });
-            return String(format("terminal_{}", i));
+            Terminals.insert({ move(terminalValue), i });
+            return String(format("terminal-{}", i));
         }
 
         auto CreateSubInfo(String left = {}) const -> GrammarTransformInfo
@@ -371,13 +266,13 @@ public:
 
         auto Transform(Terminal const* terminal, GrammarTransformInfo* info) -> void
         {
-            auto name = info->RegisterTerminalName(Escape2RegExp(terminal->Value));
+            auto name = info->RegisterTerminalName(NormalEscape2RegExpAsPrintLiteral(terminal->Value));
             info->AppendOnLastRule(name);
         }
 
         auto Transform(RegExp const* regExp, GrammarTransformInfo* info) -> void
         {
-            auto name = info->RegisterTerminalName(Escape2StringLiteral(regExp->Value));
+            auto name = info->RegisterTerminalName(RegExpEscape2PrintLiteral(regExp->Value));
             info->AppendOnLastRule(name);
         }
     };
@@ -450,12 +345,12 @@ struct LexRule2RegExpTransformer
 
         auto Visit(Terminal* object) -> void override
         {
-            Result = string(object->Value.Substring(1, object->Value.Length() - 2));
+            Result = string(NormalEscape2RegExpAsPrintLiteral(object->Value));
         }
 
         auto Visit(RegExp* object) -> void override
         {
-            Result = string(object->Value.Substring(2, object->Value.Length() - 3));
+            Result = string(RegExpEscape2PrintLiteral(object->Value));
         }
 
         auto Visit(Symbol* object) -> void override
@@ -487,17 +382,20 @@ struct LexRule2RegExpTransformer
         {
             auto item = Transform(object->BasicItem.get(), OtherSymbolRegExps);
             auto Dup = [&](unsigned n) -> string
+            {
+                string s;
+                for (unsigned i = 0; i < n; ++i)
                 {
-                    string s;
-                    for (unsigned i = 0; i < n; ++i)
-                    {
-                        s.append(format("({})", item));
-                    }
-                    return s;
-                };
+                    s.append(format("({})", item));
+                }
+                return s;
+            };
             if (object->High == std::numeric_limits<unsigned>::max())
             {
-                Result.append(format("({})", Dup(object->Low)));
+                if (object->Low > 0)
+                {
+                    Result.append(format("({})", Dup(object->Low)));
+                }
                 Result.append(format("({})*", item));
                 return;
             }
@@ -570,6 +468,7 @@ struct LexRule2RegExpTransformer
         return Transform(grammar->Productions.get(), convertedRegExps);
     }
 
+    /// <returns>pair in map is (rule name, printable string literal without quote)</returns>
     static auto Transform(Grammars const* grammars) -> map<String, string>
     {
         using std::tuple;
@@ -688,6 +587,20 @@ struct LexRule2RegExpTransformer
             regExp.append(format("{}", Transform(item.get(), convertedRegExps)));
         }
         return regExp;
+    }
+
+    // TODO return value should be vector to control the print order which means priority
+    static auto MergeTerminalFromParseRule(map<String, string> terminalsFromLexRules, map<String, int> terminalsFromParseRules) -> map<String, string>
+    {
+        for (auto const& x : terminalsFromParseRules)
+        {
+            if (terminalsFromLexRules.contains(x.first))
+            {
+                throw std::logic_error(format("Lex rules and Parse rules has the same name terminal: {}", x.first));
+            }
+            terminalsFromLexRules.insert({ String(format("Terminal{}", x.second)), string(x.first) });
+        }
+        return terminalsFromLexRules;
     }
 };
 

@@ -7,6 +7,8 @@ using std::string_view;
 enum class TokType : int
 {
     Newline,
+    LexRuleHeader,
+    ParseRuleHeader,
     Arrow,
     LeftAngle,
     RightAngle,
@@ -110,6 +112,12 @@ struct std::formatter<TokType, char>
             break;
         case TokType::QutotedDigitOrAlphabet:
             s = "QutotedDigitOrAlphabet";
+            break;
+        case TokType::LexRuleHeader:
+            s = "LexRuleHeader";
+            break;
+        case TokType::ParseRuleHeader:
+            s = "ParseRuleHeader";
             break;
         }
         return std::format_to(fc.out(), "{}", s);

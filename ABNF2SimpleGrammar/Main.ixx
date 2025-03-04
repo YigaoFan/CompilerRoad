@@ -57,10 +57,16 @@ int main()
         pair<string, TokType>{ "\"((\\\\[^\n])|[^\\\\\"\n])*\"", TokType::Terminal },
         pair<string, TokType>{ "'[a-zA-Z0-9]'", TokType::QutotedDigitOrAlphabet },
         pair<string, TokType>{ "r\"((\\\\[^\n])|[^\\\\\"\n])*\"", TokType::RegularExpression },
+        pair<string, TokType>{ "\\- Lex \\-", TokType::LexRuleHeader },
+        pair<string, TokType>{ "\\- Parse \\-", TokType::ParseRuleHeader },
     };
     auto l = Lexer<TokType>::New(rules);
     auto p = TableDrivenParser::ConstructFrom("grammars",
     {// how to represent empty in current grammar
+        { "all-grammars", {
+            { "lex-header", "grammars", "parse-header", "grammars" },
+            { },
+        }},
         { "grammars", {
             { "optional-newlines", "grammar", "more-grammars", }, // TODO support newline after grammar
             { },
@@ -140,6 +146,8 @@ int main()
         { "terminal" , static_cast<int>(TokType::Terminal) },
         { "digitOrAlphabet" , static_cast<int>(TokType::QutotedDigitOrAlphabet) },
         { "regExp" , static_cast<int>(TokType::RegularExpression) },
+        { "lex-header" , static_cast<int>(TokType::LexRuleHeader) },
+        { "parse-header" , static_cast<int>(TokType::ParseRuleHeader) },
     });
 
     auto filename = "vba.abnf";
@@ -169,8 +177,8 @@ int main()
             using std::dynamic_pointer_cast;
 
             std::println("ast: {}", st.value());
-            auto ast = dynamic_pointer_cast<Grammars>(std::get<1>(st.value().Children.front()).Result);
-            auto grammarsInfo = GrammarTransformer::Transform(ast.get());
+            auto ast = dynamic_pointer_cast<AllGrammars>(std::get<1>(st.value().Children.front()).Result);
+            auto grammarsInfo = GrammarTransformer::Transform(ast->ParseRules.get());
             //std::println("simple grammar: {}", grammarsInfo);
             std::ofstream codeFile{ "vba-spec.ixx" };
             std::print(codeFile, "export module VbaSpec;\n");
@@ -178,9 +186,9 @@ int main()
             std::print(codeFile, "import Parser;\n");
             std::print(codeFile, "using namespace std;\n");
             std::print(codeFile, "\n");
-            std::print(codeFile, "{}\n", CppCodeForm{ .Value = LexRule2RegExpTransformer::Transform(ast.get()) });
-            //std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Terminals });
-            //std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Grammars });
+            auto terminals = LexRule2RegExpTransformer::MergeTerminalFromParseRule(LexRule2RegExpTransformer::Transform(ast->LexRules.get()), grammarsInfo.Terminals);
+            std::print(codeFile, "{}\n", CppCodeForm{ .Value = terminals });
+            std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Grammars });
         }
         checker.Check();
     }
