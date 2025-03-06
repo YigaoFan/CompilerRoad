@@ -135,7 +135,7 @@ auto Test() -> void
         pair<string, TokType>{ "\\|", TokType::PipeMark },
         pair<string, TokType>{ " |\t", TokType::Whitespace },
         pair<string, TokType>{ "[a-zA-Z][a-zA-Z0-9_\\-]*", TokType::Symbol },
-        pair<string, TokType>{ "[1-9][0-9]*", TokType::Number },
+        pair<string, TokType>{ "[1-9][0-9]*((e|E)[\\-\\+]?[1-9][0-9]*)?", TokType::Number },
         pair<string, TokType>{ ";[^\n]*", TokType::Comment },
         pair<string, TokType>{ "\\-", TokType::Hyphen },
         pair<string, TokType>{ "\\(", TokType::LeftParen },
@@ -179,6 +179,14 @@ auto Test() -> void
         Assert(toks[0].Type == TokType::Terminal, "toks[0] type not " nameof(TokType::Terminal));
         Assert(toks[1].Type == TokType::PipeMark, "toks[1] type not " nameof(TokType::PipeMark));
         Assert(toks[2].Type == TokType::Terminal, "toks[2] type not " nameof(TokType::Terminal));
+    }
+    {
+        code = "12 12e12 1e1";
+        auto toks = l.Lex(code) | filter([](auto& x) -> bool { return x.Type != TokType::Whitespace and x.Type != TokType::Comment and x.Type != TokType::Newline; }) | to<vector<Token<TokType>>>();
+        Assert(toks.size() == 3, "tokens size not equal as expect");
+        Assert(toks[0].Type == TokType::Number, "toks[0] type not " nameof(TokType::Number));
+        Assert(toks[1].Type == TokType::Number, "toks[1] type not " nameof(TokType::Number));
+        Assert(toks[2].Type == TokType::Number, "toks[2] type not " nameof(TokType::Number));
     }
 }
 

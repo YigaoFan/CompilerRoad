@@ -434,7 +434,7 @@ like-operator-expression -> expression "like" like-pattern-expression
 like-pattern-expression -> expression 
 like-pattern-string -> *like-pattern-element
 like-pattern-element -> like-pattern-char | "?" | "#" | "*" | like-pattern-charlist
-like-pattern-char -> r"[^?#\*\[]" ;<Any character except "?", "#", "*" and "[" >
+like-pattern-char -> r"[^\?#\*\[]" ;<Any character except "?", "#", "*" and "[" >
 like-pattern-charlist -> "[" ["!"] ["-"] *like-pattern-charlist-element ["-"] "]"
 like-pattern-charlist-element -> like-pattern-charlist-char | like-pattern-charlist-range
 like-pattern-charlist-range -> like-pattern-charlist-char "-" like-pattern-charlist-char

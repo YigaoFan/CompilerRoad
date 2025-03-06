@@ -42,7 +42,7 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
         default: throw std::out_of_range(format("out of operate range: {}", op));
         }
     };
-    auto isOperatorOrEndScope = [](char c) { return string_view("*+|-])").contains(c); };
+    auto isOperatorOrEndScope = [](char c) { return string_view("?*+|-])").contains(c); };
     auto output = vector<char>();
     auto operators = vector<char>();
     auto AddOperator = [&](char op) -> void
