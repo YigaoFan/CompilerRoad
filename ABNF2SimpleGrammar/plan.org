@@ -46,8 +46,8 @@
        - [X] clear about where the chars from in regular expression
        - [X] escape string like \- in generated regular epxression. Use the previous convert function which convert string in ABNF to printable Cpp string literal
        - [X] merge Terminal in parse rules into lex rules <2025-03-04 Tue>
-       - [ ] solve the alternative presentation issue or empty representation
-       - [ ] not put name logic in CodeEmitter
+       - [X] solve the alternative presentation issue or empty representation. Add new operator ? to represent it.  *Wait to test.* <2025-03-05 Wed>
+       - [X] not put name logic in CodeEmitter <2025-03-06 Thu>
        - [ ] does our regular epxression implementation support empty parens or square like () or []?
      - [ ] in enum definition, keep the order in ABNF file to identical to the Token priority
      - [ ] not sure the new add rules for LINE-START and LINE-END is ok
