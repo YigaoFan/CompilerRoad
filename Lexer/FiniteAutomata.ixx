@@ -383,6 +383,24 @@ public:
         return a;
     }
 
+    static auto Optional(FiniteAutomataDraft a) -> FiniteAutomataDraft
+    {
+        auto newStart = a.transitionTable.AllocateState();
+        auto newAccept = a.transitionTable.AllocateState();
+
+        a.transitionTable.AddTransition(newStart, epsilon, a.StartState);
+        a.transitionTable.AddTransition(newStart, epsilon, newAccept);
+
+        for (auto accept : a.AcceptingStates)
+        {
+            a.transitionTable.AddTransition(accept, epsilon, newAccept);
+        }
+
+        a.StartState = newStart;
+        a.AcceptingStates = { newAccept };
+        return a;
+    }
+
     static auto Concat(FiniteAutomataDraft a, FiniteAutomataDraft b) -> FiniteAutomataDraft
     {
         auto offset = a.transitionTable.Merge(move(b.transitionTable));

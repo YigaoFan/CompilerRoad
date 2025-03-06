@@ -30,17 +30,18 @@ using std::ranges::views::filter;
 auto Convert2PostfixForm(string_view regExp) -> vector<char>
 {
     auto Priority = [](char op)
+    {
+        switch (op)
         {
-            switch (op)
-            {
-            case '*': return 3;
-            case '+': return 2;
-            case '-': return 2;
-            case '|': return 1;
-            case '^': return 0;
-            default: throw std::out_of_range(format("out of operate range: {}", op));
-            }
-        };
+        case '*': return 3;
+        case '?': return 3;
+        case '+': return 2;
+        case '-': return 2;
+        case '|': return 1;
+        case '^': return 0;
+        default: throw std::out_of_range(format("out of operate range: {}", op));
+        }
+    };
     auto isOperatorOrEndScope = [](char c) { return string_view("*+|-])").contains(c); };
     auto output = vector<char>();
     auto operators = vector<char>();
@@ -71,6 +72,9 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
         auto c = regExp[i];
         switch (c)
         {
+        case '?':
+            AddOperator(c);
+            goto addPossibleRelationWithNextChar;
         case '*':
             AddOperator(c);
             goto addPossibleRelationWithNextChar;
@@ -119,12 +123,13 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
             goto addPossibleRelationWithNextChar;
         default:
             output.push_back(c);
+        // some chars need to handle the relation with next item
         addPossibleRelationWithNextChar:
             if (i != len - 1 and not isOperatorOrEndScope(regExp[i + 1]))
             {
-                // [^ will affect relation here
                 if (any_of(operators.cbegin(), operators.cend(), [](char ch) { return '[' == ch; }))
                 {
+                    // [^ will reverse the relation here
                     AddOperator('|');
                 }
                 else
@@ -223,6 +228,13 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult) -> FiniteAut
             auto a = move(operandStack.back());
             operandStack.pop_back();
             operandStack.push_back(Automata::ZeroOrMore(std::visit(converter, move(a))));
+            break;
+        }
+        case '?':
+        {
+            auto a = move(operandStack.back());
+            operandStack.pop_back();
+            operandStack.push_back(Automata::Optional(std::visit(converter, move(a))));
             break;
         }
         case '|':
