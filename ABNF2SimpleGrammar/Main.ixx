@@ -61,14 +61,14 @@ int main()
         pair<string, TokType>{ "\\- Parse \\-", TokType::ParseRuleHeader },
     };
     auto l = Lexer<TokType>::New(rules);
-    auto p = TableDrivenParser::ConstructFrom("grammars",
+    auto p = TableDrivenParser::ConstructFrom("all-grammars",
     {// how to represent empty in current grammar
         { "all-grammars", {
             { "lex-header", "grammars", "parse-header", "grammars" },
             { },
         }},
         { "grammars", {
-            { "optional-newlines", "grammar", "more-grammars", }, // TODO support newline after grammar
+            { "optional-newlines", "grammar", "more-grammars", },
             { },
         }},
         { "more-grammars", {
@@ -178,7 +178,7 @@ int main()
 
             std::println("ast: {}", st.value());
             auto ast = dynamic_pointer_cast<AllGrammars>(std::get<1>(st.value().Children.front()).Result);
-            auto grammarsInfo = GrammarTransformer::Transform(ast->ParseRules.get());
+            auto grammarsInfo = ParseRule2SimpleGrammarTransformer::Transform(ast->ParseRules.get());
             //std::println("simple grammar: {}", grammarsInfo);
             std::ofstream codeFile{ "vba-spec.ixx" };
             std::print(codeFile, "export module VbaSpec;\n");
@@ -186,7 +186,7 @@ int main()
             std::print(codeFile, "import Parser;\n");
             std::print(codeFile, "using namespace std;\n");
             std::print(codeFile, "\n");
-            auto terminals = LexRule2RegExpTransformer::MergeTerminalFromParseRule(LexRule2RegExpTransformer::Transform(ast->LexRules.get()), grammarsInfo.Terminals);
+            auto terminals = LexRule2RegExpTransformer::MergeTerminalFromParseRule2PrintableLiteral(LexRule2RegExpTransformer::Transform(ast->LexRules.get()), grammarsInfo.Terminals);
             std::print(codeFile, "{}\n", CppCodeForm{ .Value = terminals });
             std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Grammars });
         }

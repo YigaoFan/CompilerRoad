@@ -15,6 +15,8 @@ using std::format;
 using std::move;
 using std::println;
 
+constexpr string_view regExpOperators = "?*+|-[^]()";
+
 auto AppendCppStringLiteralSlash(string& str) -> void
 {
     str.append("\\\\");
@@ -26,7 +28,6 @@ auto NormalEscape2RegExpAsPrintLiteral(String normalString) -> String
     string regExp;
     regExp.reserve(normalString.Length());
 
-    string_view operators = "*+|-[^]()";
     auto s = string_view(normalString);
     for (size_t i = 1, validLen = s.size() - 1; i < validLen; ++i) // ignore the first and last double quote
     {
@@ -54,7 +55,7 @@ auto NormalEscape2RegExpAsPrintLiteral(String normalString) -> String
             }
             break;
         default:
-            if (operators.contains(c))
+            if (regExpOperators.contains(c))
             {
                 AppendCppStringLiteralSlash(regExp);
             }
@@ -84,7 +85,6 @@ auto RegExpEscape2PrintLiteral(String regExpInAbnf) -> String
             {
                 ++i;
                 // handle \\, \r\n, \-\[
-                string_view operators = "*+|-[^]()";
                 switch (auto nextCh = s[i]; nextCh)
                 {
                 case '\\':
@@ -92,7 +92,7 @@ auto RegExpEscape2PrintLiteral(String regExpInAbnf) -> String
                     AppendCppStringLiteralSlash(regExp);
                     break;
                 default:
-                    if (operators.contains(nextCh))
+                    if (regExpOperators.contains(nextCh))
                     {
                         AppendCppStringLiteralSlash(regExp);
                         regExp.push_back(nextCh);
@@ -113,14 +113,34 @@ auto RegExpEscape2PrintLiteral(String regExpInAbnf) -> String
     return String(regExp);
 }
 
+auto GetEnumName(String symbolName, bool capitalize1stCharFlag) -> String
+{
+    using std::toupper;
+
+    auto s = string(symbolName);
+    if (capitalize1stCharFlag)
+    {
+        s[0] = toupper(s[0]);
+    }
+    for (size_t i = 1; i < s.size(); ++i)
+    {
+        if (s[i] == '-' or s[i] == '_')
+        {
+            s[i + 1] = toupper(s[i + 1]);
+        }
+    }
+    s.erase(std::remove(s.begin(), s.end(), '-'), s.end());
+    return String(s);
+}
+
 // if name is occupied, append number which
-class GrammarTransformer
+class ParseRule2SimpleGrammarTransformer
 {
 public:
     struct SimpleGrammarsInfo
     {
         vector<SimpleGrammar> Grammars;
-        map<String, int> Terminals;
+        map<String, String> Terminals;
     };
     struct GrammarTransformInfo
     {
@@ -128,7 +148,7 @@ public:
         vector<SimpleRightSide> MainRights;
         // use below 3 items to share some grammars construct, which should not be clear in low level, only allow to add
         vector<SimpleGrammar>& OtherGrammars;
-        map<String, int>& Terminals; // terminal also has priority, exact match is higher than others
+        map<String, String>& Terminals; // terminal also has priority, exact match is higher than others
         int& Counter;
 
         auto AppendOnLastRule(String symbol) -> void
@@ -142,13 +162,12 @@ public:
 
         auto RegisterTerminalName(String terminalValue) -> String
         {
-            if (Terminals.contains(terminalValue))
+            if (not Terminals.contains(terminalValue))
             {
-                return String(format("terminal-{}", Terminals.at(terminalValue)));
+                int i = Terminals.size();
+                Terminals.insert({ terminalValue, String(format("terminal-{}", i)) });
             }
-            auto i = Terminals.size();
-            Terminals.insert({ move(terminalValue), i });
-            return String(format("terminal-{}", i));
+            return Terminals.at(terminalValue);
         }
 
         auto CreateSubInfo(String left = {}) const -> GrammarTransformInfo
@@ -207,7 +226,7 @@ public:
         {
             String basicItemGrammarName{ format("{}_dup_basicItem_{}", info->Left, info->Counter++) };
             GrammarTransformInfo subInfo = info->CreateSubInfo(basicItemGrammarName);
-            GrammarTransformer::Transform(duplicate->BasicItem.get(), &subInfo);
+            ParseRule2SimpleGrammarTransformer::Transform(duplicate->BasicItem.get(), &subInfo);
 
             String auxGrammarName{ format("{}_dup_{}", info->Left, info->Counter++) };
             vector<SimpleRightSide> rss;
@@ -234,7 +253,7 @@ public:
         {
             String auxGrammarName{ format("{}_com_{}", info->Left, info->Counter++) };
             GrammarTransformInfo subInfo = info->CreateSubInfo(auxGrammarName);
-            GrammarTransformer::Transform(combine->Productions.get(), &subInfo);
+            ParseRule2SimpleGrammarTransformer::Transform(combine->Productions.get(), &subInfo);
 
             info->OtherGrammars.push_back({ subInfo.Left, move(subInfo.MainRights) });
             info->AppendOnLastRule(auxGrammarName);
@@ -244,7 +263,7 @@ public:
         {
             String auxGrammarName{ format("{}_op_{}", info->Left, info->Counter++) };
             GrammarTransformInfo subInfo = info->CreateSubInfo(auxGrammarName);
-            GrammarTransformer::Transform(optional->Productions.get(), &subInfo);
+            ParseRule2SimpleGrammarTransformer::Transform(optional->Productions.get(), &subInfo);
             subInfo.MainRights.push_back({}); // make it optional
 
             info->OtherGrammars.push_back({ subInfo.Left, move(subInfo.MainRights) });
@@ -289,7 +308,7 @@ public:
     {
         SimpleGrammarsInfo grammarsInfo;
         auto counter = 0;
-        map<String, int> terminals;
+        map<String, String> terminals;
         vector<SimpleGrammar> otherGrammars;
 
         GrammarTransformInfo rootInfo{ .OtherGrammars = otherGrammars, .Terminals = terminals, .Counter = counter, };
@@ -370,7 +389,7 @@ struct LexRule2RegExpTransformer
 
         auto Visit(Optional* object) -> void override
         {
-            Result = format("({})|[]", Transform(object->Productions.get(), OtherSymbolRegExps)); // is it ok to write empty [] here TODO check
+            Result = format("({})?", Transform(object->Productions.get(), OtherSymbolRegExps));
         }
 
         auto Visit(Combine* object) -> void override
@@ -394,7 +413,8 @@ struct LexRule2RegExpTransformer
             {
                 if (object->Low > 0)
                 {
-                    Result.append(format("({})", Dup(object->Low)));
+                    // Dup already add (), so not add () around here
+                    Result.append(format("{}", Dup(object->Low)));
                 }
                 Result.append(format("({})*", item));
                 return;
@@ -469,13 +489,15 @@ struct LexRule2RegExpTransformer
     }
 
     /// <returns>pair in map is (rule name, printable string literal without quote)</returns>
-    static auto Transform(Grammars const* grammars) -> map<String, string>
+    static auto Transform(Grammars const* grammars) -> map<String, String>
     {
         using std::tuple;
         using std::queue;
         using std::get;
         using std::ranges::views::reverse;
         using std::ranges::views::filter;
+        using std::ranges::views::transform;
+        using std::ranges::fold_left;
         using std::ranges::to;
 
         auto ReferingIn = [](Grammar* grammar) -> set<String>
@@ -546,12 +568,13 @@ struct LexRule2RegExpTransformer
         }
 
         auto debug = false;
-        if (debug)
+        if (not debug)
         {
-            return regExps;
+            // only reserve the capitalized first char one which is thought as final token type
+            regExps = regExps | filter([](pair<String, string> const& x) -> bool { return std::isupper(x.first[0]); }) | to<map<String, string>>();
         }
-        // only reserve the capitalized first char one which is thought as final token type
-        return regExps | filter([](pair<String, string> const& x) -> bool { return std::isupper(x.first[0]); }) | to<map<String, string>>();
+        return fold_left(regExps | transform([](pair<String, string> const& x) -> pair<String, String> { return { x.first, String(x.second) }; }),
+            map<String, String>(), [](map<String, String> xs, pair<String, String> x) -> map<String, String> { xs.insert(move(x)); return xs; });
     }
 
     static auto Transform(Item* item, map<String, string> const& convertedRegExps) -> string
@@ -590,22 +613,31 @@ struct LexRule2RegExpTransformer
     }
 
     // TODO return value should be vector to control the print order which means priority
-    static auto MergeTerminalFromParseRule(map<String, string> terminalsFromLexRules, map<String, int> terminalsFromParseRules) -> map<String, string>
+
+    /// <returns>(symbol name, (enum name, regular expression))</returns>
+    static auto MergeTerminalFromParseRule2PrintableLiteral(map<String, String> const& terminalsFromLexRules, map<String, String> const& terminalsFromParseRules) -> map<String, pair<String, String>>
     {
+        map<String, pair<String, String>> symbol2RegExps;
+
+        for (auto const& x : terminalsFromLexRules)
+        {
+            symbol2RegExps.insert({ x.first, { GetEnumName(x.first, false), x.second } });
+        }
+
         for (auto const& x : terminalsFromParseRules)
         {
             if (terminalsFromLexRules.contains(x.first))
             {
                 throw std::logic_error(format("Lex rules and Parse rules has the same name terminal: {}", x.first));
             }
-            terminalsFromLexRules.insert({ String(format("Terminal{}", x.second)), string(x.first) });
+            symbol2RegExps.insert({ x.second, { GetEnumName(x.second, true), x.first } });
         }
-        return terminalsFromLexRules;
+        return symbol2RegExps;
     }
 };
 
 export
 {
-    class GrammarTransformer;
+    class ParseRule2SimpleGrammarTransformer;
     struct LexRule2RegExpTransformer;
 }
