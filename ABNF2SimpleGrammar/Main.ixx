@@ -182,11 +182,12 @@ int main()
             //std::println("simple grammar: {}", grammarsInfo);
             std::ofstream codeFile{ "vba-spec.ixx" };
             std::print(codeFile, "export module VbaSpec;\n");
+            std::print(codeFile, "\n");
             std::print(codeFile, "import std;\n");
             std::print(codeFile, "import Parser;\n");
             std::print(codeFile, "using namespace std;\n");
             std::print(codeFile, "\n");
-            auto terminals = LexRule2RegExpTransformer::MergeTerminalFromParseRule2PrintableLiteral(LexRule2RegExpTransformer::Transform(ast->LexRules.get()), grammarsInfo.Terminals);
+            auto terminals = LexRule2RegExpTransformer::MergeTokInfo(LexRule2RegExpTransformer::Transform(ast->LexRules.get()), move(grammarsInfo.ToksInfo));
             std::print(codeFile, "{}\n", CppCodeForm{ .Value = terminals });
             std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Grammars });
         }

@@ -4,6 +4,7 @@ import std;
 import Base;
 import Parser;
 import Ast;
+import CodeEmitter;
 
 using std::vector;
 using std::string;
@@ -11,9 +12,11 @@ using std::set;
 using std::pair;
 using std::string_view;
 using std::map;
+using std::formatter;
 using std::format;
 using std::move;
 using std::println;
+using std::ranges::views::transform;
 
 constexpr string_view regExpOperators = "?*+|-[^]()";
 
@@ -133,6 +136,51 @@ auto GetEnumName(String symbolName, bool capitalize1stCharFlag) -> String
     return String(s);
 }
 
+struct TokensInfo
+{
+    map<String, pair<String, String>> Symbol2EnumNameRegExp;
+    vector<String> PrioritySymbols;
+};
+
+template<>
+struct formatter<CppCodeForm<TokensInfo>, char>
+{
+    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator
+    {
+        auto it = ctx.begin();
+        return it;
+    }
+
+    template<class FormatContext>
+    constexpr auto format(CppCodeForm<TokensInfo> const& t, FormatContext& fc) const -> FormatContext::iterator
+    {
+        format_to(fc.out(), "export enum class TokType : int\n");
+        format_to(fc.out(), "{{\n");
+        for (auto const& x : t.Value.PrioritySymbols)
+        {
+            format_to(fc.out(), "    {},\n", t.Value.Symbol2EnumNameRegExp.at(x).first); // print by priority
+        }
+        format_to(fc.out(), "}};\n");
+
+        format_to(fc.out(), "export array lexRules =\n");
+        format_to(fc.out(), "{{\n");
+        for (auto const& x : t.Value.Symbol2EnumNameRegExp)
+        {
+            format_to(fc.out(), "    pair<string, TokType>{{ \"{}\", TokType::{} }},\n", x.second.second, x.second.first);
+        }
+        format_to(fc.out(), "}};\n");
+
+        format_to(fc.out(), "export map<string_view, int> terminal2IntTokenType =\n");
+        format_to(fc.out(), "{{\n");
+        for (auto const& x : t.Value.Symbol2EnumNameRegExp)
+        {
+            format_to(fc.out(), "    {{ \"{}\", static_cast<int>(TokType::{}) }},\n", x.first, x.second.first);
+        }
+        format_to(fc.out(), "}};");
+        return fc.out();
+    }
+};
+
 // if name is occupied, append number which
 class ParseRule2SimpleGrammarTransformer
 {
@@ -140,7 +188,7 @@ public:
     struct SimpleGrammarsInfo
     {
         vector<SimpleGrammar> Grammars;
-        map<String, String> Terminals;
+        TokensInfo ToksInfo;
     };
     struct GrammarTransformInfo
     {
@@ -148,6 +196,7 @@ public:
         vector<SimpleRightSide> MainRights;
         // use below 3 items to share some grammars construct, which should not be clear in low level, only allow to add
         vector<SimpleGrammar>& OtherGrammars;
+        TokensInfo& ToksInfo;
         map<String, String>& Terminals; // terminal also has priority, exact match is higher than others
         int& Counter;
 
@@ -165,14 +214,17 @@ public:
             if (not Terminals.contains(terminalValue))
             {
                 int i = Terminals.size();
-                Terminals.insert({ terminalValue, String(format("terminal-{}", i)) });
+                auto symName = String(format("terminal-{}", i));
+                Terminals.insert({ terminalValue, symName });
+                ToksInfo.PrioritySymbols.push_back(symName);
+                ToksInfo.Symbol2EnumNameRegExp.insert({ symName, { GetEnumName(symName, true), terminalValue } });
             }
             return Terminals.at(terminalValue);
         }
 
         auto CreateSubInfo(String left = {}) const -> GrammarTransformInfo
         {
-            return GrammarTransformInfo{ .Left = move(left), .OtherGrammars = OtherGrammars, .Terminals = Terminals, .Counter = Counter };
+            return GrammarTransformInfo{ .Left = move(left), .OtherGrammars = OtherGrammars, .ToksInfo = ToksInfo, .Terminals = Terminals, .Counter = Counter };
         }
 
         auto ResetCurrentGrammarInfo()
@@ -311,14 +363,13 @@ public:
         map<String, String> terminals;
         vector<SimpleGrammar> otherGrammars;
 
-        GrammarTransformInfo rootInfo{ .OtherGrammars = otherGrammars, .Terminals = terminals, .Counter = counter, };
+        GrammarTransformInfo rootInfo{ .OtherGrammars = otherGrammars, .ToksInfo = grammarsInfo.ToksInfo, .Terminals = terminals, .Counter = counter, };
         for (auto const& g : grammars->Items)
         {
             auto sg = Transform(g.get(), &rootInfo);
             grammarsInfo.Grammars.push_back(move(sg));
             rootInfo.ResetCurrentGrammarInfo();
         }
-        grammarsInfo.Terminals.insert_range(move(terminals));
         grammarsInfo.Grammars.append_range(move(otherGrammars));
         return grammarsInfo;
     }
@@ -489,14 +540,13 @@ struct LexRule2RegExpTransformer
     }
 
     /// <returns>pair in map is (rule name, printable string literal without quote)</returns>
-    static auto Transform(Grammars const* grammars) -> map<String, String>
+    static auto Transform(Grammars const* grammars) -> TokensInfo
     {
         using std::tuple;
         using std::queue;
         using std::get;
         using std::ranges::views::reverse;
         using std::ranges::views::filter;
-        using std::ranges::views::transform;
         using std::ranges::fold_left;
         using std::ranges::to;
 
@@ -509,6 +559,7 @@ struct LexRule2RegExpTransformer
         };
 
         map<String, tuple<set<String>, int, Grammar const*>> refInfo;
+        map<size_t, String> priority2Symbols;
         auto InitIfNotExist = [&refInfo](String symbolName) -> tuple<set<String>, int, Grammar const*>&
         {
             if (not refInfo.contains(symbolName))
@@ -517,9 +568,10 @@ struct LexRule2RegExpTransformer
             }
             return refInfo.at(symbolName);
         };
-        for (auto const& g : grammars->Items)
+        for (auto priority = 0; auto const& g : grammars->Items)
         {
             //println("analyse grammar: {}", g->Left);
+            priority2Symbols.insert({ priority++, g->Left });
             get<2>(refInfo[g->Left]) = g.get();
             auto refs = ReferingIn(g.get());
             for (auto const& r : refs)
@@ -573,8 +625,23 @@ struct LexRule2RegExpTransformer
             // only reserve the capitalized first char one which is thought as final token type
             regExps = regExps | filter([](pair<String, string> const& x) -> bool { return std::isupper(x.first[0]); }) | to<map<String, string>>();
         }
-        return fold_left(regExps | transform([](pair<String, string> const& x) -> pair<String, String> { return { x.first, String(x.second) }; }),
-            map<String, String>(), [](map<String, String> xs, pair<String, String> x) -> map<String, String> { xs.insert(move(x)); return xs; });
+
+        TokensInfo tokInfo
+        {
+            .Symbol2EnumNameRegExp =
+                fold_left(regExps | transform([](pair<String, string> const& x) -> pair<String, pair<String, String>> { return { x.first, { GetEnumName(x.first, false), String(x.second) } }; }),
+                    map<String, pair<String, String>>(), [](map<String, pair<String, String>> xs, pair<String, pair<String, String>> x) -> map<String, pair<String, String>> { xs.insert(move(x)); return xs; }),
+        };
+        tokInfo.PrioritySymbols.reserve(tokInfo.Symbol2EnumNameRegExp.size());
+        for (auto const& x : priority2Symbols)
+        {
+            if (tokInfo.Symbol2EnumNameRegExp.contains(x.second))
+            {
+                tokInfo.PrioritySymbols.push_back(x.second);
+            }
+        }
+
+        return tokInfo;
     }
 
     static auto Transform(Item* item, map<String, string> const& convertedRegExps) -> string
@@ -615,24 +682,12 @@ struct LexRule2RegExpTransformer
     // TODO return value should be vector to control the print order which means priority
 
     /// <returns>(symbol name, (enum name, regular expression))</returns>
-    static auto MergeTerminalFromParseRule2PrintableLiteral(map<String, String> const& terminalsFromLexRules, map<String, String> const& terminalsFromParseRules) -> map<String, pair<String, String>>
+    static auto MergeTokInfo(TokensInfo tokInfoFromLexRules, TokensInfo tokInfoFromParseRules) -> TokensInfo
     {
-        map<String, pair<String, String>> symbol2RegExps;
-
-        for (auto const& x : terminalsFromLexRules)
-        {
-            symbol2RegExps.insert({ x.first, { GetEnumName(x.first, false), x.second } });
-        }
-
-        for (auto const& x : terminalsFromParseRules)
-        {
-            if (terminalsFromLexRules.contains(x.first))
-            {
-                throw std::logic_error(format("Lex rules and Parse rules has the same name terminal: {}", x.first));
-            }
-            symbol2RegExps.insert({ x.second, { GetEnumName(x.second, true), x.first } });
-        }
-        return symbol2RegExps;
+        tokInfoFromParseRules.PrioritySymbols.reserve(tokInfoFromLexRules.PrioritySymbols.size() + tokInfoFromParseRules.PrioritySymbols.size());
+        tokInfoFromParseRules.PrioritySymbols.append_range(move(tokInfoFromLexRules.PrioritySymbols));
+        tokInfoFromParseRules.Symbol2EnumNameRegExp.merge(move(tokInfoFromLexRules.Symbol2EnumNameRegExp));
+        return tokInfoFromParseRules;
     }
 };
 
@@ -640,4 +695,6 @@ export
 {
     class ParseRule2SimpleGrammarTransformer;
     struct LexRule2RegExpTransformer;
+    template<>
+    struct formatter<CppCodeForm<TokensInfo>, char>;
 }
