@@ -132,6 +132,9 @@
     <ClCompile Include="Test.ixx" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Base\Base.vcxproj">
+      <Project>{394ccc1c-1d6b-40ed-bc31-d072292b7cb8}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\Lexer\Lexer.vcxproj">
       <Project>{68f5665b-36c6-4778-965e-750cee33142a}</Project>
     </ProjectReference>
