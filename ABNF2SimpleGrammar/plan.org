@@ -50,11 +50,13 @@
        - [X] not put name logic in CodeEmitter <2025-03-06 Thu>
      - [X] test ? support of regular expression <2025-03-06 Thu>
      - [ ] does our regular epxression implementation support empty parens or square like () or []?
-     - [ ] in enum definition, keep the order in ABNF file to identical to the Token priority
+     - [X] in enum definition, keep the order in ABNF file to identical to the Token priority
      - [ ] not sure the new add rules for LINE-START and LINE-END is ok
-     - [ ] make ABNF parser support to distinguish lex rules and parse rules in ABNF file
-     - [ ] solve the wide space issue, "%x3000", maybe not support now
-     - [ ] check the generated grammar rule is correct
+     - [X] make ABNF parser support to distinguish lex rules and parse rules in ABNF file <2025-03-04 Tue>
+     - [ ] solve the wide space issue, "%x3000", maybe not support unicode now
+     - [ ] check the generated grammar rule is correct. checking: <2025-03-07 Fri>
+       - [ ] LINESTART is "" which cause regular expression error
+       - [ ] performance issue: it seems has too many partitions when run the DFA Minimize(473), then minimize not end. Maybe not use loop to check, use which one trigger the change and which one is affected?
 *** TODO Generate parse code[0/2]
    - [ ] solve operator priority issue
    - [ ] solve the Reserved-identifier and Identifier corporation
