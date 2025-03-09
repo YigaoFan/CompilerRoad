@@ -282,6 +282,15 @@ auto SetIntersection(Container0<Value> const& set1, Container1<Value> const& set
     return un;
 }
 
+template <template <typename...> class Container0, template <typename...> class Container1, typename Value>
+auto SetDifference(Container0<Value> const& set1, Container1<Value> const& set2) -> Container0<Value>
+{
+    using std::ranges::set_difference;
+    Container0<Value> un;
+    set_difference(set1, set2, std::inserter(un, un.begin()));
+    return un;
+}
+
 template <typename Input, typename Result>
 auto NFA2DFA(FiniteAutomataDraft<Input, Result> nfa) -> FiniteAutomataDraft<Input, Result>
 {
@@ -342,16 +351,17 @@ auto NFA2DFA(FiniteAutomataDraft<Input, Result> nfa) -> FiniteAutomataDraft<Inpu
             auto nexts = set<State>();
             for (auto s : q)
             {
-                nexts.insert_range(nfa.Run(s, c));
+                nexts.insert_range(nfa.Run(s, c)); // performance point
             }
-            auto temp = FollowEpsilon(move(nexts)); // performance point
+            auto temp = FollowEpsilon(move(nexts));
             //println("got {}", temp);
             if (not temp.empty())
             {
+                State s;
                 if (not subset2DFAState.contains(temp))
                 {
                     //println("not in all subsets");
-                    auto s = AddSubset(temp);
+                    s = AddSubset(temp);
 
                     if (auto common = SetIntersection(nfa.AcceptingStates, temp); not common.empty())
                     {
@@ -365,14 +375,14 @@ auto NFA2DFA(FiniteAutomataDraft<Input, Result> nfa) -> FiniteAutomataDraft<Inpu
                         }
                         accepts.push_back(s);
                     }
-                    if (any_of(nfa.AcceptingStates.cbegin(), nfa.AcceptingStates.cend(), [&temp](State accept) { return temp.contains(accept); }))
-                    {
-                        accepts.push_back(s);
-                    }
-                    worklist.push(temp);
+                    worklist.push(move(temp));
+                }
+                else
+                {
+                    s = subset2DFAState.at(temp);
                 }
                 // add transition q + c -> temp
-                transitionTable.AddTransition(subset2DFAState[q], c, subset2DFAState[temp]); // will it have duplicate?
+                transitionTable.AddTransition(subset2DFAState[q], c, s); // will it have duplicate?
             }
         }
     }
@@ -429,6 +439,7 @@ auto Minimize(FiniteAutomataDraft<Input, Result> dfa) -> FiniteAutomataDraft<Inp
         auto s = move(worklist.front());
         //println("checking {}", s);
         worklist.pop_front();
+        // can we save pointer in worklist? because partition and worklist are sharing sets
         for (auto c : chars)
         {
             auto image = set<State>();
@@ -438,36 +449,41 @@ auto Minimize(FiniteAutomataDraft<Input, Result> dfa) -> FiniteAutomataDraft<Inp
             }
             //println("for {} found image: {}", c, image);
 
-            for (auto& q : partition | to<vector<set<State>>>())
+            vector<decltype(partition)::iterator> toRemoves;
+            vector<set<State>> toAdds;
+            auto count = image.size();
+            for (auto i = partition.begin(); i != partition.end(); ++i) // not copy here
             {
-                auto q1 = vector<State>();
-                set_intersection(q, image, back_inserter(q1));
+                auto& q = *i;
+                if (count == 0)
+                {
+                    break;
+                }
+                auto q1 = SetIntersection(q, image);
                 if (not q1.empty())
                 {
-                    auto q2 = vector<State>();
-                    set_difference(q, q1, back_inserter(q2));
+                    count = count - q1.size();
+                    auto q2 = SetDifference(q, q1);
                     //println("related partition: {}, divide to {} and {}", q, q1, q2);
                     if (not q2.empty())
                     {
-                        partition.erase(q);
-                        auto q1Set = set(q1.begin(), q1.end());
-                        partition.insert(move(q1Set));
-                        partition.insert(set(q2.begin(), q2.end()));
-                        //transitionRecord[move(q1Set)].push_back({ s, c });
+                        toRemoves.push_back(i);
+                        toAdds.push_back(q1);
+                        toAdds.push_back(q2);
 
                         if (auto i = std::find(worklist.begin(), worklist.end(), q); i != worklist.end())
                         {
                             worklist.erase(i);
-                            worklist.push_back(set(q1.begin(), q1.end()));
-                            worklist.push_back(set(q2.begin(), q2.end()));
+                            worklist.push_back(move(q1));
+                            worklist.push_back(move(q2));
                         }
                         else if (q1.size() <= q2.size())
                         {
-                            worklist.push_back(set(q1.begin(), q1.end()));
+                            worklist.push_back(move(q1));
                         }
                         else
                         {
-                            worklist.push_back(set(q2.begin(), q2.end()));
+                            worklist.push_back(move(q2));
                         }
                         if (s == q)
                         {
@@ -475,6 +491,14 @@ auto Minimize(FiniteAutomataDraft<Input, Result> dfa) -> FiniteAutomataDraft<Inp
                         }
                     }
                 }
+            }
+            for (auto& i : toRemoves)
+            {
+                partition.erase(i);
+            }
+            for (auto& p : toAdds)
+            {
+                partition.insert(move(p));
             }
         }
     }
