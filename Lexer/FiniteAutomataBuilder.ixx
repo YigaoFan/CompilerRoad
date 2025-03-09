@@ -277,18 +277,18 @@ template <template <typename...> class Container0, template <typename...> class 
 auto SetIntersection(Container0<Value> const& set1, Container1<Value> const& set2) -> Container0<Value>
 {
     using std::ranges::set_intersection;
-    Container0<Value> un;
-    set_intersection(set1, set2, std::inserter(un, un.begin()));
-    return un;
+    Container0<Value> set3;
+    set_intersection(set1, set2, std::inserter(set3, set3.begin()));
+    return set3;
 }
 
 template <template <typename...> class Container0, template <typename...> class Container1, typename Value>
 auto SetDifference(Container0<Value> const& set1, Container1<Value> const& set2) -> Container0<Value>
 {
     using std::ranges::set_difference;
-    Container0<Value> un;
-    set_difference(set1, set2, std::inserter(un, un.begin()));
-    return un;
+    Container0<Value> set3;
+    set_difference(set1, set2, std::inserter(set3, set3.begin()));
+    return set3;
 }
 
 template <typename Input, typename Result>
