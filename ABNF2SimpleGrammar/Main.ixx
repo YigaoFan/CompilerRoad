@@ -12,6 +12,7 @@ using std::pair;
 using std::vector;
 using std::size_t;
 using std::shared_ptr;
+using std::move;
 
 template <typename T>
 struct VectorStream
@@ -57,8 +58,8 @@ int main()
         pair<string, TokType>{ "\"((\\\\[^\n])|[^\\\\\"\n])*\"", TokType::Terminal },
         pair<string, TokType>{ "'[a-zA-Z0-9]'", TokType::QutotedDigitOrAlphabet },
         pair<string, TokType>{ "r\"((\\\\[^\n])|[^\\\\\"\n])*\"", TokType::RegularExpression },
-        pair<string, TokType>{ "\\- Lex \\-", TokType::LexRuleHeader },
-        pair<string, TokType>{ "\\- Parse \\-", TokType::ParseRuleHeader },
+        pair<string, TokType>{ "\\- Lex \\-\n", TokType::LexRuleHeader },
+        pair<string, TokType>{ "\\- Parse \\-\n", TokType::ParseRuleHeader },
     };
     auto l = Lexer<TokType>::New(rules);
     auto p = TableDrivenParser::ConstructFrom("all-grammars",

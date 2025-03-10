@@ -107,6 +107,7 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
         case ')':
             for (;;)
             {
+                // if here operators is empty, that means parens in regExp not balanced
                 auto op = operators.back();
                 operators.pop_back();
                 if (op == '(')
@@ -156,10 +157,6 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult) -> FiniteAut
 {
     using Automata = FiniteAutomataDraft<char, Result>;
     //Log("Construct NFA for {}", regExp);
-    if (regExp.starts_with("(") && regExp.ends_with(")"))
-    {
-        regExp = regExp.substr(1, regExp.length() - 2);
-    }
 
     switch (regExp.length())
     {
@@ -211,16 +208,6 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult) -> FiniteAut
             char left = std::get<char>(b);
             char right = std::get<char>(a);
             operandStack.push_back(Automata::Range(left, right));
-            // should all content in [] be a item in classification?
-            // when item bigger than 128, it will use classification
-            // should template FiniteAutomataDraft<char>?
-            //auto p = pair{ left, right };
-            //if (not classification.contains(p))
-            //{
-            //    size_t c = classification.size() + 128;
-            //    classification.insert({ p, c });
-            //}
-            //operandStack.push_back(Automata::From(Step{ .Data = classification[p] }));
             break;
         }
         case '*':
@@ -267,7 +254,7 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult) -> FiniteAut
     {
         throw std::logic_error(nameof(operandStack)" doesn't have one finite automata as final result");
     }
-    auto finalNfa = move(std::get<Automata>(operandStack.front()));
+    auto finalNfa = move(std::visit(converter, move(operandStack.front())));
     finalNfa.SetAcceptStateResult(move(acceptStateResult));
     //Log("result NFA: {}", finalNfa);
     return finalNfa;

@@ -114,7 +114,7 @@ public:
                     r = dfa.Run(s.first, code[i], get<2>(stack.back()));
                     goto CheckState;
                 }
-                std::println("failed record: state {} at {}", state->first, get<1>(stack.back()));
+                //std::println("failed record: state {} at {}", state->first, get<1>(stack.back()));
                 failed.insert({ state->first, get<1>(stack.back()) }); // depend on last step result(state->second.has_value()) to store failed
             }
 

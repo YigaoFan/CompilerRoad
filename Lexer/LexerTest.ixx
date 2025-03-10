@@ -129,7 +129,7 @@ auto Test() -> void
         pair<string, TokType>{ ">", TokType::RightAngle },
         pair<string, TokType>{ "\\[", TokType::LeftSquare },
         pair<string, TokType>{ "\\]", TokType::RightSquare },
-        pair<string, TokType>{ "{", TokType::LeftBracket },
+        pair<string, TokType>{ "((({)))", TokType::LeftBracket },
         pair<string, TokType>{ "}", TokType::RightBracket },
         pair<string, TokType>{ "\\*", TokType::StarMark },
         pair<string, TokType>{ "\\|", TokType::PipeMark },

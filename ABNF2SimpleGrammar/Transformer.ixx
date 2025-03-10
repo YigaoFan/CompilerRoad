@@ -674,7 +674,8 @@ struct LexRule2RegExpTransformer
         string regExp;
         for (auto const& item : production->Items)
         {
-            regExp.append(format("{}", Transform(item.get(), convertedRegExps)));
+            // need parens to protect when production is combined with other items, like a|b|c (production0)
+            regExp.append(format("({})", Transform(item.get(), convertedRegExps)));
         }
         return regExp;
     }
