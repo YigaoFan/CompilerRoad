@@ -1,6 +1,6 @@
-* VBA2Python[0/3]
-** TODO Generate Cpp code to parse VBA in the future[0/3]
-*** TODO Generate lex code[5/6] DEADLINE: <2025-03-09 Sun>
+* VBA2Python[0/4]
+** TODO Generate Cpp code to parse VBA [1/2]
+*** DONE Generate lex code[5/6] DEADLINE: <2025-03-09 Sun> Done: <2025-03-10 Mon>
    - [X] add test for lex for future maintain[0/0]
      - understand the std::forward
      - one project can export a header file, because there exists nameof(x) macro
@@ -54,14 +54,30 @@
      - [ ] not sure the new add rules for LINE-START and LINE-END is ok
      - [X] make ABNF parser support to distinguish lex rules and parse rules in ABNF file <2025-03-04 Tue>
      - [ ] solve the wide space issue, "%x3000", maybe not support unicode now
-     - [ ] check the generated grammar rule is correct. checking: <2025-03-07 Fri>
-       - [ ] LINESTART is "" which cause regular expression error
-       - [ ] performance issue: it seems has too many partitions when run the DFA Minimize(473), then minimize not end. Maybe not use loop to check, use which one trigger the change and which one is affected?
-*** TODO Generate parse code[0/2]
+     - [X] check the generated grammar rule is correct. checking: <2025-03-07 Fri>
+       - [X] LINESTART is "" which cause regular expression error. No need solve
+       - [X] remove LINE-START and LINE-END in lex rules
+       - [X] performance issue: it seems has too many partitions when run the DFA Minimize(473), then minimize not end. Maybe not use loop to check, use which one trigger the change and which one is affected?
+	 * release version codes run pass with a little long time
+	 * lex result has a issue, maybe the token definition has issue
+	 * detail the performance improve point
+	   * eliminate the data copy when iterate the partitions in Minimize
+	   * break loop early when the all states are handled in Minimize
+	   * remove duplicate accept check code in NFA2DFA
+       - [X] miss parens in situation, like "((\t| )(\t| )*)?('([^\r\n])*)?\r\n|\r|\n" which should be "((\t| )(\t| )*)?('([^\r\n])*)?(\r\n|\r|\n)". <2025-03-10 Mon>
+	 * But when add back parens, regular expression has issue on nested parens handling. Fixed: remove a wrong optimization that remove the paren at head and tail which is not paired
+     - [X] remove some lex rules which is unnecessary, like LINE-START, LINE-END and so on. Only reserve some needs. <2025-03-09 Sun>
+     - [X] support using undersocre to concat two lines <2025-03-10 Mon>
+*** TODO Generate parse code[1/3]
    - [ ] solve operator priority issue
-   - [ ] solve the Reserved-identifier and Identifier corporation
+   - [X] solve the Reserved-identifier and Identifier corporation
+   - [ ] check use of private lex rule symbol(non-token type) in parse rules
 ** TODO Generate AST code
 ** TODO Write Transformer code to translate VBA to Python
+** Future improvement:
+- [ ] improve the Lexer construction performance.
+  - [ ] use map in FiniteAutomataDraft(improve data search)
+  - [ ] store pointer or iterator in worklist of NFA2DFA and Minimize(eliminate data copy)
 
 
 
