@@ -1,32 +1,21 @@
 - Lex -
-module-body-physical-structure -> *source-line [non-terminated-line] 
-source-line -> *non-line-termination-character line-terminator 
-non-terminated-line -> *non-line-termination-character 
+; capitalize the first char of grammar part as below
 line-terminator -> "\r\n" | "\r" | "\n"
-non-line-termination-character -> r"[^\r\n]" 
-LINE-END -> "\n"
-LINE-START -> ""
+non-line-termination-character -> r"[^\r\n]"
 
-module-body-logical-structure -> *extended-line 
-extended-line -> *(line-continuation | non-line-termination-character) line-terminator 
-line-continuation -> 1*WSC underscore line-terminator 
-WSC -> (tab-character | space-character | DBCS-whitespace) 
+whitespace-char -> (tab-character | space-character) ; | DBCS-whitespace) 
+line-continuation -> Whitespace underscore [Whitespace] line-terminator 
 tab-character -> "\t"
 space-character -> " "
 underscore -> "_"
-DBCS-whitespace -> "%x3000"
+;DBCS-whitespace -> "%x3000"
 
-module-body-lines -> *logical-line 
-logical-line -> LINE-START *extended-line LINE-END
-
-WS -> 1*(WSC | line-continuation)
-special-token -> "," | "." | "!" | "#" | "&" | "(" | ")" | "*" | "+" | "-" | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "\\" | "^" 
-EOL -> [WS] LINE-END | single-quote comment-body 
-EOS -> *(EOL | ":") ;End Of Statement 
+Whitespace -> 1*(whitespace-char)
+EOL -> [Whitespace] [single-quote comment-body] line-terminator | line-continuation
+;EOS -> *(EOL | ":") ;End Of Statement 
 single-quote -> "'" 
-comment-body -> *(line-continuation | non-line-termination-character) LINE-END 
+comment-body -> *(non-line-termination-character)
 
-; capitalize the first char of grammar part as below
 Integer -> integer-literal [ "%" | "&" | "^" ]
 integer-literal -> decimal-literal | octal-literal | hex-literal
 decimal-literal -> 1*decimal-digit
@@ -45,12 +34,12 @@ exponent-letter -> "D" | "E" | "d" | "e"
 sign -> "+" | "-"
 floating-point-type-suffix -> "!" | "#" | "@"
 
-Date-or-time -> (date-value 1*WSC time-value) | date-value | time-value
+Date-or-time -> (date-value 1*whitespace-char time-value) | date-value | time-value
 date-value -> left-date-value date-separator middle-date-value [date-separator right-date-value]
 left-date-value -> decimal-literal | month-name
 middle-date-value -> decimal-literal | month-name
 right-date-value -> decimal-literal | month-name
-date-separator -> 1*WSC | (*WSC ("/" | "-" | ",") *WSC)
+date-separator -> 1*whitespace-char | (*whitespace-char ("/" | "-" | ",") *whitespace-char)
 month-name -> english-month-name | english-month-abbreviation
 english-month-name -> "january" | "february" | "march" | "april" | "may" | "june" | "july" | "august" | "september" | "october" | "november" | "december"
 english-month-abbreviation -> "jan" | "feb" | "mar" | "apr" | "jun" | "jul" | "aug" | "sep" | "oct" | "nov" | "dec"
@@ -58,16 +47,16 @@ time-value -> (hour-value ampm) | (hour-value time-separator minute-value [time-
 hour-value -> decimal-literal
 minute-value -> decimal-literal
 second-value -> decimal-literal
-time-separator -> *WSC (":" | ".") *WSC
-ampm -> *WSC ("am" | "pm" | "a" | "p")
+time-separator -> *whitespace-char (":" | ".") *whitespace-char
+ampm -> *whitespace-char ("am" | "pm" | "a" | "p")
 
-String -> double-quote *string-char (double-quote | line-continuation | LINE-END)
+String -> double-quote *string-char (double-quote | line-continuation | line-terminator)
 double-quote -> "\""
 string-char -> ((double-quote double-quote) | non-line-termination-character)
 
 Reserved-identifier -> statement-keyword | marker-keyword | operator-identifier | special-form | reserved-type-identifier | reserved-name | literal-identifier | rem-keyword | reserved-for-implementation-use | future-reserved
 Identifier -> r"[a-zA-Z][a-zA-Z0-9_\-]*"
-statement-keyword -> "Call" | "Case" |"Close" | "Const"| "Declare" | "DefBool" | "DefByte" | "DefCur" | "DefDate" | "DefDbl" | "DefInt" | "DefLng" | "DefLngLng" | "DefLngPtr" | "DefObj" | "DefSng" | "DefStr" | "DefVar" | "Dim" | "Do" | "Else" | "ElseIf" | "End" | "EndIf" | "Enum" | "Erase" | "Event" | "Exit" | "For" | "Friend" | "Function" | "Get" | "Global" | "GoSub" | "GoTo" | "If" | "Implements"| "Input" | "Let" | "Lock" | "Loop" | "LSet" | "Next" | "On" | "Open" | "Option" | "Print" | "Private" | "Public" | "Put" | "RaiseEvent" | "ReDim" | "Resume" | "Return" | "RSet" | "Seek" | "Select" | "Set" | "Static" | "Stop" | "Sub" | "Type" | "Unlock" | "Wend" | "While" | "With" | "Write" 
+statement-keyword -> "Call" | "Case" |"Close" | "Const"| "Declare" | "DefBool" | "DefByte" | "DefCur" | "DefDate" | "DefDbl" | "DefInt" | "DefLng" | "DefLngLng" | "DefLngPtr" | "DefObj" | "DefSng" | "DefStr" | "DefVar" | "Dim" | "Do" | "Else" | "ElseIf" | "End" | "End If" | "Enum" | "Erase" | "Event" | "Exit" | "For" | "Friend" | "Function" | "Get" | "Global" | "GoSub" | "GoTo" | "If" | "Implements"| "Input" | "Let" | "Lock" | "Loop" | "LSet" | "Next" | "On" | "Open" | "Option" | "Print" | "Private" | "Public" | "Put" | "RaiseEvent" | "ReDim" | "Resume" | "Return" | "RSet" | "Seek" | "Select" | "Set" | "Static" | "Stop" | "Sub" | "Type" | "Unlock" | "Wend" | "While" | "With" | "Write" 
 rem-keyword -> "Rem" 
 marker-keyword -> "Any" | "As"| "ByRef" | "ByVal "|"Case" | "Each" | "Else" |"In"| "New" | "Shared" | "Until" | "WithEvents" | "Write" | "Optional" | "ParamArray" | "Preserve" | "Spc" | "Tab" | "Then" | "To" 
 operator-identifier -> "AddressOf" | "And" | "Eqv" | "Imp" | "Is" | "Like" | "New" | "Mod" | "Not" | "Or" | "TypeOf" | "Xor"
@@ -82,28 +71,14 @@ reserved-for-implementation-use -> "Attribute" | "LINEINPUT" | "VB_Base" | "VB_C
 future-reserved -> "CDecl" | "Decimal" | "DefDec"
 
 Foreign-name -> "[" foreign-identifier "]" 
-foreign-identifier -> 1*non-line-termination-character ; TODO use regexp to implement
+foreign-identifier -> 1*non-line-termination-character
 
 Builtin-type -> reserved-type-identifier | ("[" reserved-type-identifier "]") | "object" | "[object]" 
 
 Typed-name -> Identifier type-suffix 
-type-suffix -> "%" | "&" | "^" | "!" | "#" | "@" | "$" 
-
-;Conditional-module-body -> cc-block
-;cc-block -> *(cc-const | cc-if-block | logical-line) 
-;cc-const -> LINE-START "#" "const" cc-var-lhs "=" cc-expression cc-eol ;TODO ignore LINE-START and LINE-END in translation
-;cc-var-lhs -> name 
-;cc-eol -> [single-quote *non-line-termination-character] LINE-END
-;cc-if-block -> cc-if cc-block *cc-elseif-block [cc-else-block] cc-endif 
-;cc-if -> LINE-START "#" "if" cc-expression "then" cc-eol 
-;cc-elseif-block -> cc-elseif cc-block 
-;cc-elseif -> LINE-START "#" "elseif" cc-expression "then" cc-eol 
-;cc-else-block -> cc-else cc-block 
-;cc-else -> LINE-START "#" "else" cc-eol 
-;cc-endif -> LINE-START "#" ("endif" | ("end" "if")) cc-eol 
+type-suffix -> "%" | "&" | "^" | "!" | "#" | "@" | "$"
 
 - Parse -
-
 Procedural-module -> LINE-START procedural-module-header EOS LINE-START procedural-module-body 
 Class-module -> LINE-START class-module-header LINE-START class-module-body 
 procedural-module-header -> attribute "VB_Name" attr-eq quoted-identifier attr-end 
@@ -220,7 +195,7 @@ function-declaration -> procedure-scope [initial-static] "function" function-nam
 property-get-declaration -> procedure-scope [initial-static] "Property" "Get" function-name [procedure-parameters] [function-type] [trailing-static] EOS [procedure-body EOS] [end-label] "end" "property" procedure-tail
 property-lhs-declaration -> procedure-scope [initial-static] "Property" ("Let"  | "Set") subroutine-name property-parameters [trailing-static] EOS [procedure-body EOS] [end-label] "end" "property" procedure-tail
 end-label -> statement-label-definition
-procedure-tail -> [WS] LINE-END  | single-quote comment-body  | ":" rem-statement
+procedure-tail -> [Whitespace] LINE-END  | single-quote comment-body  | ":" rem-statement
 procedure-scope -> ["global" | "public" | "private" | "friend"]
 initial-static -> "static"
 trailing-static -> "static" 
@@ -292,7 +267,7 @@ condition-clause -> while-clause | until-clause
 while-clause -> "While" boolean-expression
 until-clause -> "Until" boolean-expression 
 exit-do-statement -> "Exit" "Do" 
-if-statement -> LINE-START "If" boolean-expression "Then" EOL statement-block *[else-if-block] [else-block] LINE-START (("End" "If") | "EndIf")
+if-statement -> LINE-START "If" boolean-expression "Then" EOL statement-block *[else-if-block] [else-block] LINE-START (("End" "If") | "End If")
 else-if-block -> (LINE-START "ElseIf" boolean-expression "Then" EOL LINE-START statement-block) | ("ElseIf" boolean-expression "Then" statement-block)
 else-block -> LINE-START "Else" statement-block
 single-line-if-statement -> if-with-non-empty-then | if-with-empty-then
@@ -301,7 +276,7 @@ if-with-empty-then -> "If" boolean-expression "Then" single-line-else-clause
 single-line-else-clause -> "Else" [list-or-label]
 list-or-label -> (statement-label *[":" [same-line-statement]]) | ([":"] same-line-statement *[":" [same-line-statement]])
 same-line-statement -> file-statement | error-handling-statement | data-manipulation-statement | control-statement-except-multiline-if 
-select-case-statement -> "Select" "Case" WS select-expression EOS *[case-clause] [case-else-clause] "End" "Select"
+select-case-statement -> "Select" "Case" Whitespace select-expression EOS *[case-clause] [case-else-clause] "End" "Select"
 case-clause -> "Case" range-clause *("," range-clause) EOS statement-block
 case-else-clause -> "Case" "Else" EOS statement-block
 range-clause -> expression | (start-value "To" end-value) | (["Is"] comparison-operator expression)
