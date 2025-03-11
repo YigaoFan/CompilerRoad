@@ -68,11 +68,21 @@
 	 * But when add back parens, regular expression has issue on nested parens handling. Fixed: remove a wrong optimization that remove the paren at head and tail which is not paired
      - [X] remove some lex rules which is unnecessary, like LINE-START, LINE-END and so on. Only reserve some needs. <2025-03-09 Sun>
      - [X] support using undersocre to concat two lines <2025-03-10 Mon>
-*** TODO Generate parse code[1/3]
-   - [ ] solve operator priority issue
-   - [X] solve the Reserved-identifier and Identifier corporation
-   - [ ] check use of private lex rule symbol(non-token type) in parse rules
+*** TODO Generate parse code[1/8] DEADLINE: <2025-03-17 Mon>
+- [ ] pass parse with SimpleGrammar
+  - [ ] prepare a test grammar unit code loader to test code
+  - [ ] fix VBA grammar
+  - [ ] a token maybe belong to different tokens, like a token can be typed name or name, and typed name belong to name. Some parse rules need typed name, some rules need name. This is not fixed, priority is not suitable, how to fix it? Implement a token type compatiable check mechanism when parser check the token
+- [ ] pass actual grammar unit, simple to complex
+  - [ ] enum
+- [ ] recover tree node as abnf form shown
+- [ ] support line concat
+- [ ] solve operator priority issue
+- [ ] add EOF token type to token type enum
+- [X] solve the Reserved-identifier and Identifier corporation
+- [ ] check use of private lex rule symbol(non-token type) in parse rules
 ** TODO Generate AST code
+- [ ] add annotation to support AST class generation
 ** TODO Write Transformer code to translate VBA to Python
 ** Future improvement:
 - [ ] improve the Lexer construction performance.
