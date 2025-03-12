@@ -55,8 +55,6 @@ export
 {
     template<>
     struct std::formatter<CppCodeForm<vector<SimpleGrammar>>, char>;
-    template<>
-    struct std::formatter<CppCodeForm<map<String, pair<String, String>>>, char>;
     template <typename T>
     struct CppCodeForm;
 }

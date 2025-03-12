@@ -6,6 +6,7 @@ import Ast;
 import Transformer;
 import Checker;
 import CodeEmitter; // affect the bottom format code
+import Parser;
 
 using std::string;
 using std::pair;
@@ -14,22 +15,14 @@ using std::size_t;
 using std::shared_ptr;
 using std::move;
 
-template <typename T>
-struct VectorStream
+auto ReadFileAsync(string filename) -> std::generator<char>
 {
-    vector<T> Tokens;
-    size_t Index = 0;
-
-    auto NextItem() -> T
+    std::ifstream file(filename);
+    while (file.eof())
     {
-        return Tokens[Index++];
+        co_yield file.get();
     }
-
-    auto Eof() const -> bool
-    {
-        return Index >= Tokens.size();
-    }
-};
+}
 
 int main()
 {
@@ -177,7 +170,7 @@ int main()
         {
             using std::dynamic_pointer_cast;
 
-            std::println("ast: {}", st.value());
+            //std::println("ast: {}", st.value());
             auto ast = dynamic_pointer_cast<AllGrammars>(std::get<1>(st.value().Children.front()).Result);
             auto grammarsInfo = ParseRule2SimpleGrammarTransformer::Transform(ast->ParseRules.get());
             //std::println("simple grammar: {}", grammarsInfo);
@@ -191,6 +184,7 @@ int main()
             auto terminals = LexRule2RegExpTransformer::MergeTokInfo(LexRule2RegExpTransformer::Transform(ast->LexRules.get()), move(grammarsInfo.ToksInfo));
             std::print(codeFile, "{}\n", CppCodeForm{ .Value = terminals });
             std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Grammars });
+            std::println("code generate done");
         }
         checker.Check();
     }

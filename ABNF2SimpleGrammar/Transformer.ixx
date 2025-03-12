@@ -162,6 +162,35 @@ struct formatter<CppCodeForm<TokensInfo>, char>
         }
         format_to(fc.out(), "}};\n");
 
+        format_to(fc.out(), R"(
+export template<>
+struct formatter<TokType, char>
+{{
+    constexpr auto parse(std::format_parse_context& ctx) -> std::format_parse_context::iterator
+    {{
+        auto it = ctx.begin();
+        return it;
+    }}
+    template<class FormatContext>
+    constexpr auto format(TokType const& t, FormatContext& fc) const
+    {{
+        string_view s;
+        switch (t)
+        {{)");
+        for (auto const& x : t.Value.Symbol2EnumNameRegExp)
+        {
+            format_to(fc.out(), R"(
+        case TokType::{}: s = "{}"; break;)", x.second.first, x.second.first);
+        }
+        format_to(fc.out(), R"(
+        }})");
+        format_to(fc.out(), R"(
+        return std::format_to(fc.out(), "{{}}", s);
+)");
+        format_to(fc.out(), R"(}}
+}};
+)");
+
         format_to(fc.out(), "export array lexRules =\n");
         format_to(fc.out(), "{{\n");
         for (auto const& x : t.Value.Symbol2EnumNameRegExp)
