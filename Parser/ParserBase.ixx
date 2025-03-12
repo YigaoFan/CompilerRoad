@@ -61,21 +61,21 @@ export
         { t.Value } -> std::convertible_to<string>;
         { t.IsEof() } -> std::same_as<bool>;
     };
+
     template <IToken Token, typename Result>
-    struct SyntaxTreeNode
+    struct SyntaxTreeNode;
+    template <IToken Token>
+    struct SyntaxTreeNode<Token, void>
     {
         String Name;
         vector<String> ChildSymbols;
         vector<variant<Token, SyntaxTreeNode>> Children;// put all SyntaxTreeNode in a vector, here use raw pointer or deconstruct manually from bottom
-        Result Result;
 
         SyntaxTreeNode(String name, vector<String> childSymbols, vector<variant<Token, SyntaxTreeNode>> children = {})
-            : Name(move(name)), ChildSymbols(move(childSymbols)), Children(move(children)), Result() // typo here, Kern invoke me
+            : Name(move(name)), ChildSymbols(move(childSymbols)), Children(move(children)) // typo here, Kern invoke me
         { }
 
-        SyntaxTreeNode(SyntaxTreeNode&& that)
-            : Name(move(that.Name)), ChildSymbols(move(that.ChildSymbols)), Children(move(that.Children)), Result(move(that.Result))
-        { }
+        SyntaxTreeNode(SyntaxTreeNode&& that) = default;
 
         /// <summary>
         /// due to this is recursive data structure, copy directly will cause deep recursive call in actual usage.
@@ -110,6 +110,58 @@ export
                         [&workingNodes](SyntaxTreeNode& n) -> void { workingNodes.push(move(n)); },
                         [](Token) -> void {},
                     }, back);
+                }
+            }
+        }
+    };
+    template <IToken Token, typename Result>
+    struct SyntaxTreeNode
+    {
+        String Name;
+        vector<String> ChildSymbols;
+        vector<variant<Token, SyntaxTreeNode>> Children;// put all SyntaxTreeNode in a vector, here use raw pointer or deconstruct manually from bottom
+        Result Result;
+
+        SyntaxTreeNode(String name, vector<String> childSymbols, vector<variant<Token, SyntaxTreeNode>> children = {})
+            : Name(move(name)), ChildSymbols(move(childSymbols)), Children(move(children)) // typo here, Kern invoke me
+        {
+        }
+
+        SyntaxTreeNode(SyntaxTreeNode&& that) = default;
+
+        /// <summary>
+        /// due to this is recursive data structure, copy directly will cause deep recursive call in actual usage.
+        /// so delete it explicitly
+        /// </summary>
+        SyntaxTreeNode(SyntaxTreeNode const& that) = delete;
+
+        ~SyntaxTreeNode()
+        {
+            using std::println;
+            stack<SyntaxTreeNode> workingNodes;
+            for (; not Children.empty(); Children.pop_back())
+            {
+                auto& back = Children.back();
+                std::visit(overloads
+                    {
+                        [&workingNodes](SyntaxTreeNode& n) -> void { workingNodes.push(move(n)); },
+                        [](Token) -> void {},
+                    }, back);
+            }
+
+            for (; not workingNodes.empty();)
+            {
+                //println("working nodes size: {}", workingNodes.size());
+                auto working = move(workingNodes.top());
+                workingNodes.pop();
+                for (; not working.Children.empty(); working.Children.pop_back())
+                {
+                    auto& back = working.Children.back();
+                    std::visit(overloads
+                        {
+                            [&workingNodes](SyntaxTreeNode& n) -> void { workingNodes.push(move(n)); },
+                            [](Token) -> void {},
+                        }, back);
                 }
             }
         }
