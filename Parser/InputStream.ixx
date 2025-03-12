@@ -5,6 +5,7 @@ import std;
 using std::string_view;
 using std::ifstream;
 using std::string;
+using std::vector;
 using std::move;
 
 using Char = char;
@@ -54,13 +55,31 @@ public:
     }
 };
 
+template <typename T>
+struct VectorStream
+{
+    vector<T> Tokens;
+    size_t Index = 0;
+
+    auto NextItem() -> T
+    {
+        return Tokens[Index++];
+    }
+
+    auto Eof() const -> bool
+    {
+        return Index >= Tokens.size();
+    }
+};
+
 export
 {
     template <typename T, typename Item>
     concept Stream = requires (T t)
     {
         { t.NextItem() } -> std::same_as<Item>;
-        //{ t.Copy() } -> std::same_as<T>; // TODO: used?
-        //{ t.Eof() } -> std::same_as<bool>; // TODO: used?
+        { t.Eof() } -> std::same_as<bool>;
     };
+    template <typename T>
+    struct VectorStream;
 }
