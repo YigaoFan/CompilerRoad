@@ -21,5 +21,8 @@
     <ClCompile Include="..\ABNF2SimpleGrammar\vba-spec.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="GrammarUnitLoader.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

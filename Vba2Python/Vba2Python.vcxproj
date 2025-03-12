@@ -132,6 +132,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\ABNF2SimpleGrammar\vba-spec.ixx" />
+    <ClCompile Include="GrammarUnitLoader.ixx" />
     <ClCompile Include="Main.ixx" />
   </ItemGroup>
   <ItemGroup>
