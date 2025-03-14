@@ -65,11 +65,6 @@ struct VectorStream
     {
         return Tokens[Index++];
     }
-
-    auto Eof() const -> bool
-    {
-        return Index >= Tokens.size();
-    }
 };
 
 export
@@ -78,7 +73,6 @@ export
     concept Stream = requires (T t)
     {
         { t.NextItem() } -> std::same_as<Item>;
-        { t.Eof() } -> std::same_as<bool>;
     };
     template <typename T>
     struct VectorStream;
