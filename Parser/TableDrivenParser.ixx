@@ -66,7 +66,7 @@ public:
         grammars.append_range(move(newAddGrammars));
         //std::println("after left refactor: {}", grammars);
         map<pair<String, int>, pair<int, int>> parseTable;
-        grammars = RemoveIndirectLeftRecur(startSymbol, move(grammars));
+        //grammars = RemoveIndirectLeftRecur(startSymbol, move(grammars));
         auto starts = Starts(startSymbol, grammars); // string_view here is from grammars
         std::println("after remove left recur grammar: {}", grammars);
 
@@ -110,7 +110,7 @@ public:
     auto operator= (TableDrivenParser&& that) -> TableDrivenParser& = default;
 
     template <IToken Tok, typename Result>
-    auto Parse(Stream<Tok> auto stream, INodeCallback<Tok, Result> auto callback) -> ParserResult<SyntaxTreeNode<Tok, Result>>
+    auto Parse(Stream<Tok> auto stream, INodeCallback<Tok, Result> auto callback, set<int> ignorableTokenTypes = {}, map<int, set<int>> replaceableTokenTypes = {}) -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
         using std::ranges::to;
         using std::ranges::views::reverse;
@@ -120,7 +120,7 @@ public:
         /// <summary>
         /// Only work for terminal symbol or eof
         /// </summary>
-        auto MatchTerminal = [this](Symbol const& symbol, Tok const& token) -> bool
+        auto MatchTerminal = [this, &replaceableTokenTypes](Symbol const& symbol, Tok const& token) -> bool
         {
             if (symbol.IsEof())
             {
@@ -134,7 +134,16 @@ public:
                 }
             }
 
-            return static_cast<int>(terminal2IntTokenType.at(symbol.Value)) == static_cast<int>(token.Type); // TODO compare the actual value, like the Keyword include multiple values
+            // TODO compare the actual value, like the Keyword include multiple values
+            if (auto dest = terminal2IntTokenType.at(symbol.Value); dest == static_cast<int>(token.Type))
+            {
+                return true;
+            }
+            else if (auto current = static_cast<int>(token.Type); replaceableTokenTypes.contains(current))
+            {
+                return replaceableTokenTypes.at(current).contains(dest);
+            }
+            return false;
         };
         auto IsTerminal = [nontermins = Nontermins(grammars) | to<set<string_view>>()](Symbol const& t) { return not nontermins.contains(t.Value); };
         stack<Symbol> symbolStack;
@@ -183,6 +192,10 @@ public:
                     PopAllFilledNodes();
                     word = stream.NextItem();
                 }
+                else if (ignorableTokenTypes.contains(static_cast<int>(word.Type)))
+                {
+                    word = stream.NextItem();
+                }
                 else
                 {
                     return unexpected(ParseFailResult{ .Message = format("cannot found token for terminal symbol({}) when parse", focus.Value) });
@@ -207,6 +220,10 @@ public:
                             symbolStack.push(b);
                         }
                     }
+                }
+                else if (ignorableTokenTypes.contains(static_cast<int>(word.Type)))
+                {
+                    word = stream.NextItem();
                 }
                 else
                 {
