@@ -156,6 +156,7 @@ struct formatter<CppCodeForm<TokensInfo>, char>
     {
         format_to(fc.out(), "export enum class TokType : int\n");
         format_to(fc.out(), "{{\n");
+        format_to(fc.out(), "    EOF,\n");
         for (auto const& x : t.Value.PrioritySymbols)
         {
             format_to(fc.out(), "    {},\n", t.Value.Symbol2EnumNameRegExp.at(x).first); // print by priority
@@ -177,6 +178,8 @@ struct formatter<TokType, char>
         string_view s;
         switch (t)
         {{)");
+        format_to(fc.out(), R"(
+        case TokType::EOF: s = "EOF"; break;)");
         for (auto const& x : t.Value.Symbol2EnumNameRegExp)
         {
             format_to(fc.out(), R"(
@@ -187,7 +190,8 @@ struct formatter<TokType, char>
         format_to(fc.out(), R"(
         return std::format_to(fc.out(), "{{}}", s);
 )");
-        format_to(fc.out(), R"(}}
+        format_to(fc.out(), R"(
+    }}
 }};
 )");
 
@@ -201,6 +205,7 @@ struct formatter<TokType, char>
 
         format_to(fc.out(), "export map<string_view, int> terminal2IntTokenType =\n");
         format_to(fc.out(), "{{\n");
+        format_to(fc.out(), "    {{ eof, static_cast<int>(TokType::EOF) }},\n");
         for (auto const& x : t.Value.Symbol2EnumNameRegExp)
         {
             format_to(fc.out(), "    {{ \"{}\", static_cast<int>(TokType::{}) }},\n", x.first, x.second.first);
