@@ -11,7 +11,6 @@ using std::generator;
 using std::pair;
 using std::vector;
 using std::map;
-using std::move_iterator;
 using std::queue;
 using std::move;
 
@@ -84,6 +83,23 @@ public:
             }
         }
         return relateds;
+    }
+
+    auto SeparateGrammarBaseOn(String root0, String root1) -> pair<map<LeftSide, vector<SimpleRightSide>>, map<LeftSide, vector<SimpleRightSide>>>
+    {
+        auto gs = LoadRelatedGrammarsOf(root0);
+        auto remain = RefineGrammarAfterRemove(root0, root1);
+        return { move(gs), move(remain) };
+    }
+private:
+    auto RefineGrammarAfterRemove(String symbol, String root) -> map<LeftSide, vector<SimpleRightSide>>
+    {
+        // load the old root related grammars with not expand the this symbol
+        //auto rules = move(grammars.at(symbol));
+        // check reference change? no.
+        auto l = GrammarUnitLoader(grammars); // copy grammars to isolate changes
+        l.grammars.erase(symbol);
+        return l.LoadRelatedGrammarsOf(root);
     }
 };
 
