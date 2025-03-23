@@ -97,7 +97,7 @@ public:
                 }
                 else
                 {
-                    stack.push_back({ move(s), i, 0 });
+                    stack.push_back({ move(s), i, std::numeric_limits<unsigned>::max() });
                 }
             }
         RollBack2RetryOtherStep:
