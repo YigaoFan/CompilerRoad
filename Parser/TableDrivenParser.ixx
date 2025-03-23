@@ -16,6 +16,7 @@ using std::logic_error;
 using std::stack;
 using std::set;
 using std::variant;
+using std::function;
 using std::move;
 using std::format;
 using std::println;
@@ -68,7 +69,7 @@ public:
         map<pair<String, int>, pair<int, int>> parseTable;
         //grammars = RemoveIndirectLeftRecur(startSymbol, move(grammars));
         auto starts = Starts(startSymbol, grammars); // string_view here is from grammars
-        std::println("after remove left recur grammar: {}", grammars);
+        //std::println("after remove left recur grammar: {}", grammars);
 
         // handle e-production, focus <- pop() TODO
         for (auto i = 0; auto const& g : grammars)
@@ -96,7 +97,7 @@ public:
             }
             ++i;
         }
-        std::println("parse table: {}", parseTable);
+        //std::println("parse table: {}", parseTable);
         return TableDrivenParser(move(startSymbol), move(grammars), move(parseTable), move(terminal2IntTokenType));
     }
 
@@ -110,7 +111,8 @@ public:
     auto operator= (TableDrivenParser&& that) -> TableDrivenParser& = default;
 
     template <IToken Tok, typename Result>
-    auto Parse(Stream<Tok> auto stream, INodeCallback<Tok, Result> auto callback, set<int> ignorableTokenTypes = {}, map<int, set<int>> replaceableTokenTypes = {}) -> ParserResult<SyntaxTreeNode<Tok, Result>>
+    auto Parse(Stream<Tok> auto stream, INodeCallback<Tok, Result> auto callback, set<int> ignorableTokenTypes = {}, map<int, set<int>> replaceableTokenTypes = {}, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> externalParsers = {})
+        -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
         using std::ranges::to;
         using std::ranges::views::reverse;
@@ -181,6 +183,18 @@ public:
             {
                 return root;
             }
+            else if (externalParsers.contains(focus.Value))
+            {
+                auto subResult = externalParsers.at(focus.Value)(stream);
+                if (not subResult.has_value())
+                {
+                    return subResult;
+                }
+                // almost same as handle terminal
+                symbolStack.pop();
+                workingNodes.top()->Children.push_back(move(subResult.value()));
+                PopAllFilledNodes();
+            }
             else if (IsTerminal(focus) or focus.IsEof())
             {
                 if (MatchTerminal(focus, word))
@@ -205,10 +219,12 @@ public:
             {
                 if (auto dest = pair{ focus.Value, static_cast<int>(word.Type) }; parseTable.contains(dest))
                 {
+                ExpandRule:
                     // add log here
                     auto [i, j] = parseTable[dest];
                     symbolStack.pop();
                     auto const& rule = grammars[i].second[j];
+                    //std::println("focus: {}, add rule: {}->{}", focus.Value, grammars[i].first, rule);
                     workingNodes.top()->Children.push_back(SyntaxTreeNode<Tok, Result>{ grammars[i].first, rule, });
                     workingNodes.push(&std::get<SyntaxTreeNode<Tok, Result>>(workingNodes.top()->Children.back()));
                     PopAllFilledNodes();
@@ -220,6 +236,19 @@ public:
                             symbolStack.push(b);
                         }
                     }
+                }
+                else if (auto current = static_cast<int>(word.Type); replaceableTokenTypes.contains(current))
+                {
+                    auto const& replaces = replaceableTokenTypes.at(current);
+                    for (auto x : replaces)
+                    {
+                        dest.second = x;
+                        if (parseTable.contains(dest))
+                        {
+                            goto ExpandRule;
+                        }
+                    }
+                    return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, replaceable word: {}) when parse", focus.Value, word) });
                 }
                 else if (ignorableTokenTypes.contains(static_cast<int>(word.Type)))
                 {
