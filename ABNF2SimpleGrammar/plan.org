@@ -68,7 +68,7 @@
 	 * But when add back parens, regular expression has issue on nested parens handling. Fixed: remove a wrong optimization that remove the paren at head and tail which is not paired
      - [X] remove some lex rules which is unnecessary, like LINE-START, LINE-END and so on. Only reserve some needs. <2025-03-09 Sun>
      - [X] support using undersocre to concat two lines <2025-03-10 Mon>
-*** TODO Generate parse code[10/22] DEADLINE: <2025-03-17 Mon>
+*** TODO Generate parse code[11/22] DEADLINE: <2025-03-17 Mon>
 - [X] preparation for parse debug <2025-03-12 Wed>
   - [X] add language snippet loader
   - [X] add part grammars loader to make it independent from other noise grammars
@@ -83,8 +83,8 @@
 - [X] remove expression related rules, give it to Pratt parser <2025-03-23 Sun>
 - [ ] use depth first search in productions to get the atom unit(not left recursive is ok) in recursive rules
 - [X] replaceable token types can also lead to future rule in parse table <2025-03-23 Sun>
-- [ ] check use of private lex rule symbol(non-token type) in parse rules. Too many rules reference the private token. Move them into parse rule? Use checker to check which parse rule references private token type
-  - [ ] literal-identifier. Promote them to parse rules for more flexibility. <2025-03-23 Sun>
+- [X] check use of private lex rule symbol(non-token type) in parse rules. Too many rules reference the private token. Move them into parse rule? Use checker to check which parse rule references private token type
+  - [X] literal-identifier. Promote them to parse rules for more flexibility. <2025-03-23 Sun>
 - [ ] terminalXXX will change if change vba.abnf file, it needs to generate code to fix it.
 - [ ] why not load constant-expression grammar? Because parseTable doesn't have expression token type to store in it. Need to fix it in GrammarSet.
 - [ ] optimize Lexer result to use String
