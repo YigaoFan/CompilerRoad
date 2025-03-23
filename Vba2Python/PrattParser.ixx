@@ -9,16 +9,21 @@ using std::pair;
 using std::set;
 using std::map;
 using std::unexpected;
+using std::array;
+using std::optional;
 using std::move;
 using std::format;
 
-template <IToken Tok, typename Result>
-auto Cons(Tok op, SyntaxTreeNode<Tok, Result> lhs, SyntaxTreeNode<Tok, Result> rhs) -> SyntaxTreeNode<Tok, Result>
+template <IToken Tok, typename Result, size_t Size>
+auto Cons(Tok op, array<SyntaxTreeNode<Tok, Result>, Size> items) -> SyntaxTreeNode<Tok, Result>
 {
     auto n = SyntaxTreeNode<Tok, Result>(String(format("{}-expression", op.Value)), { "op", "lhs", "rhs" }); // TODO
     n.Children.push_back(move(op));
-    n.Children.push_back(move(lhs));
-    n.Children.push_back(move(rhs));
+
+    for (auto& x : items)
+    {
+        n.Children.push_back(move(x));
+    }
     return n;
 }
 
@@ -40,6 +45,27 @@ auto ParseUnit(Stream<Tok> auto& stream) -> ParserResult<SyntaxTreeNode<Tok, Res
         n.Children.push_back(move(item));
         return move(n);
     }
+    case TokType::Terminal18:
+    {
+        auto [_, rbp] = PrefixBindingPower(item.Type);
+        auto rhs = ParseExp<Tok, Result>(stream, rbp);
+        if (not rhs.has_value())
+        {
+            return rhs;
+        }
+        return Cons(item, array{ move(rhs.value()) });
+    }
+    case TokType::Terminal38:
+    {
+        auto exp = ParseExp<Tok, Result>(stream, 0);
+        if (not exp.has_value())
+        {
+            return exp;
+        }
+        auto next = stream.NextItem();
+        Assert(next.Type == TokType::Terminal39, "right parentheses not matched");
+        return exp;
+    }
     default:
         return unexpected(ParseFailResult{ .Message = format("token type ({}) isn't allowed atom in expression", item.Type) });
     }
@@ -56,9 +82,31 @@ auto InfixBindingPower(TokType op) -> pair<int, int>
     case TokType::Terminal156:
         return { 3, 4 };
     case TokType::Terminal78:
-        return { 6, 5 };
+        return { 8, 7 };
     default:
         throw std::out_of_range(format("unknown operator({}) when get the binding power", op));
+    }
+}
+
+auto PrefixBindingPower(TokType op) -> pair<optional<int>, int>
+{
+    switch (op)
+    {
+    case TokType::Terminal18:
+        return { {}, 5 };
+    default:
+        throw std::out_of_range(format("unknown operator({}) when get the binding power", op));
+    }
+}
+
+auto PostfixBindingPower(TokType op) -> optional<pair<int, int>>
+{
+    switch (op)
+    {
+    case TokType::Terminal18:
+        return pair{ 0, 5 };
+    default:
+        return {};
     }
 }
 
@@ -76,9 +124,6 @@ auto ParseExp(Stream<Tok> auto& stream, int minBindingPower) -> ParserResult<Syn
         auto op = stream.NextItem();
         switch (op.Type)
         {
-        case TokType::EOF:
-            stream.Rollback(); // reserve EOF for out recursive call to exit
-            return lhs;
         // below is operator
         case TokType::Terminal18:
         case TokType::Terminal155:
@@ -98,24 +143,16 @@ auto ParseExp(Stream<Tok> auto& stream, int minBindingPower) -> ParserResult<Syn
             {
                 return rhs;
             }
-            lhs = Cons(op, move(lhs.value()), move(rhs.value()));
+            lhs = Cons(op, array{ move(lhs.value()), move(rhs.value()) });
             break;
         }
+        case TokType::EOF:
         default:
-            return unexpected(ParseFailResult{ .Message = format("unhandled operator({})", op) });
+            stream.Rollback(); // reserve for outer to handle or trigger exit
+            return lhs;
         }
     }
 }
-
-// para should be TokType
-//auto PrefixBindingPower(char op) -> pair<int, int>
-//{
-//
-//}
-
-//auto PostfixBindingPower(char op) -> pair<int, int>
-//{
-//}
 
 export
 {
