@@ -594,14 +594,6 @@ struct LexRule2RegExpTransformer
 
         map<String, tuple<set<String>, int, Grammar const*>> refInfo;
         map<size_t, String> priority2Symbols;
-        auto InitIfNotExist = [&refInfo](String symbolName) -> tuple<set<String>, int, Grammar const*>&
-        {
-            if (not refInfo.contains(symbolName))
-            {
-                refInfo.insert({ symbolName, { {}, 0, nullptr } });
-            }
-            return refInfo.at(symbolName);
-        };
         for (auto priority = 0; auto const& g : grammars->Items)
         {
             //println("analyse grammar: {}", g->Left);
@@ -629,7 +621,14 @@ struct LexRule2RegExpTransformer
             auto symbol = move(workings.front());
             workings.pop();
             auto& info = refInfo.at(symbol);
-            ordereds.push_back(get<2>(info));
+            if (auto g = get<2>(info); g == nullptr)
+            {
+                throw std::invalid_argument(format("no definition for {} in lex rules", symbol));
+            }
+            else
+            {
+                ordereds.push_back(g);
+            }
 
             for (auto const& ref : get<0>(info))
             {
