@@ -77,6 +77,9 @@ export
 
         SyntaxTreeNode(SyntaxTreeNode&& that) = default;
 
+        SyntaxTreeNode& operator= (SyntaxTreeNode const& that) = delete;
+        SyntaxTreeNode& operator= (SyntaxTreeNode&& that) = default;
+
         /// <summary>
         /// due to this is recursive data structure, copy directly will cause deep recursive call in actual usage.
         /// so delete it explicitly
@@ -134,6 +137,9 @@ export
         /// so delete it explicitly
         /// </summary>
         SyntaxTreeNode(SyntaxTreeNode const& that) = delete;
+
+        SyntaxTreeNode& operator= (SyntaxTreeNode const& that) = delete;
+        SyntaxTreeNode& operator= (SyntaxTreeNode&& that) = default;
 
         ~SyntaxTreeNode()
         {
