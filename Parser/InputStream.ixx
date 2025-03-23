@@ -65,6 +65,14 @@ struct VectorStream
     {
         return Tokens[Index++];
     }
+
+    auto Rollback() -> void
+    {
+        if (Index > 0)
+        {
+            --Index;
+        }
+    }
 };
 
 export
@@ -73,6 +81,7 @@ export
     concept Stream = requires (T t)
     {
         { t.NextItem() } -> std::same_as<Item>;
+        { t.Rollback() } -> std::same_as<void>;
     };
     template <typename T>
     struct VectorStream;
