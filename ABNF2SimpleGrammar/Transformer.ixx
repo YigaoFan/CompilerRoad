@@ -247,7 +247,7 @@ public:
         {
             if (not Terminals.contains(terminalValue))
             {
-                int i = Terminals.size();
+                auto i = Terminals.size();
                 auto symName = String(format("terminal-{}", i));
                 Terminals.insert({ terminalValue, symName });
                 ToksInfo.PrioritySymbols.push_back(symName);
