@@ -68,7 +68,7 @@
 	 * But when add back parens, regular expression has issue on nested parens handling. Fixed: remove a wrong optimization that remove the paren at head and tail which is not paired
      - [X] remove some lex rules which is unnecessary, like LINE-START, LINE-END and so on. Only reserve some needs. <2025-03-09 Sun>
      - [X] support using undersocre to concat two lines <2025-03-10 Mon>
-*** TODO Generate parse code[11/22] DEADLINE: <2025-03-17 Mon>
+*** TODO Generate parse code[11/23] DEADLINE: <2025-03-17 Mon>
 - [X] preparation for parse debug <2025-03-12 Wed>
   - [X] add language snippet loader
   - [X] add part grammars loader to make it independent from other noise grammars
@@ -76,9 +76,15 @@
 - [X] support ignorable token type <2025-03-14 Fri>
 - [X] support replaceable token type <2025-03-14 Fri>
 - [X] complete a Pratt parser demo <2025-03-18 Tue> data driven style
-- [X] complete a Pratt parser demo <2025-03-20 Thu> hard code token type style
+- [-] complete a Pratt parser  <2025-03-20 Thu> hard code token type style
   - [X] add dot <2025-03-21 Fri>
   - [X] fix Pratt parser bugs <2025-03-21 Fri>
+  - [ ] add expression token type in generated TokType
+    - [ ] why not load constant-expression grammar? Because parseTable doesn't have expression token type to store in it. Then I bypass the "expression" item in TableDrivenParser::ConstructFrom--this is the cause.
+  - [ ] when encounter constant-expression and word is number which is compatiable to expression, we can try go into Pratt parser
+  - [ ] or calculate all token types which can replace expression token type
+  - [ ] add '0' to Pratt parser
+- [X] fix BlockRange logic in regular expression <2025-03-28 Fri>
 - [ ] add comment for terminal token from parser part
 - [X] remove expression related rules, give it to Pratt parser <2025-03-23 Sun>
 - [ ] use depth first search in productions to get the atom unit(not left recursive is ok) in recursive rules
@@ -86,7 +92,7 @@
 - [X] check use of private lex rule symbol(non-token type) in parse rules. Too many rules reference the private token. Move them into parse rule? Use checker to check which parse rule references private token type
   - [X] literal-identifier. Promote them to parse rules for more flexibility. <2025-03-23 Sun>
 - [ ] terminalXXX will change if change vba.abnf file, it needs to generate code to fix it.
-- [ ] why not load constant-expression grammar? Because parseTable doesn't have expression token type to store in it. Need to fix it in GrammarSet.
+
 - [ ] optimize Lexer result to use String
 - [-] pass parse with SimpleGrammar
   - [X] +fix out of range access in RemoveIndirectLeftRecur+ not use left recursive
