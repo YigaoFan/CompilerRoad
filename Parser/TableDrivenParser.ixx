@@ -185,6 +185,7 @@ public:
             }
             else if (externalParsers.contains(focus.Value))
             {
+                stream.Rollback(); // return the current word, to let external parser read it
                 auto subResult = externalParsers.at(focus.Value)(stream);
                 if (not subResult.has_value())
                 {
@@ -194,6 +195,7 @@ public:
                 symbolStack.pop();
                 workingNodes.top()->Children.push_back(move(subResult.value()));
                 PopAllFilledNodes();
+                word = stream.NextItem();
             }
             else if (IsTerminal(focus) or focus.IsEof())
             {
