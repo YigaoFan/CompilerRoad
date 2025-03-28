@@ -12,9 +12,9 @@ underscore -> "_"
 
 Whitespace -> 1*(whitespace-char)
 EOL -> [Whitespace] [single-quote comment-body] line-terminator | line-continuation
-;EOS -> *(EOL | ":") ;End Of Statement 
 single-quote -> "'" 
 comment-body -> *(non-line-termination-character)
+Rem-statement -> "Rem" whitespace-char comment-body
 
 Integer -> integer-literal [ "%" | "&" | "^" ]
 integer-literal -> decimal-literal | octal-literal | hex-literal
@@ -54,15 +54,26 @@ String -> double-quote *string-char (double-quote | line-continuation | line-ter
 double-quote -> "\""
 string-char -> ((double-quote double-quote) | non-line-termination-character)
 
-Reserved-identifier -> statement-keyword | marker-keyword | operator-identifier | special-form | reserved-type-identifier | reserved-name | literal-identifier | rem-keyword | reserved-for-implementation-use | future-reserved
 Identifier -> r"[a-zA-Z][a-zA-Z0-9_\-]*"
+Reserved-type-identifier -> "Boolean" | "Byte" | "Currency" | "Date" | "Double" | "Integer" | "Long" | "LongLong" | "LongPtr" | "Single" | "String" | "Variant" 
+
+Foreign-name -> "[" foreign-identifier "]" 
+foreign-identifier -> 1*non-line-termination-character
+
+Typed-name -> Identifier type-suffix 
+type-suffix -> "%" | "&" | "^" | "!" | "#" | "@" | "$"
+
+- Parse -
+EOS -> EOL | ":" ;End Of Statement 
+
+Builtin-type -> Reserved-type-identifier | ("[" Reserved-type-identifier "]") | "object" | "[object]" 
+Reserved-identifier -> statement-keyword | marker-keyword | operator-identifier | special-form | Reserved-type-identifier | reserved-name | literal-identifier | rem-keyword | reserved-for-implementation-use | future-reserved
 statement-keyword -> "Call" | "Case" |"Close" | "Const"| "Declare" | "DefBool" | "DefByte" | "DefCur" | "DefDate" | "DefDbl" | "DefInt" | "DefLng" | "DefLngLng" | "DefLngPtr" | "DefObj" | "DefSng" | "DefStr" | "DefVar" | "Dim" | "Do" | "Else" | "ElseIf" | "End" | "End If" | "Enum" | "Erase" | "Event" | "Exit" | "For" | "Friend" | "Function" | "Get" | "Global" | "GoSub" | "GoTo" | "If" | "Implements"| "Input" | "Let" | "Lock" | "Loop" | "LSet" | "Next" | "On" | "Open" | "Option" | "Print" | "Private" | "Public" | "Put" | "RaiseEvent" | "ReDim" | "Resume" | "Return" | "RSet" | "Seek" | "Select" | "Set" | "Static" | "Stop" | "Sub" | "Type" | "Unlock" | "Wend" | "While" | "With" | "Write" 
 rem-keyword -> "Rem" 
 marker-keyword -> "Any" | "As"| "ByRef" | "ByVal "|"Case" | "Each" | "Else" |"In"| "New" | "Shared" | "Until" | "WithEvents" | "Write" | "Optional" | "ParamArray" | "Preserve" | "Spc" | "Tab" | "Then" | "To" 
 operator-identifier -> "AddressOf" | "And" | "Eqv" | "Imp" | "Is" | "Like" | "New" | "Mod" | "Not" | "Or" | "TypeOf" | "Xor"
 reserved-name -> "Abs" | "CBool" | "CByte" | "CCur" | "CDate" | "CDbl" | "CDec" | "CInt" | "CLng" | "CLngLng" | "CLngPtr" | "CSng" | "CStr" | "CVar" | "CVErr" | "Date" | "Debug" | "DoEvents" | "Fix" | "Int" | "Len" | "LenB" | "Me" | "PSet" | "Scale" | "Sgn" | "String" 
 special-form -> "Array" | "Circle" | "Input" | "InputB" | "LBound" | "Scale" | "UBound" 
-reserved-type-identifier -> "Boolean" | "Byte" | "Currency" | "Date" | "Double" | "Integer" | "Long" | "LongLong" | "LongPtr" | "Single" | "String" | "Variant" 
 literal-identifier -> boolean-literal-identifier | object-literal-identifier | variant-literal-identifier 
 boolean-literal-identifier -> "true" | "false" 
 object-literal-identifier -> "nothing" 
@@ -70,15 +81,6 @@ variant-literal-identifier -> "empty" | "null"
 reserved-for-implementation-use -> "Attribute" | "LINEINPUT" | "VB_Base" | "VB_Control" | "VB_Creatable" | "VB_Customizable" | "VB_Description" | "VB_Exposed" | "VB_Ext_KEY " | "VB_GlobalNameSpace" | "VB_HelpID" | "VB_Invoke_Func" | "VB_Invoke_Property " | "VB_Invoke_PropertyPut" | "VB_Invoke_PropertyPutRef" | "VB_MemberFlags" | "VB_Name" | "VB_PredeclaredId" | "VB_ProcData" | "VB_TemplateDerived" | "VB_UserMemId" | "VB_VarDescription" | "VB_VarHelpID" | "VB_VarMemberFlags" | "VB_VarProcData " | "VB_VarUserMemId" 
 future-reserved -> "CDecl" | "Decimal" | "DefDec"
 
-Foreign-name -> "[" foreign-identifier "]" 
-foreign-identifier -> 1*non-line-termination-character
-
-Builtin-type -> reserved-type-identifier | ("[" reserved-type-identifier "]") | "object" | "[object]" 
-
-Typed-name -> Identifier type-suffix 
-type-suffix -> "%" | "&" | "^" | "!" | "#" | "@" | "$"
-
-- Parse -
 Procedural-module -> LINE-START procedural-module-header EOS LINE-START procedural-module-body 
 Class-module -> LINE-START class-module-header LINE-START class-module-body 
 procedural-module-header -> attribute "VB_Name" attr-eq quoted-identifier attr-end 
@@ -101,7 +103,7 @@ procedural-module-directive-element -> common-option-directive | option-private-
 procedural-module-declaration-element -> common-module-declaration-element | global-variable-declaration | public-const-declaration | public-type-declaration | public-external-procedure-declaration | global-enum-declaration | common-option-directive | option-private-directive
 class-module-directive-element -> common-option-directive | def-directive | implements-directive 
 class-module-declaration-element -> common-module-declaration-element | event-declaration | common-option-directive | implements-directive ;commonoption-directive in the doc
-common-option-directive -> option-compare-directive | option-base-directive | option-explicit-directive | rem-statement
+common-option-directive -> option-compare-directive | option-base-directive | option-explicit-directive | Rem-statement
 option-compare-directive -> "Option" "Compare" ( "Binary" | "Text")
 option-base-directive -> "Option" "Base" Integer
 option-explicit-directive -> "Option" "Explicit"
@@ -155,7 +157,7 @@ public-type-declaration -> ["global"  | "public"] udt-declaration
 private-type-declaration -> "private" udt-declaration
 udt-declaration -> "type" untyped-name EOS udt-member-list EOS "end" "type"
 udt-member-list -> udt-element *[EOS udt-element]
-udt-element -> rem-statement  | udt-member
+udt-element -> Rem-statement  | udt-member
 udt-member -> reserved-name-member-dcl  | untyped-name-member-dcl
 untyped-name-member-dcl -> Identifier optional-array-clause
 reserved-name-member-dcl -> reserved-member-name as-clause
@@ -165,9 +167,9 @@ reserved-member-name -> statement-keyword  | marker-keyword  | operator-identifi
 global-enum-declaration -> "global" enum-declaration
 public-enum-declaration -> ["public"] enum-declaration
 private-enum-declaration -> "private" enum-declaration
-enum-declaration -> "enum" untyped-name EOS enum-member-list EOS "end" "enum"
-enum-member-list -> enum-element *[EOS enum-element]
-enum-element -> rem-statement  | enum-member
+enum-declaration -> "Enum" untyped-name EOS enum-member-list "End" "Enum"
+enum-member-list -> 1*(enum-element EOS)
+enum-element -> Rem-statement | enum-member
 enum-member -> untyped-name [ "=" constant-expression] 
 
 public-external-procedure-declaration -> ["public"] external-proc-dcl
@@ -187,7 +189,7 @@ procedural-module-code-section -> *( LINE-START procedural-module-code-element L
 class-module-code-section -> *( LINE-START class-module-code-element LINE-END)
 procedural-module-code-element -> common-module-code-element
 class-module-code-element -> common-module-code-element  | implements-directive
-common-module-code-element -> rem-statement  | procedure-declaration
+common-module-code-element -> Rem-statement  | procedure-declaration
 procedure-declaration -> subroutine-declaration  | function-declaration  | property-get-declaration  | property-lhs-declaration 
 
 subroutine-declaration -> procedure-scope [initial-static] "sub" subroutine-name [procedure-parameters] [trailing-static] EOS [procedure-body EOS] [end-label] "end" "sub" procedure-tail 
@@ -195,7 +197,7 @@ function-declaration -> procedure-scope [initial-static] "function" function-nam
 property-get-declaration -> procedure-scope [initial-static] "Property" "Get" function-name [procedure-parameters] [function-type] [trailing-static] EOS [procedure-body EOS] [end-label] "end" "property" procedure-tail
 property-lhs-declaration -> procedure-scope [initial-static] "Property" ("Let"  | "Set") subroutine-name property-parameters [trailing-static] EOS [procedure-body EOS] [end-label] "end" "property" procedure-tail
 end-label -> statement-label-definition
-procedure-tail -> [Whitespace] LINE-END  | single-quote comment-body  | ":" rem-statement
+procedure-tail -> [Whitespace] LINE-END  | single-quote comment-body  | ":" Rem-statement
 procedure-scope -> ["global" | "public" | "private" | "friend"]
 initial-static -> "static"
 trailing-static -> "static" 
@@ -231,7 +233,7 @@ lifecycle-handler-name -> "Class_Initialize" | "Class_Terminate"
 procedure-body -> statement-block 
 
 statement-block -> *(block-statement EOS)
-block-statement -> statement-label-definition | rem-statement | statement | attribute-statement
+block-statement -> statement-label-definition | Rem-statement | statement | attribute-statement
 attribute-statement -> attribute [Identifier "."] reserved-for-implementation-use attr-eq [quoted-identifier | boolean-literal-identifier]
 statement -> control-statement | data-manipulation-statement | error-handling-statement | file-statement
 
@@ -240,8 +242,6 @@ statement-label -> identifier-statement-label | line-number-label
 statement-label-list -> statement-label ["," statement-label]
 identifier-statement-label -> Identifier
 line-number-label -> Integer
-
-rem-statement -> "Rem" comment-body
 
 control-statement -> if-statement | control-statement-except-multiline-if
 control-statement-except-multiline-if -> call-statement | while-statement | for-statement | exit-for-statement | do-statement | exit-do-statement | single-line-if-statement | select-case-statement |stop-statement | goto-statement | on-goto-statement | gosub-statement | return-statement | on-gosub-statement |for-each-statement | exit-sub-statement | exit-function-statement | exit-property-statement | raiseevent-statement | with-statement | end-statement | assert-statement
