@@ -51,7 +51,7 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
         {
             if (not operators.empty())
             {
-                if (auto lastOp = operators.back(); lastOp != '(' and lastOp != '[')
+                if (auto lastOp = operators.back(); lastOp != '(' and lastOp != '[' and lastOp != '^')
                 {
                     if (Priority(op) <= Priority(lastOp))
                     {
@@ -70,6 +70,12 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
     for (size_t i = 0, len = regExp.length(); i < len; i++)
     {
         auto c = regExp[i];
+        auto PassEscape = [&]()
+        {
+            output.push_back('\\');
+            ++i;
+            output.push_back(regExp[i]);
+        };
         switch (c)
         {
         case '?':
@@ -84,22 +90,48 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
             AddOperator(c);
             break;
         case '[':
-            operators.push_back('[');
-            break;
-        case '^':
-            operators.push_back('^');
-            break;
-        case ']':
-            for (;;)
+            ++i;
+            if (regExp[i] == '^')
             {
-                auto op = operators.back();
-                operators.pop_back();
-                if (op == '[')
-                {
-                    goto addPossibleRelationWithNextChar;
-                }
-                output.push_back(op);
+                output.push_back('^'); // use ^ and [ head to distinguish function, change [^ to ^
+                ++i;
             }
+            else
+            {
+                output.push_back('[');
+            }
+            for (;; i++)
+            {
+                c = regExp[i];
+                switch (c)
+                {
+                case '-':
+                    ++i;
+                    c = regExp[i];
+
+                    if (c != '\\')
+                    {
+                        output.push_back(c);
+                    }
+                    else
+                    {
+                        PassEscape();
+                    }
+                    output.push_back('-');
+                    break;
+                case '\\':
+                    PassEscape();
+                    break;
+                case ']':
+                    output.push_back(']');
+                    goto RangeEnd;
+                default:
+                    output.push_back(c);
+                    break;
+                }
+            }
+        RangeEnd:
+            goto addPossibleRelationWithNextChar;
             break;
         case '(':
             operators.push_back('(');
@@ -118,9 +150,7 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
             }
             break;
         case '\\':
-            output.push_back('\\');
-            ++i;
-            output.push_back(regExp[i]);
+            PassEscape();
             goto addPossibleRelationWithNextChar;
         default:
             output.push_back(c);
@@ -128,15 +158,7 @@ auto Convert2PostfixForm(string_view regExp) -> vector<char>
         addPossibleRelationWithNextChar:
             if (i != len - 1 and not isOperatorOrEndScope(regExp[i + 1]))
             {
-                if (any_of(operators.cbegin(), operators.cend(), [](char ch) { return '[' == ch; }))
-                {
-                    // [^ will reverse the relation here
-                    AddOperator('|');
-                }
-                else
-                {
-                    AddOperator('+');
-                }
+                AddOperator('+');
             }
         }
     }
@@ -188,6 +210,7 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult) -> FiniteAut
     for (size_t l = postfixRegExp.size(), i = 0; i < l; i++)
     {
         auto c = postfixRegExp[i];
+        auto passRange = true;
         switch (c)
         {
         case '+':
@@ -207,7 +230,7 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult) -> FiniteAut
             operandStack.pop_back();
             char left = std::get<char>(b);
             char right = std::get<char>(a);
-            operandStack.push_back(Automata::Range(left, right));
+            operandStack.push_back(Automata::PassRange({}, { { left, right } }));
             break;
         }
         case '*':
@@ -234,10 +257,44 @@ auto ConstructNFAFrom(string_view regExp, Result acceptStateResult) -> FiniteAut
             break;
         }
         case '^':
+            passRange = false;
+        case '[':
         {
-            auto a = move(operandStack.back());
-            operandStack.pop_back();
-            operandStack.push_back(Automata::Not(std::visit(converter, move(a))));
+            vector<char> singleChars;
+            vector<pair<char, char>> ranges;
+            ++i;
+            for (;; ++i)
+            {
+                auto c = postfixRegExp[i];
+                switch (c)
+                {
+                case '-':
+                {
+                    auto b = singleChars.back();
+                    singleChars.pop_back();
+                    auto a = singleChars.back();
+                    singleChars.pop_back();
+                    ranges.push_back({ a, b });
+                    break;
+                }
+                case ']':
+                    goto NextStep;
+                case '\\':
+                    ++i;
+                default:
+                    singleChars.push_back(postfixRegExp[i]);
+                    break;
+                }
+            }
+        NextStep:
+            if (passRange)
+            {
+                operandStack.push_back(Automata::PassRange(move(singleChars), move(ranges)));
+            }
+            else
+            {
+                operandStack.push_back(Automata::BlockRange(move(singleChars), move(ranges)));
+            }
             break;
         }
         case '\\':

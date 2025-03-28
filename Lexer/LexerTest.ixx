@@ -35,6 +35,7 @@ enum class TokType : int
     Number,
     Comment,
     EOF,
+    RemStatement,
 };
 
 template<>
@@ -112,12 +113,15 @@ struct std::formatter<TokType, char>
         case TokType::QutotedDigitOrAlphabet:
             s = "QutotedDigitOrAlphabet";
             break;
+        case TokType::RemStatement:
+            s = "RemStatement";
+            break;
         }
         return std::format_to(fc.out(), "{}", s);
     }
 };
 
-auto Test() -> void
+auto Test0() -> void
 {
     using std::ranges::views::filter;
     using std::ranges::to;
@@ -141,10 +145,9 @@ auto Test() -> void
         pair<string, TokType>{ "\\(", TokType::LeftParen },
         pair<string, TokType>{ "\\)", TokType::RightParen },
         pair<string, TokType>{ "\n", TokType::Newline },
-        pair<string, TokType>{ "\"((\\\\[^\n])|[^\\\\\"\n])*\"", TokType::Terminal },
+        pair<string, TokType>{ "\"((\\\\[^\n\r])|[^\\\\\"\n])*\"", TokType::Terminal },
         pair<string, TokType>{ "'[a-zA-Z0-9]'", TokType::QutotedDigitOrAlphabet },        
         pair<string, TokType>{ "r\"((\\\\[^\n])|[^\\\\\"\n])*\"", TokType::RegularExpression },
-
     };
 
     auto l = Lexer<TokType>::New(rules);
@@ -190,7 +193,33 @@ auto Test() -> void
     }
 }
 
+auto Test1() -> void
+{
+    using std::ranges::views::filter;
+    using std::ranges::to;
+
+    array rules =
+    {
+        pair<string, TokType>{ "(Re[m])((((\t))|(( ))))((((([^\r\n])))*))", TokType::RemStatement }, // lex wrong, maybe parens handle issue
+        pair<string, TokType>{ "\n", TokType::Newline },
+    };
+
+    auto l = Lexer<TokType>::New(rules);
+    string code;
+    {
+        code = "Rem 123\nRem 456";
+        auto toks = l.Lex(code) | filter([](auto& x) -> bool { return x.Type != TokType::Newline; }) | to<vector<Token<TokType>>>();
+        Assert(toks.size() == 2, "tokens size not equal as expect");
+        Assert(toks[0].Type == TokType::RemStatement, "toks[0] type not " nameof(TokType::RemStatement));
+        Assert(toks[1].Type == TokType::RemStatement, "toks[0] type not " nameof(TokType::RemStatement));
+    }
+}
+
 export
 {
-    auto Test() -> void;
+    auto Test() -> void
+    {
+        Test0();
+        Test1();
+    }
 }

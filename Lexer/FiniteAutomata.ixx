@@ -26,6 +26,7 @@ enum class Strategy : int
     PassRange,
     BlockOne,
     BlockRange,
+    Multiple,
 };
 
 template <>
@@ -61,6 +62,9 @@ struct std::formatter<Strategy, char>
         case Strategy::BlockRange:
             s = nameof(Strategy::BlockRange);
             break;
+        case Strategy::Multiple:
+            s = nameof(Strategy::Multiple);
+            break;
         default:
             break;
         }
@@ -73,11 +77,26 @@ template <typename T>
 struct Step
 {
 public:
+    static auto PackAsOneStep(vector<Step> steps) -> Step
+    {
+        for (auto const& x : steps)
+        {
+            Assert(x.Signal != Strategy::Multiple, nameof(Strategy::Multiple) " not allowed nest " nameof(Strategy::Multiple));
+        }
+        return { .Signal = Strategy::Multiple, .Steps = move(steps) };
+    }
+
     Strategy Signal = Strategy::PassOne;
-    // TODO maybe merge below 3 field in the future
-    T Data;
-    T Left;
-    T Right;
+    vector<Step> Steps;
+    union
+    {
+        T Data;
+        struct
+        {
+            T Left;
+            T Right;
+        };
+    };
 
     /// <summary>
     /// for Step as key ordering in map, also important for iterate item in result of Graph::OutStepsOf--PassOne, PassRange... first, which is same as the order in Strategy definition
@@ -86,7 +105,19 @@ public:
     {
         if (Signal == that.Signal)
         {
-            return OrderValue() < that.OrderValue();
+            switch (Signal)
+            {
+            case Strategy::PassOne:
+            case Strategy::PassRange:
+                return Data < that.Data;
+            case Strategy::BlockOne:
+            case Strategy::BlockRange:
+                return Left + Right < that.Left + that.Right;
+            case Strategy::Multiple:
+                return Steps < Steps;
+            default:
+                throw logic_error(std::format("not handled Signal: {}", static_cast<int>(Signal)));
+            }
         }
         else
         {
@@ -109,6 +140,8 @@ public:
             case Strategy::PassRange:
             case Strategy::BlockRange:
                 return Left == that.Left and Right == that.Right;
+            case Strategy::Multiple:
+                return Steps == Steps;
             }
         }
         return false;
@@ -118,101 +151,7 @@ public:
     {
         return not operator==(that);
     }
-
-    /// <summary>
-    /// for support not same type map.contains
-    /// </summary>
-    /// TODO remove in the future
-    auto operator< (char c) const -> bool
-    {
-        // by actual test, below compare act as expected TODO think
-        // should match the order semantic defined by Step < Step
-        // user OrderValue to control compare branch correct, how to present pass and block
-        // how to control pass or 
-        switch (Signal)
-        {
-        case Strategy::PassOne:
-            if (c == Data)
-            {
-                return false;
-            }
-            else if (c < Data)
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
-        case Strategy::BlockOne: 
-
-            return Data == c;
-        case Strategy::PassRange:
-            if (c < Left)
-            {
-                return true;
-            }
-            else if (c > Right)
-            {
-
-            }
-            if (c >= Left and c <= Right)
-            {
-                return true;
-            }
-            return false;
-        }
-        throw logic_error(std::format("not handled Signal: {}", static_cast<int>(Signal)));
-    }
-private:
-    auto OrderValue() const -> float
-    {
-        float v = 0;
-        switch (Signal)
-        {
-        case Strategy::PassOne:
-            v = Data;
-            v += 0.5;
-            break;
-        case Strategy::BlockOne:
-            v = Data;
-            break;
-        case Strategy::PassRange:
-            v = (Left + Right) / 2;
-            v += 0.5;
-            break;
-        case Strategy::BlockRange:
-            v = (Left + Right) / 2;
-            break;
-        default:
-            throw logic_error(std::format("not handled Signal: {}", static_cast<int>(Signal)));
-        }
-        return v;
-    }
 };
-
-auto operator! (Strategy const& a) -> Strategy
-{
-    switch (a)
-    {
-    case Strategy::BlockOne:
-        return Strategy::PassOne;
-    case Strategy::PassOne:
-        return Strategy::BlockOne;
-    case Strategy::PassRange:
-        return Strategy::BlockRange;
-    case Strategy::BlockRange:
-        return Strategy::PassRange;
-    default:
-        throw logic_error(std::format("not handled Signal: {}", static_cast<int>(a)));
-    }
-}
-
-template <typename T>
-auto operator< (char b, Step<T> const& a) -> bool
-{
-    return not (a < b);
-}
 
 template <typename Input, typename AcceptStateResult>
 class FiniteAutomata
@@ -284,6 +223,33 @@ public:
                     return HandleResult(p.second);
                 }
                 break;
+            case Strategy::Multiple:
+                for (auto const& x : step.Steps)
+                {
+                    switch (x.Signal)
+                    {
+                    case Strategy::BlockOne:
+                        if (input == x.Data)
+                        {
+                            goto MatchFailed;
+                        }
+                        break;
+                    case Strategy::BlockRange:
+                        if (input >= x.Left and input <= x.Right)
+                        {
+                            goto MatchFailed;
+                        }
+                        break;
+                    case Strategy::PassOne:
+                    case Strategy::PassRange:
+                        throw logic_error("now not support PassXXX in" nameof(Strategy::Multiple));
+                    default:
+                        throw logic_error(format("not handled Strategy {}", static_cast<int>(x.Signal)));
+                    }
+                }
+                return HandleResult(p.second);
+            MatchFailed:
+                break;
             default:
                 throw logic_error(format("not handled Strategy {}", static_cast<int>(step.Signal)));
             }
@@ -324,20 +290,39 @@ public:
         return FiniteAutomataDraft(s0, { s1 }, move(transitionTable), {});
     }
 
-    static auto Not(FiniteAutomataDraft a) -> FiniteAutomataDraft
+    static auto BlockRange(vector<char> singleChars, vector<pair<char, char>> ranges) -> FiniteAutomataDraft
     {
-        a.transitionTable.Traverse([](pair<State, vector<pair<Step<Input>, State>>>& item)
-        {
-            for (auto& e : item.second)
-            {
-                if (e.first != epsilon)
-                {
-                    e.first.Signal = not e.first.Signal;
-                }
-            }
-        });
+        auto transitionTable = GraphDraft<Step<Input>>();
+        auto start = transitionTable.AllocateState();
+        auto accept = transitionTable.AllocateState();
 
-        return a;
+        if (singleChars.size() == 1 and ranges.empty())
+        {
+            transitionTable.AddTransition(start, Step{ .Signal = Strategy::BlockOne, .Data = singleChars.front() }, accept);
+        }
+        else if (singleChars.empty() and ranges.size() == 1)
+        {
+            transitionTable.AddTransition(start, Step{ .Signal = Strategy::BlockRange, .Left = ranges.front().first, .Right = ranges.front().second }, accept);
+        }
+        else
+        {
+            vector<Step<Input>> steps;
+            steps.reserve(singleChars.size() + ranges.size());
+
+            for (auto x : singleChars)
+            {
+                steps.push_back(Step{ .Signal = Strategy::BlockOne, .Data = x });
+            }
+            for (auto& x : ranges)
+            {
+                steps.push_back(Step{ .Signal = Strategy::BlockRange, .Left = x.first, .Right = x.second });
+            }
+
+            auto step = Step<Input>::PackAsOneStep(move(steps));
+            transitionTable.AddTransition(start, move(step), accept);
+        }
+
+        return FiniteAutomataDraft(start, { accept }, move(transitionTable), {});
     }
 
     // follow priority order to run FiniteAutomataDraft<char> combination, parentheses, closure, concatenation and alternation
@@ -417,22 +402,26 @@ public:
         return a;
     }
 
-    static auto Range(char a, char b) -> FiniteAutomataDraft
+    static auto PassRange(vector<char> singleChars, vector<pair<char, char>> ranges) -> FiniteAutomataDraft
     {
-        if (not (std::isalnum(a) and std::isalnum(b) and a < b))
-        {
-            throw std::out_of_range(format("{} and {} should be number or alphabet", a, b));
-        }
         auto transitionTable = GraphDraft<Step<Input>>();
         auto start = transitionTable.AllocateState();
         auto accept = transitionTable.AllocateState();
 
-        auto n0 = transitionTable.AllocateState();
-        auto n1 = transitionTable.AllocateState();
-
-        transitionTable.AddTransition(start, epsilon, n0);
-        transitionTable.AddTransition(n0, Step{ .Signal = Strategy::PassRange, .Left = a, .Right = b }, n1);
-        transitionTable.AddTransition(n1, epsilon, accept);
+        for (auto x : singleChars)
+        {
+            transitionTable.AddTransition(start, Step{ .Signal = Strategy::PassOne, .Data = x }, accept);
+        }
+        for (auto& x : ranges)
+        {
+            auto a = x.first;
+            auto b = x.second;
+            if (not (std::isalnum(a) and std::isalnum(b) and a < b))
+            {
+                throw std::out_of_range(format("{} and {} should be number or alphabet", a, b));
+            }
+            transitionTable.AddTransition(start, Step{ .Signal = Strategy::PassRange, .Left = a, .Right = b }, accept);
+        }
 
         return FiniteAutomataDraft(start, { accept }, move(transitionTable), {});
     }
@@ -536,6 +525,9 @@ struct std::formatter<Step<T>, char>
         case Strategy::PassRange:
             format_to(back_inserter(out), "({}: {}-{})", t.Signal, t.Left, t.Right);
             break;
+        case Strategy::Multiple:
+            format_to(back_inserter(out), "({}: {})", t.Signal, t.Steps);
+            break;
         default:
             break;
         }
@@ -547,9 +539,6 @@ export
 {
     template <typename T>
     struct Step;
-    template <typename T>
-    auto operator< (char b, Step<T> const& a) -> bool;
-    auto operator! (Strategy const& a) -> Strategy;
     template <typename Input, typename Result>
     class FiniteAutomataDraft;
     template <typename Input, typename Result>
