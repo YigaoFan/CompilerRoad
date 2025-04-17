@@ -54,6 +54,7 @@ export
     using LeftSide = String;
     using SimpleRightSide = vector<String>;
     using SimpleGrammar = pair<LeftSide, vector<SimpleRightSide>>;
+    using SimpleGrammars = std::map<LeftSide, vector<SimpleRightSide>>;
     template <typename T>
     concept IToken = requires (T t)
     {
