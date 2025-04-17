@@ -337,12 +337,20 @@ public:
 
         auto Transform(Combine const* combine, GrammarTransformInfo* info) -> void
         {
+            if (combine->Productions->Items.size() == 1)
+            {
+                ParseRule2SimpleGrammarTransformer::Transform(combine->Productions->Items.front().get(), info);
+            }
+            else
+            {
+                // why need create a new symbol? because SimpleGrammar not support alter semantic in a rule
             String auxGrammarName{ format("{}_com_{}", info->Left, info->Counter++) };
             GrammarTransformInfo subInfo = info->CreateSubInfo(auxGrammarName);
             ParseRule2SimpleGrammarTransformer::Transform(combine->Productions.get(), &subInfo);
 
             info->OtherGrammars.push_back({ subInfo.Left, move(subInfo.MainRights) });
             info->AppendOnLastRule(auxGrammarName);
+        }
         }
 
         auto Transform(Optional const* optional, GrammarTransformInfo* info) -> void
