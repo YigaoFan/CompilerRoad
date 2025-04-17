@@ -38,7 +38,7 @@ struct formatter<CppCodeForm<vector<SimpleGrammar>>, char>
         std::basic_format_parse_context<char> fpc{":#}"};
         rangeFmt.underlying().parse(fpc);
 
-        format_to(fc.out(), "export vector<SimpleGrammar> grammars =\n");
+        format_to(fc.out(), "export SimpleGrammars grammars =\n");
         format_to(fc.out(), "{{\n");
         for (auto const& x : t.Value)
         {
