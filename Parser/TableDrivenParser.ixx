@@ -642,8 +642,6 @@ private:
                 }
             }
         }
-
-
     }
 
     template <typename Tok, typename Result>
