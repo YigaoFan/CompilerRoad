@@ -145,9 +145,24 @@ public:
         return operator== (static_cast<char const*>(that));
     }
 
+    auto operator== (string_view that) const -> bool
+    {
+        return static_cast<string_view>(*this) == that;
+    }
+
     auto operator< (String const& that) const -> bool
     {
         return static_cast<string_view>(*this) < static_cast<string_view>(that);
+    }
+
+    auto operator< (string_view that) const -> bool
+    {
+        return static_cast<string_view>(*this) < that;
+    }
+
+    auto operator<=> (String const& that) const noexcept -> std::strong_ordering
+    {
+        return static_cast<string_view>(*this) <=> static_cast<string_view>(that);
     }
 
     auto operator+ (char c) const -> String
@@ -318,6 +333,27 @@ private:
             delete share;
             share = nullptr;
         }
+    }
+};
+
+template <>
+struct std::less<String>
+{
+    using is_transparent = void;
+
+    bool operator()(String const& lhs, string_view const& rhs) const
+    {
+        return lhs < rhs;
+    }
+
+    bool operator()(string_view const& lhs, String const& rhs) const
+    {
+        return lhs < string_view(rhs);
+    }
+
+    bool operator()(String const& lhs, String const& rhs) const
+    {
+        return lhs < rhs;
     }
 };
 
