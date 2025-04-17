@@ -49,7 +49,12 @@ public:
         return instream.get();
     }
 
-    auto Copy() const -> FileStream
+    auto RollbackTo(size_t i) -> void
+    {
+        throw; // not implement
+    }
+
+    auto CurrentPosition() -> size_t
     {
         throw; // not implement
     }
@@ -73,15 +78,27 @@ struct VectorStream
             --Index;
         }
     }
+
+    auto RollbackTo(size_t i) -> void
+    {
+        Index = i;
+    }
+
+    auto CurrentPosition() -> size_t
+    {
+        return Index;
+    }
 };
 
 export
 {
     template <typename T, typename Item>
-    concept Stream = requires (T t)
+    concept Stream = requires (T t, size_t i)
     {
         { t.NextItem() } -> std::same_as<Item>;
         { t.Rollback() } -> std::same_as<void>;
+        { t.RollbackTo(i) } -> std::same_as<void>;
+        { t.CurrentPosition() } -> std::same_as<size_t>;
     };
     template <typename T>
     struct VectorStream;
