@@ -27,9 +27,6 @@
     <ClCompile Include="FiniteAutomataBuilder.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="LexerTest.ixx">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Util.h">

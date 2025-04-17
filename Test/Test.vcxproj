@@ -129,6 +129,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="LexerTest.ixx" />
+    <ClCompile Include="ParserTest.ixx" />
     <ClCompile Include="Test.ixx" />
   </ItemGroup>
   <ItemGroup>
@@ -137,6 +139,9 @@
     </ProjectReference>
     <ProjectReference Include="..\Lexer\Lexer.vcxproj">
       <Project>{68f5665b-36c6-4778-965e-750cee33142a}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\Parser\Parser.vcxproj">
+      <Project>{fa5d972e-26e4-470b-bec1-cd4c634861fe}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

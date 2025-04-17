@@ -138,7 +138,6 @@
     <ClCompile Include="FiniteAutomataBuilder.ixx" />
     <ClCompile Include="Graph.ixx" />
     <ClCompile Include="Lexer.ixx" />
-    <ClCompile Include="LexerTest.ixx" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Util.h" />

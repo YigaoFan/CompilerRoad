@@ -18,5 +18,11 @@
     <ClCompile Include="Test.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="LexerTest.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ParserTest.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
