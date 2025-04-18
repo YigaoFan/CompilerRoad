@@ -547,6 +547,10 @@ private:
         };
         while (true)
         {
+            if (symbolStack.empty())
+            {
+                return root;
+            }
             auto const& focus = symbolStack.top();
 
             if (focus.IsEof() and MatchTerminal(focus, word))
@@ -609,6 +613,7 @@ private:
                             if (auto r = ParseWith<Tok, Result>(focus.Value, rule, stream, callback, externalParsers);
                                 r.has_value())
                             {
+                                stream.Rollback();
                                 DoWhenGotChild(move(r.value()), bool_constant<true>{}); // handle as terminal, self filled children
                                 goto SubPartParseSuccess;
                             }
