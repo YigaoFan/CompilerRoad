@@ -68,7 +68,7 @@
 	 * But when add back parens, regular expression has issue on nested parens handling. Fixed: remove a wrong optimization that remove the paren at head and tail which is not paired
      - [X] remove some lex rules which is unnecessary, like LINE-START, LINE-END and so on. Only reserve some needs. <2025-03-09 Sun>
      - [X] support using undersocre to concat two lines <2025-03-10 Mon>
-*** TODO Generate parse code[12/28] DEADLINE: <2025-03-17 Mon>
+*** TODO Generate parse code[13/27] DEADLINE: <2025-03-17 Mon>
 - [X] preparation for parse debug <2025-03-12 Wed>
   - [X] add language snippet loader
   - [X] add part grammars loader to make it independent from other noise grammars
@@ -89,6 +89,10 @@
 - [X] refactor refactor GrammarSet:<2025-04-15 Tue>
   - [X] replace string_view with String
   - [X] replace vector<SimpleGrammar> with SimpleGrammars(actual is map)
+- [ ] implement and test GLL. implement at <2025-04-17 Thu>
+  - GLL should also have memory to rollbck to retry each parse path
+  - add rollback when inner parse success <2025-04-18 Fri>
+  - return root when symbol stack is empty <2025-04-18 Fri>
 - [ ] refactor LLParser as GLLParser: add const to data member and simplify the Parse method
 - [ ] add grammar conflict resolver, ignore some conflicts
 - [ ] add comment for terminal token from parser part
@@ -99,16 +103,15 @@
 - [X] check use of private lex rule symbol(non-token type) in parse rules. Too many rules reference the private token. Move them into parse rule? Use checker to check which parse rule references private token type <2025-04-01 Tue>
   - [X] literal-identifier. Promote them to parse rules for more flexibility. <2025-03-23 Sun>
 - [ ] terminalXXX will change if change vba.abnf file, it needs to generate code to fix it.
-- [ ] implement and test GLL. implement at <2025-04-17 Thu>
 - [ ] optimize Lexer result to use String
 - [-] pass parse with SimpleGrammar
   - [X] +fix out of range access in RemoveIndirectLeftRecur+ not use left recursive
   - [ ] fix VBA grammar
-  - [ ] make the VBA keyword ignore the word case when generate the lex code
+  - [X] make the VBA keyword ignore the word case when generate the lex code <2025-04-18 Fri>
   - [ ] a token maybe belong to different tokens, like a token can be typed name or name, and typed name belong to name. Some parse rules need typed name, some rules need name. This is not fixed, priority is not suitable, how to fix it? Implement a token type compatiable check mechanism when parser check the token
     - [ ] generate compatiable token type from lexer construction
-- [ ] pass actual grammar unit, simple to complex
-  - [ ] enum
+- [X] pass actual grammar unit, simple to complex
+  - [X] enum
 - [X] support EOS token <2025-03-14 Fri>
 - [ ] why grammar literal use vector not map?
 - [ ] recover tree node as abnf form shown
