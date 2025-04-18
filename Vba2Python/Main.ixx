@@ -26,7 +26,8 @@ int main()
     //}
 
     string f = "VbaGrammarUnit.vba";
-    String focusSymbol = "enum-declaration";
+    //String focusSymbol = "enum-declaration";
+    String focusSymbol = "public-type-declaration";
     auto [_, partGrammars] = gs.SeparateGrammarBaseOn("expression", focusSymbol);
     for (auto const& x : LoadSource(f))
     {
@@ -38,18 +39,28 @@ int main()
         {
             continue;
         }
-        auto p = TableDrivenParser::ConstructFrom(focusSymbol, { partGrammars.begin(), partGrammars.end() }, terminal2IntTokenType);
-        p.Parse<Token<TokType>, void>(VectorStream{ .Tokens = move(toks) }, [](auto) { },
-            { static_cast<int>(TokType::EOS), },
+        // { "Reserved-identifier", }
+        auto p = GLLParser::ConstructFrom(focusSymbol, partGrammars, terminal2IntTokenType, 
+            { static_cast<int>(TokType::CommentEndOfLine), static_cast<int>(TokType::RemStatement), },
             {
-                { static_cast<int>(TokType::Terminal198), { static_cast<int>(TokType::EOS) /* order here is priority */ } }, // terminalXXX will change if change vba.abnf file
-                { static_cast<int>(TokType::Terminal221), { static_cast<int>(TokType::Integer) } }, 
-            },
+                // terminalXXX will change if change vba.abnf file
+                { static_cast<int>(TokType::Terminal200)/*0*/, { static_cast<int>(TokType::Integer), static_cast<int>(TokType::Expression), } }, // Integer also can replace Expression. All Expression atom's prefix can replace/trigger Expression
+                { static_cast<int>(TokType::Integer), { static_cast<int>(TokType::Expression), } },
+            });
+        auto st = p.Parse<Token<TokType>, void>(VectorStream{ .Tokens = move(toks) }, [](auto) { },
             {
                 { "expression", [](auto& stream) { return ParseExp<Token<TokType>, void>(stream, 0); }},
             }
         );
-        std::println("parse done");
+
+        if (st.has_value())
+        {
+            std::println("parse done");
+        }
+        else
+        {
+            std::println("parse failed");
+        }
         //std::println("{}: {}", x.first, x.second);
     }
     return 0;
@@ -68,7 +79,7 @@ int main()
             content.push_back('\n');
         }
         file.close();
-        auto toks = l.Lex(content) | filter([](auto& x) -> bool { return x.Type != TokType::Whitespace and x.Type != TokType::EOL; }) | to<vector<Token<TokType>>>();
+        //auto toks = l.Lex(content) | filter([](auto& x) -> bool { return x.Type != TokType::Whitespace and x.Type != TokType::EOL; }) | to<vector<Token<TokType>>>();
         std::println("Hello World");
         //toks.push_back({ .Type = TokType::EOF, .Value = "" }); // add eof
     }
