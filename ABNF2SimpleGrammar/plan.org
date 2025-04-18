@@ -86,7 +86,7 @@
   - [ ] add '0' to Pratt parser
   - [ ] generate Pratt parser with generated TokType
 - [X] fix BlockRange logic in regular expression <2025-03-28 Fri>
-- [X] refactor refactor GrammarSet:<2025-04-15 Tue>
+- [X] why grammar literal use vector not map? refactor refactor GrammarSet:<2025-04-15 Tue>
   - [X] replace string_view with String
   - [X] replace vector<SimpleGrammar> with SimpleGrammars(actual is map)
 - [ ] implement and test GLL. implement at <2025-04-17 Thu>
@@ -113,7 +113,6 @@
 - [X] pass actual grammar unit, simple to complex
   - [X] enum
 - [X] support EOS token <2025-03-14 Fri>
-- [ ] why grammar literal use vector not map?
 - [ ] recover tree node as abnf form shown
 - [ ] support line concat
 - [ ] solve operator priority issue
