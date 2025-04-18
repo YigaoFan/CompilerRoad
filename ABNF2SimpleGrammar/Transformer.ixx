@@ -62,6 +62,16 @@ auto NormalEscape2RegExpAsPrintLiteral(String normalString) -> String
             {
                 AppendCppStringLiteralSlash(regExp);
             }
+            else if (std::isalpha(c)) // alphabet in string ignore case
+            {
+                regExp.push_back('(');
+                regExp.push_back(std::toupper(c));
+                regExp.push_back('|');
+                regExp.push_back(std::tolower(c));
+                regExp.push_back(')');
+                break;
+            }
+            
             regExp.push_back(c);
             break;
         }
