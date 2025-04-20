@@ -20,6 +20,7 @@ using std::function;
 using std::optional;
 using std::unexpected;
 using std::bool_constant;
+using std::tuple;
 using std::move;
 using std::format;
 using std::println;
@@ -123,7 +124,7 @@ public:
     auto operator= (LLParser&& that) -> LLParser& = default;
 
     template <IToken Tok, typename Result>
-    auto Parse(Stream<Tok> auto stream, INodeCallback<Tok, Result> auto callback, set<int> ignorableTokenTypes = {}, map<int, set<int>> replaceableTokenTypes = {}, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> externalParsers = {})
+    auto Parse(Stream<Tok> auto stream, INodeCallback<Tok, Result> auto callback, set<int> ignorableTokenTypes = {}, map<int, set<int>> replaceableTokenTypes = {}, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> externalParsers = {}) const
         -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
         using std::ranges::to;
@@ -374,6 +375,7 @@ static auto ReconstructSyntaxTreeAffectedByRemoveLeftRecursive(SyntaxTreeNode<To
 class GLLParser
 {
 private:
+    friend struct UnitParser;
     String const startSymbol;
     SimpleGrammars const grammars;
     map<pair<String, int>, vector<int>> const parseTable;
@@ -444,55 +446,24 @@ public:
     auto operator= (GLLParser&& that) -> GLLParser& = default;
 
     template <IToken Tok, typename Result>
-    auto Parse(Stream<Tok> auto stream, INodeCallback<Tok, Result> auto callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> externalParsers = {})
+    auto Parse(Stream<Tok> auto stream, INodeCallback<Tok, Result> auto callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> externalParsers = {}) const
         -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
         stack<Symbol> symbolStack;
         symbolStack.push(String(eof));
         symbolStack.push(startSymbol);
         SyntaxTreeNode<Tok, Result> root{ "root", { startSymbol } }; // TODO why "root" is shown as "???" in VS debugger
-        
-        return ParseWith<Tok, Result>(move(root), move(symbolStack), stream, callback, externalParsers);
+        map<tuple<String, int, size_t>, int> tryMemory;
+        // add a list to store the parse path
+        stack<pair<tuple<String, int, size_t>, int>> parsePath; // focus, token type, token index in stream
+
+        return ParseWith<Tok, Result>(move(root), move(symbolStack), stream, parsePath, callback, externalParsers);
     }
 
 private:
-    /// <summary>
-    /// Only work for terminal symbol or eof
-    /// </summary>
-    template <IToken Tok>
-    auto MatchTerminal(Symbol const& symbol, Tok const& token) -> bool
-    {
-        if (symbol.IsEof())
-        {
-            if (token.IsEof())
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
-        }
-
-        // TODO compare the actual value, like the Keyword include multiple values
-        if (auto dest = terminal2IntTokenType.at(symbol.Value); dest == static_cast<int>(token.Type))
-        {
-            return true;
-        }
-        else if (auto current = static_cast<int>(token.Type); replaceableTokenTypes.contains(current))
-        {
-            return replaceableTokenTypes.at(current).contains(dest);
-        }
-        return false;
-    }
-
-    auto IsTerminal(Symbol const& t) -> bool
-    {
-        return not grammars.contains(t.Value);
-    }
-
     template <IToken Tok, typename Result>
-    auto ParseWith(String startSymbol, SimpleRightSide startRule, Stream<Tok> auto& stream, INodeCallback<Tok, Result> auto& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers) -> ParserResult<SyntaxTreeNode<Tok, Result>>
+    auto ParseWith(String startSymbol, SimpleRightSide startRule, Stream<Tok> auto& stream, stack<pair<tuple<String, int, size_t>, int>>& parsePath, INodeCallback<Tok, Result> auto& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers) const
+        -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
         stack<Symbol> symbolStack;
         for (auto x : startRule)
@@ -501,152 +472,222 @@ private:
         }
         SyntaxTreeNode<Tok, Result> root{ startSymbol, move(startRule) };
         
-        return ParseWith<Tok, Result>(move(root), move(symbolStack), stream, callback, externalParsers);
+        return ParseWith<Tok, Result>(move(root), move(symbolStack), stream, parsePath, callback, externalParsers);
     }
 
     template <IToken Tok, typename Result>
-    auto ParseWith(SyntaxTreeNode<Tok, Result> root, stack<Symbol> initSymbolStack, Stream<Tok> auto& stream, INodeCallback<Tok, Result> auto& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers) -> ParserResult<SyntaxTreeNode<Tok, Result>>
+    auto ParseWith(SyntaxTreeNode<Tok, Result> root, stack<Symbol> initSymbolStack, Stream<Tok> auto& stream, stack<pair<tuple<String, int, size_t>, int>>& parsePath, INodeCallback<Tok, Result> auto const& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
-        stack<Symbol> symbolStack = move(initSymbolStack);
-        auto word = stream.NextItem();
-        stack<SyntaxTreeNode<Tok, Result>*> workingNodes;
-        workingNodes.push(&root);
-        auto PopAllFilledNodes = [&workingNodes, &callback]()
+        struct UnitParser // use to recover parse
         {
-            while (not workingNodes.empty())
+            SyntaxTreeNode<Tok, Result> Root;
+            decltype(stream)& TokStream; // attention: attention when retry parse
+            stack<Symbol> SymbolStack;
+            stack<SyntaxTreeNode<Tok, Result>*> WorkingNodes;
+
+            decltype(callback)& Callback;
+            map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(TokStream)&)>> const& ExternalParsers;
+            GLLParser const* const TopParser;
+
+            auto SetupWorkingNodesFromRoot() -> void
             {
-                if (auto working = workingNodes.top(); working->Children.size() == working->ChildSymbols.size())
+                WorkingNodes.push(&Root);
+            }
+
+            auto Parse(vector<pair<tuple<String, int, size_t>, int>> tryMemory) -> ParserResult<SyntaxTreeNode<Tok, Result>> // learn from lexer retry mechanism
+            {
+                stack<pair<tuple<String, int, size_t>, int>> parsePath; // todo make compile pass
+
+                auto word = TokStream.NextItem();
+                auto PopAllFilledNodes = [this]()
                 {
-                    TryRemoveChildrenCausedByLeftFactor(working);
-                    if (not (working->Name.EndWith(leftFactorSuffix) or working->Name.EndWith(rightRecurSuffix)))
+                    while (not WorkingNodes.empty())
                     {
-                        callback(working);
-                    }
-
-                    workingNodes.pop();
-                }
-                else
-                {
-                    break;
-                }
-            }
-        };
-        auto DoWhenGotChild = [&]<bool IsTerminal>(variant<Tok, SyntaxTreeNode<Tok, Result>> child, bool_constant<IsTerminal>)
-        {
-            symbolStack.pop();
-            workingNodes.top()->Children.push_back(move(child));
-            if constexpr (not IsTerminal)
-            {
-                workingNodes.push(&std::get<SyntaxTreeNode<Tok, Result>>(workingNodes.top()->Children.back()));
-            }
-            PopAllFilledNodes();
-            if constexpr (IsTerminal)
-            {
-                word = stream.NextItem();
-            }
-        };
-        while (true)
-        {
-            if (symbolStack.empty())
-            {
-                return root;
-            }
-            auto const& focus = symbolStack.top();
-
-            if (focus.IsEof() and MatchTerminal(focus, word))
-            {
-                return root;
-            }
-            else if (externalParsers.contains(focus.Value))
-            {
-                stream.Rollback(); // return the current word, to let external parser read it
-                auto subResult = externalParsers.at(focus.Value)(stream);
-                if (not subResult.has_value())
-                {
-                    return subResult;
-                }
-                DoWhenGotChild(move(subResult.value()), bool_constant<true>{}); // handle as terminal
-            }
-            else if (IsTerminal(focus) or focus.IsEof())
-            {
-                if (MatchTerminal(focus, word))
-                {
-                    DoWhenGotChild(move(word), bool_constant<true>{});
-                }
-                else if (ignorableTokenTypes.contains(static_cast<int>(word.Type)))
-                {
-                    word = stream.NextItem();
-                }
-                else
-                {
-                    return unexpected(ParseFailResult{ .Message = format("cannot found token for terminal symbol({}) when parse", focus.Value) });
-                }
-            }
-            else
-            {
-                if (auto dest = pair{ focus.Value, static_cast<int>(word.Type) }; parseTable.contains(dest))
-                {
-                ExpandRule:
-                    // add log here
-                    auto& js = parseTable.at(dest);
-                    if (js.size() == 1)
-                    {
-                        auto const& rule = grammars.at(focus.Value).at(js.front());
-                        DoWhenGotChild(SyntaxTreeNode<Tok, Result>{ focus.Value, rule, }, bool_constant<false>{});
-
-                        if (not rule.empty())
+                        if (auto working = WorkingNodes.top(); working->Children.size() == working->ChildSymbols.size())
                         {
-                            for (auto const& b : reverse(rule))
+                            TryRemoveChildrenCausedByLeftFactor(working);
+                            if (not (working->Name.EndWith(leftFactorSuffix) or working->Name.EndWith(rightRecurSuffix)))
                             {
-                                symbolStack.push(b);
+                                Callback(working);
                             }
+
+                            WorkingNodes.pop();
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                };
+                auto DoWhenGotChild = [&]<bool IsTerminal>(variant<Tok, SyntaxTreeNode<Tok, Result>> child, bool_constant<IsTerminal>)
+                {
+                    SymbolStack.pop();
+                    WorkingNodes.top()->Children.push_back(move(child));
+                    if constexpr (not IsTerminal)
+                    {
+                        WorkingNodes.push(&std::get<SyntaxTreeNode<Tok, Result>>(WorkingNodes.top()->Children.back()));
+                    }
+                    PopAllFilledNodes();
+                    if constexpr (IsTerminal)
+                    {
+                        word = TokStream.NextItem();
+                    }
+                };
+                while (true)
+                {
+                    if (SymbolStack.empty())
+                    {
+                        return move(Root); // attention: move will make this root empty which maybe used in future retry
+                    }
+                    auto const& focus = SymbolStack.top();
+
+                    if (focus.IsEof() and MatchTerminal(focus, word))
+                    {
+                        return move(Root);
+                    }
+                    else if (ExternalParsers.contains(focus.Value))
+                    {
+                        TokStream.Rollback(); // return the current word, to let external parser read it
+                        auto subResult = ExternalParsers.at(focus.Value)(TokStream);
+                        if (not subResult.has_value())
+                        {
+                            return subResult;
+                        }
+                        DoWhenGotChild(move(subResult.value()), bool_constant<true>{}); // handle as terminal
+                    }
+                    else if (IsTerminal(focus) or focus.IsEof())
+                    {
+                        if (MatchTerminal(focus, word))
+                        {
+                            DoWhenGotChild(move(word), bool_constant<true>{});
+                        }
+                        else if (TopParser->ignorableTokenTypes.contains(static_cast<int>(word.Type)))
+                        {
+                            word = TokStream.NextItem();
+                        }
+                        else
+                        {
+                            return unexpected(ParseFailResult{ .Message = format("cannot found token for terminal symbol({}) when parse", focus.Value) });
                         }
                     }
                     else
                     {
-                        stream.Rollback();
-                        auto pos = stream.CurrentPosition();
-                        for (auto j : js)
+                        if (auto dest = pair{ focus.Value, static_cast<int>(word.Type) }; TopParser->parseTable.contains(dest))
                         {
-                            auto const& rule = grammars.at(focus.Value).at(j);
-
-                            if (auto r = ParseWith<Tok, Result>(focus.Value, rule, stream, callback, externalParsers);
-                                r.has_value())
+                        ExpandRule:
+                            // add log here
+                            auto& js = TopParser->parseTable.at(dest);
+                            if (js.size() == 1)
                             {
-                                stream.Rollback();
-                                DoWhenGotChild(move(r.value()), bool_constant<true>{}); // handle as terminal, self filled children
-                                goto SubPartParseSuccess;
+                                auto const& rule = TopParser->grammars.at(focus.Value).at(js.front());
+                                DoWhenGotChild(SyntaxTreeNode<Tok, Result>{ focus.Value, rule, }, bool_constant<false>{});
+
+                                if (not rule.empty())
+                                {
+                                    for (auto const& b : reverse(rule))
+                                    {
+                                        SymbolStack.push(b);
+                                    }
+                                }
                             }
-                            stream.RollbackTo(pos);
+                            else
+                            {
+                                TokStream.Rollback();
+                                auto pos = TokStream.CurrentPosition();
+                                tuple k{ dest.first, dest.second, pos };
+
+                                for (auto i = 0; auto j : js)
+                                {
+                                    auto const& rule = TopParser->grammars.at(focus.Value).at(j);
+
+                                    if (auto r = TopParser->ParseWith<Tok, Result>(focus.Value, rule, TokStream, parsePath, Callback, ExternalParsers);
+                                        r.has_value())
+                                    {
+                                        TokStream.Rollback();
+                                        DoWhenGotChild(move(r.value()), bool_constant<true>{}); // handle as terminal, self filled children
+                                        parsePath.push({ k, i });
+                                        goto SubPartParseSuccess;
+                                    }
+                                    TokStream.RollbackTo(pos);
+                                    ++i;
+                                }
+                                parsePath.push({ k, std::numeric_limits<unsigned>::max() });
+                                return unexpected(ParseFailResult{ .Message = format("try parse ambiguous (nonterminal: {}, word: {}) failed", focus.Value, word) });
+                            SubPartParseSuccess:
+                                ;
+                            }
                         }
-                        return unexpected(ParseFailResult{ .Message = format("try parse ambiguous (nonterminal: {}, word: {}) failed", focus.Value, word) });
-                    SubPartParseSuccess:
-                        ;
-                    }
-                }
-                else if (auto current = static_cast<int>(word.Type); replaceableTokenTypes.contains(current))
-                {
-                    auto const& replaces = replaceableTokenTypes.at(current);
-                    for (auto x : replaces)
-                    {
-                        dest.second = x;
-                        if (parseTable.contains(dest))
+                        else if (auto current = static_cast<int>(word.Type); TopParser->replaceableTokenTypes.contains(current))
                         {
-                            goto ExpandRule;
+                            auto const& replaces = TopParser->replaceableTokenTypes.at(current);
+                            for (auto x : replaces)
+                            {
+                                dest.second = x;
+                                if (TopParser->parseTable.contains(dest))
+                                {
+                                    goto ExpandRule;
+                                }
+                            }
+                            return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, replaceable word: {}) when parse", focus.Value, word) });
+                        }
+                        else if (TopParser->ignorableTokenTypes.contains(static_cast<int>(word.Type)))
+                        {
+                            word = TokStream.NextItem();
+                        }
+                        else
+                        {
+                            return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, word: {}) when parse", focus.Value, word) });
                         }
                     }
-                    return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, replaceable word: {}) when parse", focus.Value, word) });
-                }
-                else if (ignorableTokenTypes.contains(static_cast<int>(word.Type)))
-                {
-                    word = stream.NextItem();
-                }
-                else
-                {
-                    return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, word: {}) when parse", focus.Value, word) });
                 }
             }
-        }
+
+            /// <summary>
+            /// Only work for terminal symbol or eof
+            /// </summary>
+            auto MatchTerminal(Symbol const& symbol, Tok const& token) -> bool
+            {
+                if (symbol.IsEof())
+                {
+                    if (token.IsEof())
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                }
+
+                // TODO compare the actual value, like the Keyword include multiple values
+                if (auto dest = TopParser->terminal2IntTokenType.at(symbol.Value); dest == static_cast<int>(token.Type))
+                {
+                    return true;
+                }
+                else if (auto current = static_cast<int>(token.Type); TopParser->replaceableTokenTypes.contains(current))
+                {
+                    return TopParser->replaceableTokenTypes.at(current).contains(dest);
+                }
+                return false;
+            }
+
+            auto IsTerminal(Symbol const& t) -> bool
+            {
+                return not TopParser->grammars.contains(t.Value);
+            }
+        };
+
+        auto p = UnitParser
+        { 
+            .Root = move(root),
+            .TokStream = stream,
+            .SymbolStack = move(initSymbolStack),
+            .Callback = callback,
+            .ExternalParsers = externalParsers,
+            .TopParser = this, 
+        };
+        p.SetupWorkingNodesFromRoot();
+        return p.Parse({});
     }
 
     template <typename Tok, typename Result>
