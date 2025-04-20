@@ -478,7 +478,7 @@ private:
     template <IToken Tok, typename Result>
     auto ParseWith(SyntaxTreeNode<Tok, Result> root, stack<Symbol> initSymbolStack, Stream<Tok> auto& stream, stack<pair<tuple<String, int, size_t>, int>>& parsePath, INodeCallback<Tok, Result> auto const& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
-        struct UnitParser // use to recover parse
+        struct UnitParser // use to store then recover parse
         {
             SyntaxTreeNode<Tok, Result> Root;
             decltype(stream)& TokStream; // attention: attention when retry parse
