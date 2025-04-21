@@ -25,6 +25,7 @@ using std::move;
 using std::format;
 using std::println;
 using std::ranges::views::reverse;
+using std::ranges::views::drop;
 
 template <typename T, typename Tok, typename Result>
 concept INodeCallback = requires (T callback, SyntaxTreeNode<Tok, Result>* node)
@@ -453,34 +454,26 @@ public:
         symbolStack.push(String(eof));
         symbolStack.push(startSymbol);
         SyntaxTreeNode<Tok, Result> root{ "root", { startSymbol } }; // TODO why "root" is shown as "???" in VS debugger
-        map<tuple<String, int, size_t>, int> tryMemory;
+        //map<tuple<String, int, size_t>, int> tryMemory;
         // add a list to store the parse path
-        stack<pair<tuple<String, int, size_t>, int>> parsePath; // focus, token type, token index in stream
+        //stack<pair<tuple<String, int, size_t>, int>> parsePath; // focus, token type, token index in stream
 
-        return ParseWith<Tok, Result>(move(root), move(symbolStack), stream, parsePath, callback, externalParsers);
+        return ParseWith<Tok, Result>(move(root), move(symbolStack), stream, callback, externalParsers);
     }
 
 private:
     template <IToken Tok, typename Result>
-    auto ParseWith(String startSymbol, SimpleRightSide startRule, Stream<Tok> auto& stream, stack<pair<tuple<String, int, size_t>, int>>& parsePath, INodeCallback<Tok, Result> auto& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers) const
-        -> ParserResult<SyntaxTreeNode<Tok, Result>>
+    auto ParseWith(SyntaxTreeNode<Tok, Result> root, stack<Symbol> initSymbolStack, Stream<Tok> auto& stream, INodeCallback<Tok, Result> auto const& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
-        stack<Symbol> symbolStack;
-        for (auto x : startRule)
+        enum class UnitContinuation
         {
-            symbolStack.push(move(x)); // TODO when symbolStack is empty, exit parse method
-        }
-        SyntaxTreeNode<Tok, Result> root{ startSymbol, move(startRule) };
-        
-        return ParseWith<Tok, Result>(move(root), move(symbolStack), stream, parsePath, callback, externalParsers);
-    }
+            Success,
+            Wait2ParseNewUnit,
+        };
 
-    template <IToken Tok, typename Result>
-    auto ParseWith(SyntaxTreeNode<Tok, Result> root, stack<Symbol> initSymbolStack, Stream<Tok> auto& stream, stack<pair<tuple<String, int, size_t>, int>>& parsePath, INodeCallback<Tok, Result> auto const& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
-    {
         struct UnitParser // use to store then recover parse
         {
-            SyntaxTreeNode<Tok, Result> Root;
+            SyntaxTreeNode<Tok, Result> Root; // attention: move will make this root empty which maybe used in future retry
             decltype(stream)& TokStream; // attention: attention when retry parse
             stack<Symbol> SymbolStack;
             stack<SyntaxTreeNode<Tok, Result>*> WorkingNodes;
@@ -494,10 +487,8 @@ private:
                 WorkingNodes.push(&Root);
             }
 
-            auto Parse(vector<pair<tuple<String, int, size_t>, int>> tryMemory) -> ParserResult<SyntaxTreeNode<Tok, Result>> // learn from lexer retry mechanism
+            auto Parse(unsigned& stepCounter, stack<pair<UnitParser, unsigned>>& parsePath) -> ParserResult<UnitContinuation> // learn from lexer retry mechanism
             {
-                stack<pair<tuple<String, int, size_t>, int>> parsePath; // todo make compile pass
-
                 auto word = TokStream.NextItem();
                 auto PopAllFilledNodes = [this]()
                 {
@@ -537,13 +528,13 @@ private:
                 {
                     if (SymbolStack.empty())
                     {
-                        return move(Root); // attention: move will make this root empty which maybe used in future retry
+                        return UnitContinuation::Success;
                     }
                     auto const& focus = SymbolStack.top();
 
                     if (focus.IsEof() and MatchTerminal(focus, word))
                     {
-                        return move(Root);
+                        return UnitContinuation::Success;
                     }
                     else if (ExternalParsers.contains(focus.Value))
                     {
@@ -551,7 +542,7 @@ private:
                         auto subResult = ExternalParsers.at(focus.Value)(TokStream);
                         if (not subResult.has_value())
                         {
-                            return subResult;
+                            return unexpected(move(subResult.error()));
                         }
                         DoWhenGotChild(move(subResult.value()), bool_constant<true>{}); // handle as terminal
                     }
@@ -596,25 +587,29 @@ private:
                                 auto pos = TokStream.CurrentPosition();
                                 tuple k{ dest.first, dest.second, pos };
 
-                                for (auto i = 0; auto j : js)
+                                for (auto i = 0; auto j : js | drop(stepCounter))
                                 {
-                                    auto const& rule = TopParser->grammars.at(focus.Value).at(j);
+                                    ++stepCounter;
 
-                                    if (auto r = TopParser->ParseWith<Tok, Result>(focus.Value, rule, TokStream, parsePath, Callback, ExternalParsers);
-                                        r.has_value())
-                                    {
-                                        TokStream.Rollback();
-                                        DoWhenGotChild(move(r.value()), bool_constant<true>{}); // handle as terminal, self filled children
-                                        parsePath.push({ k, i });
-                                        goto SubPartParseSuccess;
-                                    }
-                                    TokStream.RollbackTo(pos);
-                                    ++i;
+                                    // use coroutines to implement below
+                                    auto const& rule = TopParser->grammars.at(focus.Value).at(j);
+                                    parsePath.push({ Construct(TopParser, focus.Value, rule, TokStream, Callback, ExternalParsers), 0 });
+                                    return UnitContinuation::Wait2ParseNewUnit;
+
+                                    // do when come sub parse result
+                                    //if (auto r = TopParser->ParseWith<Tok, Result>(focus.Value, rule, TokStream, Callback, ExternalParsers);
+                                    //    r.has_value())
+                                    //{
+                                    //    TokStream.Rollback();
+                                    //    DoWhenGotChild(move(r.value()), bool_constant<true>{}); // handle as terminal, self filled children
+                                    //    goto SubPartParseSuccess;
+                                    //}
+                                    //TokStream.RollbackTo(pos);
                                 }
-                                parsePath.push({ k, std::numeric_limits<unsigned>::max() });
+                                stepCounter = std::numeric_limits<unsigned>::max();
                                 return unexpected(ParseFailResult{ .Message = format("try parse ambiguous (nonterminal: {}, word: {}) failed", focus.Value, word) });
-                            SubPartParseSuccess:
-                                ;
+                            //SubPartParseSuccess:
+                                //;
                             }
                         }
                         else if (auto current = static_cast<int>(word.Type); TopParser->replaceableTokenTypes.contains(current))
@@ -675,10 +670,35 @@ private:
             {
                 return not TopParser->grammars.contains(t.Value);
             }
+
+            static auto Construct(GLLParser const* const topParser, String startSymbol, SimpleRightSide startRule, decltype(TokStream)& stream, decltype(Callback)& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers)
+                -> UnitParser
+            {
+                stack<Symbol> symbolStack;
+                for (auto x : startRule)
+                {
+                    symbolStack.push(move(x)); // TODO when symbolStack is empty, exit parse method
+                }
+                SyntaxTreeNode<Tok, Result> root{ startSymbol, move(startRule) };
+
+                auto p = UnitParser
+                {
+                    .Root = move(root),
+                    .TokStream = stream,
+                    .SymbolStack = move(symbolStack),
+                    .Callback = callback,
+                    .ExternalParsers = externalParsers,
+                    .TopParser = topParser,
+                };
+                p.SetupWorkingNodesFromRoot();
+                return p;
+            }
         };
 
+        stack<pair<UnitParser, unsigned>> units;
+
         auto p = UnitParser
-        { 
+        {
             .Root = move(root),
             .TokStream = stream,
             .SymbolStack = move(initSymbolStack),
@@ -687,7 +707,26 @@ private:
             .TopParser = this, 
         };
         p.SetupWorkingNodesFromRoot();
-        return p.Parse({});
+        units.push({ move(p), 0 });
+        for (;;)
+        {
+            if (auto r = units.top().first.Parse(units.top().second, units); r.has_value())
+            {
+                switch (r.value())
+                {
+                case UnitContinuation::Success:
+                    // assemble the current parse result to upper level
+                    units.pop();
+                case UnitContinuation::Wait2ParseNewUnit:
+                    break;
+                }
+            }
+            else
+            {
+                // retry
+            }
+        }
+        throw;
     }
 
     template <typename Tok, typename Result>
