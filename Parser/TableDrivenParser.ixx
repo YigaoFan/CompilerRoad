@@ -2,6 +2,7 @@ export module Parser:TableDrivenParser;
 
 import std;
 import Base;
+import Generator;
 import :ParserBase;
 import :GrammarSet;
 import :GrammarPreProcess;
@@ -463,7 +464,8 @@ public:
 
 private:
     template <IToken Tok, typename Result>
-    auto ParseWith(SyntaxTreeNode<Tok, Result> root, stack<Symbol> initSymbolStack, Stream<Tok> auto& stream, INodeCallback<Tok, Result> auto const& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
+    auto ParseWith(SyntaxTreeNode<Tok, Result> root, stack<Symbol> initSymbolStack, Stream<Tok> auto& stream, INodeCallback<Tok, Result> auto const& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers) const
+        -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
         enum class UnitContinuation
         {
@@ -476,25 +478,22 @@ private:
             SyntaxTreeNode<Tok, Result> Root; // attention: move will make this root empty which maybe used in future retry
             decltype(stream)& TokStream; // attention: attention when retry parse
             stack<Symbol> SymbolStack;
-            stack<SyntaxTreeNode<Tok, Result>*> WorkingNodes;
 
             decltype(callback)& Callback;
             map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(TokStream)&)>> const& ExternalParsers;
             GLLParser const* const TopParser;
 
-            auto SetupWorkingNodesFromRoot() -> void
+            auto Parse(stack<UnitParser>& parsePath) -> Exchanger<ParserResult<UnitContinuation>, SyntaxTreeNode<Tok, Result>>
             {
-                WorkingNodes.push(&Root);
-            }
+                stack<SyntaxTreeNode<Tok, Result>*> workingNodes;
+                workingNodes.push(&Root);
 
-            auto Parse(unsigned& stepCounter, stack<pair<UnitParser, unsigned>>& parsePath) -> ParserResult<UnitContinuation> // learn from lexer retry mechanism
-            {
                 auto word = TokStream.NextItem();
-                auto PopAllFilledNodes = [this]()
+                auto PopAllFilledNodes = [this, &workingNodes]()
                 {
-                    while (not WorkingNodes.empty())
+                    while (not workingNodes.empty())
                     {
-                        if (auto working = WorkingNodes.top(); working->Children.size() == working->ChildSymbols.size())
+                        if (auto working = workingNodes.top(); working->Children.size() == working->ChildSymbols.size())
                         {
                             TryRemoveChildrenCausedByLeftFactor(working);
                             if (not (working->Name.EndWith(leftFactorSuffix) or working->Name.EndWith(rightRecurSuffix)))
@@ -502,7 +501,7 @@ private:
                                 Callback(working);
                             }
 
-                            WorkingNodes.pop();
+                            workingNodes.pop();
                         }
                         else
                         {
@@ -513,10 +512,10 @@ private:
                 auto DoWhenGotChild = [&]<bool IsTerminal>(variant<Tok, SyntaxTreeNode<Tok, Result>> child, bool_constant<IsTerminal>)
                 {
                     SymbolStack.pop();
-                    WorkingNodes.top()->Children.push_back(move(child));
+                    workingNodes.top()->Children.push_back(move(child));
                     if constexpr (not IsTerminal)
                     {
-                        WorkingNodes.push(&std::get<SyntaxTreeNode<Tok, Result>>(WorkingNodes.top()->Children.back()));
+                        workingNodes.push(&std::get<SyntaxTreeNode<Tok, Result>>(workingNodes.top()->Children.back()));
                     }
                     PopAllFilledNodes();
                     if constexpr (IsTerminal)
@@ -528,13 +527,14 @@ private:
                 {
                     if (SymbolStack.empty())
                     {
-                        return UnitContinuation::Success;
+                        co_yield UnitContinuation::Success;
                     }
                     auto const& focus = SymbolStack.top();
 
                     if (focus.IsEof() and MatchTerminal(focus, word))
                     {
-                        return UnitContinuation::Success;
+                        co_yield UnitContinuation::Success;
+                        co_return;
                     }
                     else if (ExternalParsers.contains(focus.Value))
                     {
@@ -542,7 +542,8 @@ private:
                         auto subResult = ExternalParsers.at(focus.Value)(TokStream);
                         if (not subResult.has_value())
                         {
-                            return unexpected(move(subResult.error()));
+                            co_yield unexpected(move(subResult.error()));
+                            co_return;
                         }
                         DoWhenGotChild(move(subResult.value()), bool_constant<true>{}); // handle as terminal
                     }
@@ -558,7 +559,8 @@ private:
                         }
                         else
                         {
-                            return unexpected(ParseFailResult{ .Message = format("cannot found token for terminal symbol({}) when parse", focus.Value) });
+                            co_yield unexpected(ParseFailResult{ .Message = format("cannot found token for terminal symbol({}) when parse", focus.Value) });
+                            co_return;
                         }
                     }
                     else
@@ -587,29 +589,26 @@ private:
                                 auto pos = TokStream.CurrentPosition();
                                 tuple k{ dest.first, dest.second, pos };
 
-                                for (auto i = 0; auto j : js | drop(stepCounter))
+                                for (auto j : js)
                                 {
-                                    ++stepCounter;
-
                                     // use coroutines to implement below
                                     auto const& rule = TopParser->grammars.at(focus.Value).at(j);
-                                    parsePath.push({ Construct(TopParser, focus.Value, rule, TokStream, Callback, ExternalParsers), 0 });
-                                    return UnitContinuation::Wait2ParseNewUnit;
+                                    auto p = Construct(TopParser, focus.Value, rule, TokStream, Callback, ExternalParsers);
+                                    parsePath.push(move(p));
+                                    co_yield UnitContinuation::Wait2ParseNewUnit;
 
-                                    // do when come sub parse result
-                                    //if (auto r = TopParser->ParseWith<Tok, Result>(focus.Value, rule, TokStream, Callback, ExternalParsers);
-                                    //    r.has_value())
-                                    //{
-                                    //    TokStream.Rollback();
-                                    //    DoWhenGotChild(move(r.value()), bool_constant<true>{}); // handle as terminal, self filled children
-                                    //    goto SubPartParseSuccess;
-                                    //}
-                                    //TokStream.RollbackTo(pos);
+                                    if (auto r = move(co_await false); r.has_value())
+                                    {
+                                        TokStream.Rollback();
+                                        DoWhenGotChild(move(r.value()), bool_constant<true>{}); // handle as terminal, self filled children
+                                        goto SubPartParseSuccess;
+                                    }
+                                    TokStream.RollbackTo(pos);
                                 }
-                                stepCounter = std::numeric_limits<unsigned>::max();
-                                return unexpected(ParseFailResult{ .Message = format("try parse ambiguous (nonterminal: {}, word: {}) failed", focus.Value, word) });
-                            //SubPartParseSuccess:
-                                //;
+                                co_yield unexpected(ParseFailResult{ .Message = format("try parse ambiguous (nonterminal: {}, word: {}) failed", focus.Value, word) });
+                                co_return;
+                            SubPartParseSuccess:
+                                ;
                             }
                         }
                         else if (auto current = static_cast<int>(word.Type); TopParser->replaceableTokenTypes.contains(current))
@@ -623,7 +622,8 @@ private:
                                     goto ExpandRule;
                                 }
                             }
-                            return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, replaceable word: {}) when parse", focus.Value, word) });
+                            co_yield unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, replaceable word: {}) when parse", focus.Value, word) });
+                            co_return;
                         }
                         else if (TopParser->ignorableTokenTypes.contains(static_cast<int>(word.Type)))
                         {
@@ -631,7 +631,8 @@ private:
                         }
                         else
                         {
-                            return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, word: {}) when parse", focus.Value, word) });
+                            co_yield unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, word: {}) when parse", focus.Value, word) });
+                            co_return;
                         }
                     }
                 }
@@ -690,12 +691,12 @@ private:
                     .ExternalParsers = externalParsers,
                     .TopParser = topParser,
                 };
-                p.SetupWorkingNodesFromRoot();
                 return p;
             }
         };
 
-        stack<pair<UnitParser, unsigned>> units;
+        stack<UnitParser> units;
+        stack<Exchanger<ParserResult<UnitContinuation>, SyntaxTreeNode<Tok, Result>>> parsings;
 
         auto p = UnitParser
         {
@@ -706,27 +707,38 @@ private:
             .ExternalParsers = externalParsers,
             .TopParser = this, 
         };
-        p.SetupWorkingNodesFromRoot();
-        units.push({ move(p), 0 });
+        units.push(move(p));
+        parsings.push(units.top().Parse(units));
         for (;;)
         {
-            if (auto r = units.top().first.Parse(units.top().second, units); r.has_value())
+            if (parsings.top().MoveNext() and parsings.top().Current().has_value())
             {
-                switch (r.value())
+                switch (parsings.top().Current().value())
                 {
                 case UnitContinuation::Success:
-                    // assemble the current parse result to upper level
+                {
+                    // if all symbol parsed, all is done, return the result
+                    if (parsings.size() == 1 and units.size() == 1)
+                    {
+                        return move(units.top().Root);
+                    }
+                    auto subResult = move(units.top().Root);
                     units.pop();
+                    parsings.pop();
+                    parsings.top().Input(move(subResult));
+                    break;
+                }
                 case UnitContinuation::Wait2ParseNewUnit:
                     break;
                 }
             }
             else
             {
-                // retry
+                // pop to continue last parsing
+                units.pop();
+                parsings.pop();
             }
         }
-        throw;
     }
 
     template <typename Tok, typename Result>

@@ -42,5 +42,8 @@
     <ClCompile Include="GrammarPreProcess.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Generator.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
