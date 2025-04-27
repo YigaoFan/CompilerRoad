@@ -11,201 +11,201 @@ template <typename T>
 class Generator
 {
 public:
-	struct Promise
-	{
-		using CoroHandle = coroutine_handle<Promise>;
-		T Value;
-
-		auto initial_suspend() -> suspend_always
-		{
-			return {};
-		}
-
-		auto final_suspend() noexcept -> suspend_always
-		{
-			return {};
-		}
-
-		void unhandled_exception()
-		{
-			std::terminate();
-		}
-
-		auto yield_value(T t) -> suspend_always
-		{
-			Value = move(t);
-			return {};
-		}
-
-		auto get_return_object()
-		{
-			return CoroHandle::from_promise(*this);
-		}
-
-		auto return_void() -> void
-		{}
-	};
-private:
-	Promise::CoroHandle handle;
-public:
-    using promise_type = Promise;
-
-	Generator(Promise::CoroHandle handle) : handle(move(handle))
-	{ }
-
-	Generator(Generator const& that) = delete;
-	Generator(Generator&& that) noexcept
-		: handle(move(that.handle))
-	{
-		that.handle = nullptr;
-	}
-
-	Generator& operator= (Generator const& that) = delete;
-	Generator& operator= (Generator&& that) noexcept
-	{
-		this->handle = move(that.handle);
-		that.handle = nullptr;
-		return *this;
-	}
-
-	~Generator()
-	{
-		if (handle)
-		{
-			handle.destroy();
-		}
-	}
-
-	auto MoveNext() -> bool
-	{
-		if (handle.done())
-		{
-            return false;
-		}
-
-        handle.resume();
-        return not handle.done();
-	}
-
-	auto Current() -> T&
-	{
-		return handle.promise().Value;
-	}
-};
-
-template <typename Output, typename Input>
-class Exchanger
-{
-public:
-	struct Promise
-	{
-		using CoroHandle = coroutine_handle<Promise>;
-		Output Out;
-		optional<Input> In;
+    struct Promise
+    {
+        using CoroHandle = coroutine_handle<Promise>;
+        T Value;
 
         auto initial_suspend() -> suspend_always
         {
             return {};
         }
 
-		auto final_suspend() noexcept -> suspend_always
-		{
-			return {};
-		}
+        auto final_suspend() noexcept -> suspend_always
+        {
+            return {};
+        }
 
-		void unhandled_exception()
-		{
-			std::terminate();
-		}
+        void unhandled_exception()
+        {
+            std::terminate();
+        }
 
-		auto yield_value(Output out) -> suspend_always
-		{
-			Out = move(out);
-			return {};
-		}
+        auto yield_value(T t) -> suspend_always
+        {
+            Value = move(t);
+            return {};
+        }
 
-		auto get_return_object() -> Exchanger
-		{
-			return CoroHandle::from_promise(*this);
-		}
+        auto get_return_object()
+        {
+            return CoroHandle::from_promise(*this);
+        }
 
-		auto return_void() -> void
-		{
-		}
-
-		auto await_transform(bool)
-		{
-			struct Awaiter
-			{
-				Promise* Mediator;
-				bool await_ready() noexcept { return false; }
-				void await_suspend(std::coroutine_handle<>) noexcept {}
-				auto& await_resume() noexcept { return Mediator->In; }
-			};
-			return Awaiter{ .Mediator = this };
-		}
-
-		template <typename T>
-		auto await_transform(T) = delete;
-	};
+        auto return_void() -> void
+        {}
+    };
 private:
-	Promise::CoroHandle handle;
+    Promise::CoroHandle handle;
 public:
-	using promise_type = Promise;
+    using promise_type = Promise;
 
-	Exchanger(Promise::CoroHandle handle) : handle(move(handle))
-	{
-	}
+    Generator(Promise::CoroHandle handle) : handle(move(handle))
+    { }
 
-	Exchanger(Exchanger const& that) = delete;
-	Exchanger(Exchanger&& that) noexcept
-		: handle(move(that.handle))
-	{
-		that.handle = nullptr;
-	}
+    Generator(Generator const& that) = delete;
+    Generator(Generator&& that) noexcept
+        : handle(move(that.handle))
+    {
+        that.handle = nullptr;
+    }
 
-	Exchanger& operator= (Exchanger const& that) = delete;
-	Exchanger& operator= (Exchanger&& that) noexcept
-	{
-		this->handle = move(that.handle);
-		that.handle = nullptr;
-		return *this;
-	}
+    Generator& operator= (Generator const& that) = delete;
+    Generator& operator= (Generator&& that) noexcept
+    {
+        this->handle = move(that.handle);
+        that.handle = nullptr;
+        return *this;
+    }
 
-	~Exchanger()
-	{
-		if (handle)
-		{
-			handle.destroy();
-		}
-	}
+    ~Generator()
+    {
+        if (handle)
+        {
+            handle.destroy();
+        }
+    }
 
-	auto MoveNext() -> bool
-	{
-		if (handle.done())
-		{
-			return false;
-		}
+    auto MoveNext() -> bool
+    {
+        if (handle.done())
+        {
+            return false;
+        }
 
-		handle.resume();
-		return not handle.done();
-	}
+        handle.resume();
+        return not handle.done();
+    }
 
-	auto Current() -> Output&
-	{
-		return handle.promise().Out;
-	}
+    auto Current() -> T&
+    {
+        return handle.promise().Value;
+    }
+};
 
-	auto Input(Input in) -> void
-	{
-		handle.promise().In = move(in);
-	}
+template <typename Output, typename Input>
+class Exchanger
+{
+public:
+    struct Promise
+    {
+        using CoroHandle = coroutine_handle<Promise>;
+        Output Out;
+        optional<Input> In;
+
+        auto initial_suspend() -> suspend_always
+        {
+            return {};
+        }
+
+        auto final_suspend() noexcept -> suspend_always
+        {
+            return {};
+        }
+
+        void unhandled_exception()
+        {
+            std::terminate();
+        }
+
+        auto yield_value(Output out) -> suspend_always
+        {
+            Out = move(out);
+            return {};
+        }
+
+        auto get_return_object() -> Exchanger
+        {
+            return CoroHandle::from_promise(*this);
+        }
+
+        auto return_void() -> void
+        {
+        }
+
+        auto await_transform(bool)
+        {
+            struct Awaiter
+            {
+                Promise* Mediator;
+                bool await_ready() noexcept { return false; }
+                void await_suspend(std::coroutine_handle<>) noexcept {}
+                auto& await_resume() noexcept { return Mediator->In; }
+            };
+            return Awaiter{ .Mediator = this };
+        }
+
+        template <typename T>
+        auto await_transform(T) = delete;
+    };
+private:
+    Promise::CoroHandle handle;
+public:
+    using promise_type = Promise;
+
+    Exchanger(Promise::CoroHandle handle) : handle(move(handle))
+    {
+    }
+
+    Exchanger(Exchanger const& that) = delete;
+    Exchanger(Exchanger&& that) noexcept
+        : handle(move(that.handle))
+    {
+        that.handle = nullptr;
+    }
+
+    Exchanger& operator= (Exchanger const& that) = delete;
+    Exchanger& operator= (Exchanger&& that) noexcept
+    {
+        this->handle = move(that.handle);
+        that.handle = nullptr;
+        return *this;
+    }
+
+    ~Exchanger()
+    {
+        if (handle)
+        {
+            handle.destroy();
+        }
+    }
+
+    auto MoveNext() -> bool
+    {
+        if (handle.done())
+        {
+            return false;
+        }
+
+        handle.resume();
+        return not handle.done();
+    }
+
+    auto Current() -> Output&
+    {
+        return handle.promise().Out;
+    }
+
+    auto Input(Input in) -> void
+    {
+        handle.promise().In = move(in);
+    }
 };
 
 export
 {
     template <typename T>
     class Generator;
-	template <typename Output, typename Input>
-	class Exchanger;
+    template <typename Output, typename Input>
+    class Exchanger;
 }
