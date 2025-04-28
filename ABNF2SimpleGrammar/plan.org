@@ -94,6 +94,7 @@
     - [X] add UnitParser to store parse state then to recover <2025-04-20 Sun>
   - add rollback when inner parse success <2025-04-18 Fri>
   - return root when symbol stack is empty <2025-04-18 Fri>
+  - first time run pass the GLL parser <2025-04-28 Mon>
 - [ ] refactor LLParser as GLLParser: add const to data member and simplify the Parse method
 - [ ] add grammar conflict resolver, ignore some conflicts
 - [ ] add comment for terminal token from parser part
