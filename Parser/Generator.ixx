@@ -138,7 +138,7 @@ public:
             struct Awaiter
             {
                 Promise* Mediator;
-                bool await_ready() noexcept { return false; }
+                bool await_ready() noexcept { return Mediator->In.has_value(); }
                 void await_suspend(std::coroutine_handle<>) noexcept {}
                 auto& await_resume() noexcept { return Mediator->In; }
             };

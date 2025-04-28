@@ -5,6 +5,7 @@ import Parser;
 import VbaSpec;
 import GrammarUnitLoader;
 import PrattParser;
+import Generator;
 
 using std::string;
 using std::pair;
@@ -12,8 +13,24 @@ using std::vector;
 using std::ranges::views::filter;
 using std::ranges::to;
 
+auto GenNums() -> Exchanger<int, string>
+{
+    co_yield 1;
+    auto s = co_await false;
+    std::println("got {} from outside", s.value());
+    co_yield 2;
+    co_yield 3;
+}
+
 int main()
 {
+    auto g = GenNums();
+    g.Input("Hello inside");
+    while (g.MoveNext())
+    {
+        std::println("num: {}", g.Current());
+    }
+    return 0;
     auto gs = GrammarUnitLoader({ grammars.begin(), grammars.end() });
     //auto [g0, g1] = gs.SeparateGrammarBaseOn("expression", "Procedural-module");
     auto l = Lexer<TokType>::New(lexRules);
