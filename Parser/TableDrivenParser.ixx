@@ -511,7 +511,10 @@ private:
                 };
                 auto DoWhenGotChild = [&]<bool IsTerminal>(variant<Tok, SyntaxTreeNode<Tok, Result>> child, bool_constant<IsTerminal>)
                 {
-                    SymbolStack.pop();
+                    if (not SymbolStack.empty()) // TODO temp condition
+                    {
+                        SymbolStack.pop();
+                    }
                     workingNodes.top()->Children.push_back(move(child));
                     if constexpr (not IsTerminal)
                     {
@@ -595,20 +598,39 @@ private:
                                     auto const& rule = TopParser->grammars.at(focus.Value).at(j);
                                     auto p = Construct(TopParser, focus.Value, rule, TokStream, Callback, ExternalParsers);
                                     parsePath.push(move(p));
+                                    println("push a unit");
                                     co_yield UnitContinuation::Wait2ParseNewUnit;
 
                                     if (auto r = move(co_await false); r.has_value())
                                     {
+                                        println("continue parse with sub result");
                                         TokStream.Rollback();
                                         DoWhenGotChild(move(r.value()), bool_constant<true>{}); // handle as terminal, self filled children
-                                        goto SubPartParseSuccess;
+
+                                        SimpleRightSide rs;
+                                        while (not SymbolStack.empty())
+                                        {
+                                            rs.push_back(move(SymbolStack.top().Value));
+                                            SymbolStack.pop();
+                                        }
+                                        auto remainParser = Construct(TopParser, "remain", move(rs), TokStream, Callback, ExternalParsers);
+                                        parsePath.push(move(remainParser));
+                                        println("push a remain unit");
+                                        co_yield UnitContinuation::Wait2ParseNewUnit;
+                                        if (auto remainResult = move(co_await false); remainResult.has_value())
+                                        {
+                                            println("remain parse done");
+                                            //TokStream.Rollback();
+                                            DoWhenGotChild(move(remainResult.value()), bool_constant<true>{});
+                                            co_yield UnitContinuation::Success;
+                                            co_return;
+                                        }
                                     }
+                                    println("continue parse with next optional rule of {} options", js.size());
                                     TokStream.RollbackTo(pos);
                                 }
                                 co_yield unexpected(ParseFailResult{ .Message = format("try parse ambiguous (nonterminal: {}, word: {}) failed", focus.Value, word) });
                                 co_return;
-                            SubPartParseSuccess:
-                                ;
                             }
                         }
                         else if (auto current = static_cast<int>(word.Type); TopParser->replaceableTokenTypes.contains(current))
@@ -676,7 +698,7 @@ private:
                 -> UnitParser
             {
                 stack<Symbol> symbolStack;
-                for (auto x : startRule)
+                for (auto x : reverse(startRule))
                 {
                     symbolStack.push(move(x)); // TODO when symbolStack is empty, exit parse method
                 }
@@ -711,12 +733,14 @@ private:
         parsings.push(units.top().Parse(units));
         for (;;)
         {
+            println("current parsings size: {}, units size: {}", parsings.size(), units.size());
             if (parsings.top().MoveNext() and parsings.top().Current().has_value())
             {
                 switch (parsings.top().Current().value())
                 {
                 case UnitContinuation::Success:
                 {
+                    println("Success");
                     // if all symbol parsed, all is done, return the result
                     if (parsings.size() == 1 and units.size() == 1)
                     {
@@ -729,11 +753,14 @@ private:
                     break;
                 }
                 case UnitContinuation::Wait2ParseNewUnit:
+                    println("Wait2ParseNewUnit");
+                    parsings.push(units.top().Parse(units));
                     break;
                 }
             }
             else
             {
+                println("parse failed");
                 // pop to continue last parsing
                 units.pop();
                 parsings.pop();
