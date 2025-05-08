@@ -493,7 +493,7 @@ private:
                 {
                     while (not workingNodes.empty())
                     {
-                        if (auto working = workingNodes.top(); working->Children.size() == working->ChildSymbols.size())
+                        if (auto working = workingNodes.top(); working->Children.size() == working->ChildSymbols.size()) // here may have issue
                         {
                             TryRemoveChildrenCausedByLeftFactor(working);
                             if (not (working->Name.EndWith(leftFactorSuffix) or working->Name.EndWith(rightRecurSuffix)))
@@ -509,10 +509,11 @@ private:
                         }
                     }
                 };
-                auto DoWhenGotChild = [&]<bool IsTerminal>(variant<Tok, SyntaxTreeNode<Tok, Result>> child, bool_constant<IsTerminal>)
+                auto DoWhenGotChild = [&]<bool IsTerminal, bool ContinueUseWord>(variant<Tok, SyntaxTreeNode<Tok, Result>> child, bool_constant<IsTerminal>, bool_constant<ContinueUseWord>)
                 {
                     if (not SymbolStack.empty()) // TODO temp condition
                     {
+                        // and node's Name is remain
                         SymbolStack.pop();
                     }
                     workingNodes.top()->Children.push_back(move(child));
@@ -521,7 +522,7 @@ private:
                         workingNodes.push(&std::get<SyntaxTreeNode<Tok, Result>>(workingNodes.top()->Children.back()));
                     }
                     PopAllFilledNodes();
-                    if constexpr (IsTerminal)
+                    if constexpr (IsTerminal and ContinueUseWord) // if continue use word, we should update it
                     {
                         word = TokStream.NextItem();
                     }
@@ -530,6 +531,7 @@ private:
                 {
                     if (SymbolStack.empty())
                     {
+                        TokStream.Rollback();
                         co_yield UnitContinuation::Success;
                     }
                     auto const& focus = SymbolStack.top();
@@ -548,13 +550,13 @@ private:
                             co_yield unexpected(move(subResult.error()));
                             co_return;
                         }
-                        DoWhenGotChild(move(subResult.value()), bool_constant<true>{}); // handle as terminal
+                        DoWhenGotChild(move(subResult.value()), bool_constant<true>{}, bool_constant<true>{}); // handle as terminal
                     }
                     else if (IsTerminal(focus) or focus.IsEof())
                     {
                         if (MatchTerminal(focus, word))
                         {
-                            DoWhenGotChild(move(word), bool_constant<true>{});
+                            DoWhenGotChild(move(word), bool_constant<true>{}, bool_constant<true>{});
                         }
                         else if (TopParser->ignorableTokenTypes.contains(static_cast<int>(word.Type)))
                         {
@@ -576,7 +578,7 @@ private:
                             if (js.size() == 1)
                             {
                                 auto const& rule = TopParser->grammars.at(focus.Value).at(js.front());
-                                DoWhenGotChild(SyntaxTreeNode<Tok, Result>{ focus.Value, rule, }, bool_constant<false>{});
+                                DoWhenGotChild(SyntaxTreeNode<Tok, Result>{ focus.Value, rule, }, bool_constant<false>{}, bool_constant<true>{});
 
                                 if (not rule.empty())
                                 {
@@ -592,8 +594,10 @@ private:
                                 auto pos = TokStream.CurrentPosition();
                                 tuple k{ dest.first, dest.second, pos };
 
-                                for (auto j : js)
+                                for (auto i = 1; auto j : js)
                                 {
+                                    println("start parse with {} option rule of {} options of {}", i++, js.size(), focus.Value);
+
                                     // use coroutines to implement below
                                     auto const& rule = TopParser->grammars.at(focus.Value).at(j);
                                     auto p = Construct(TopParser, focus.Value, rule, TokStream, Callback, ExternalParsers);
@@ -601,32 +605,48 @@ private:
                                     println("push a unit");
                                     co_yield UnitContinuation::Wait2ParseNewUnit;
 
-                                    if (auto r = move(co_await false); r.has_value())
+                                    if (auto& r = co_await false; r.HasValue())
                                     {
                                         println("continue parse with sub result");
-                                        TokStream.Rollback();
-                                        DoWhenGotChild(move(r.value()), bool_constant<true>{}); // handle as terminal, self filled children
+                                        //TokStream.Rollback();
+                                        // handle as terminal, self filled children. 
+                                        // And we're going to use remain to handle remain symbols, so we don't continue use word
+                                        DoWhenGotChild(move(r.Get()), bool_constant<true>{}, bool_constant<false>{}); // pop symbol inner
 
-                                        SimpleRightSide rs;
-                                        while (not SymbolStack.empty())
+                                        if (SymbolStack.empty())
                                         {
-                                            rs.push_back(move(SymbolStack.top().Value));
-                                            SymbolStack.pop();
-                                        }
-                                        auto remainParser = Construct(TopParser, "remain", move(rs), TokStream, Callback, ExternalParsers);
-                                        parsePath.push(move(remainParser));
-                                        println("push a remain unit");
-                                        co_yield UnitContinuation::Wait2ParseNewUnit;
-                                        if (auto remainResult = move(co_await false); remainResult.has_value())
-                                        {
-                                            println("remain parse done");
-                                            //TokStream.Rollback();
-                                            DoWhenGotChild(move(remainResult.value()), bool_constant<true>{});
                                             co_yield UnitContinuation::Success;
                                             co_return;
                                         }
+                                        else
+                                        {
+                                            SimpleRightSide rs;
+                                            while (not SymbolStack.empty())
+                                            {
+                                                rs.push_back(move(SymbolStack.top().Value));
+                                                SymbolStack.pop();
+                                            }
+                                            auto remainParser = Construct(TopParser, "remain", rs, TokStream, Callback, ExternalParsers);
+                                            parsePath.push(move(remainParser));
+                                            println("push a remain unit of {}", dest.first);
+                                            co_yield UnitContinuation::Wait2ParseNewUnit;
+                                            if (auto& remainResult = co_await false; remainResult.HasValue())
+                                            {
+                                                println("remain parse done");
+                                                DoWhenGotChild(move(remainResult.Get()), bool_constant<true>{}, bool_constant<false>{});
+                                                co_yield UnitContinuation::Success;
+                                                co_return;
+                                            }
+                                            else
+                                            {
+                                                for (auto const& b : reverse(rs))
+                                                {
+                                                    SymbolStack.push(b);
+                                                }
+                                                SymbolStack.push(dest.first); // the focus value
+                                            }
+                                        }
                                     }
-                                    println("continue parse with next optional rule of {} options", js.size());
                                     TokStream.RollbackTo(pos);
                                 }
                                 co_yield unexpected(ParseFailResult{ .Message = format("try parse ambiguous (nonterminal: {}, word: {}) failed", focus.Value, word) });
@@ -734,6 +754,7 @@ private:
         for (;;)
         {
             println("current parsings size: {}, units size: {}", parsings.size(), units.size());
+            println("current parsing: {}({} symbols), tok pos: {}", units.top().Root.Name, units.top().SymbolStack.size(), units.top().TokStream.CurrentPosition());
             if (parsings.top().MoveNext() and parsings.top().Current().has_value())
             {
                 switch (parsings.top().Current().value())
@@ -760,10 +781,14 @@ private:
             }
             else
             {
-                println("parse failed");
+                println("parse failed: {}", parsings.top().Current().error().Message);
                 // pop to continue last parsing
                 units.pop();
                 parsings.pop();
+                if (units.empty() and parsings.empty())
+                {
+                    return unexpected(move(parsings.top().Current().error()));
+                }
             }
         }
     }
