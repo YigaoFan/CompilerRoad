@@ -74,7 +74,12 @@ export
 
         SyntaxTreeNode(String name, vector<String> childSymbols, vector<variant<Token, SyntaxTreeNode>> children = {})
             : Name(move(name)), ChildSymbols(move(childSymbols)), Children(move(children)) // typo here, Kern invoke me
-        { }
+        {
+            if (Name.Empty())
+            {
+                throw std::invalid_argument("SyntaxTreeNode::Name is empty");
+            }
+        }
 
         SyntaxTreeNode(SyntaxTreeNode&& that) = default;
 
