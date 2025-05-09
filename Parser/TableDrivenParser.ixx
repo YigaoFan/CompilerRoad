@@ -467,18 +467,15 @@ private:
     auto ParseWith(SyntaxTreeNode<Tok, Result> root, stack<Symbol> initSymbolStack, Stream<Tok> auto& stream, INodeCallback<Tok, Result> auto const& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers) const
         -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
-        enum class UnitContinuation
-        {
-            Done, // followed by co_return
-            OkOnThisChoice,
-            Wait2ParseNewUnit,
-        };
-
         enum class SubPartResult
         {
-            Success2ContinueRemain,
-            Fail,
-            AllFail,
+            Success,
+        };
+
+        struct ParseTarget
+        {
+            String StartSymbol;
+            SimpleRightSide StartRule;
         };
 
         struct UnitParser // use to store then recover parse
@@ -489,9 +486,9 @@ private:
 
             decltype(callback)& Callback;
             map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(TokStream)&)>> const& ExternalParsers;
-            GLLParser const* const TopParser;
+            GLLParser const* TopParser;
 
-            auto Parse(vector<UnitParser>& parsePath) -> Exchanger<ParserResult<UnitContinuation>, SubPartResult>
+            auto ParseWithContinuation(vector<UnitParser*>& parsePath, vector<ParseTarget> continuations) -> ParserResult<SubPartResult>
             {
                 stack<SyntaxTreeNode<Tok, Result>*> workingNodes;
                 workingNodes.push(&Root);
@@ -540,15 +537,14 @@ private:
                     if (SymbolStack.empty())
                     {
                         TokStream.Rollback();
-                        co_yield UnitContinuation::Done;
-                        co_return;
+                        return ContinueWith(parsePath, continuations);
                     }
-                    auto const& focus = SymbolStack.top();
+                    auto const focus = SymbolStack.top();
 
                     if (focus.IsEof() and MatchTerminal(focus, word))
                     {
-                        co_yield UnitContinuation::Done;
-                        co_return;
+                        Assert(continuations.empty(), "continuations should be empty when encounter EOF");
+                        return SubPartResult::Success;
                     }
                     else if (ExternalParsers.contains(focus.Value))
                     {
@@ -556,8 +552,7 @@ private:
                         auto subResult = ExternalParsers.at(focus.Value)(TokStream);
                         if (not subResult.has_value())
                         {
-                            co_yield unexpected(move(subResult.error()));
-                            co_return;
+                            return unexpected(move(subResult.error()));
                         }
                         DoWhenGotChild(move(subResult.value()), bool_constant<true>{}, bool_constant<true>{}); // handle as terminal
                     }
@@ -573,8 +568,7 @@ private:
                         }
                         else
                         {
-                            co_yield unexpected(ParseFailResult{ .Message = format("cannot found token for terminal symbol({}) when parse", focus.Value) });
-                            co_return;
+                            return unexpected(ParseFailResult{ .Message = format("cannot found token for terminal symbol({}) when parse", focus.Value) });
                         }
                     }
                     else
@@ -582,7 +576,6 @@ private:
                         if (auto dest = pair{ focus.Value, static_cast<int>(word.Type) }; TopParser->parseTable.contains(dest))
                         {
                         ExpandRule:
-                            // add log here
                             auto& js = TopParser->parseTable.at(dest);
                             if (js.size() == 1)
                             {
@@ -601,76 +594,35 @@ private:
                             {
                                 TokStream.Rollback();
                                 auto pos = TokStream.CurrentPosition();
-                                tuple k{ dest.first, dest.second, pos };
+
+                                SymbolStack.pop();
+                                SimpleRightSide rs;
+                                while (not SymbolStack.empty())
+                                {
+                                    rs.push_back(move(SymbolStack.top().Value));
+                                    SymbolStack.pop();
+                                }
+                                if (not rs.empty())
+                                {
+                                    continuations.push_back({ .StartSymbol = String(format("remain-after-{}", focus.Value)), .StartRule = move(rs) });
+                                }
 
                                 for (auto i = 1; auto j : js)
                                 {
                                     println("start parse with {} option rule of {} options of {}", i++, js.size(), focus.Value);
 
-                                    // use coroutines to implement below
                                     auto const& rule = TopParser->grammars.at(focus.Value).at(j);
                                     auto p = Construct(TopParser, focus.Value, rule, TokStream, Callback, ExternalParsers);
-                                    parsePath.push_back(move(p));
-                                    println("push a unit");
-                                    co_yield UnitContinuation::Wait2ParseNewUnit;
-
-                                    for (auto& r = co_await false; r.HasValue();) // TODO will re-ask when sub part retry
+                                    //parsePath.push_back(move(p));
+                                    auto subResult = p.ParseWithContinuation(parsePath, continuations); // make continuations copied to isolate change
+                                    if (subResult.has_value() and subResult == SubPartResult::Success)
                                     {
-                                        switch (r.Get())
-                                        {
-                                        case SubPartResult::Success2ContinueRemain:
-                                            break;
-                                        case SubPartResult::AllFail:
-                                            goto NextOption;
-                                        }
-                                        println("continue parse with sub result");
-                                        //TokStream.Rollback();
-                                        // handle as terminal, self filled children. 
-                                        // And we're going to use remain to handle remain symbols, so we don't continue use word
-                                        //DoWhenGotChild(move(r.Get()), bool_constant<true>{}, bool_constant<false>{}); // pop symbol inner
-                                        // TODO not merge sub result
-                                        if (not SymbolStack.empty()) // TODO check if need
-                                        {
-                                            SymbolStack.pop(); // TODO need to recover when future trigger retry
-                                        }
-
-                                        if (SymbolStack.empty())
-                                        {
-                                            co_yield UnitContinuation::OkOnThisChoice;
-                                        }
-                                        else
-                                        {
-                                            SimpleRightSide rs;
-                                            while (not SymbolStack.empty())
-                                            {
-                                                rs.push_back(move(SymbolStack.top().Value));
-                                                SymbolStack.pop();
-                                            }
-                                            auto remainParser = Construct(TopParser, "remain", rs, TokStream, Callback, ExternalParsers);
-                                            parsePath.push_back(move(remainParser));
-                                            println("push a remain unit after {}", dest.first);
-                                            co_yield UnitContinuation::Wait2ParseNewUnit;
-                                            if (auto& remainResult = co_await false; remainResult.HasValue() and remainResult.Get() == SubPartResult::Success2ContinueRemain)
-                                            {
-                                                println("remain parse done");
-                                                //DoWhenGotChild(move(remainResult.Get()), bool_constant<true>{}, bool_constant<false>{});
-                                                // TODO not merge remain
-                                                co_yield UnitContinuation::OkOnThisChoice; // TODO here should not be this kind value
-                                            }
-
-                                            // failed or recover from OkOnThisChoice, we need to recover the symbol stack
-                                            for (auto const& b : reverse(rs))
-                                            {
-                                                SymbolStack.push(b);
-                                            }
-                                            SymbolStack.push(dest.first); // the focus value
-                                        }
+                                        return SubPartResult::Success;
                                     }
-                                NextOption:
+                                    //parsePath.pop_back();
                                     TokStream.RollbackTo(pos);
                                 }
-                                co_yield unexpected(ParseFailResult{ .Message = format("try parse ambiguous (nonterminal: {}, word: {}) failed", focus.Value, word) });
-                                co_return;
+                                return unexpected(ParseFailResult{ .Message = format("try parse ambiguous (nonterminal: {}, word: {}) failed", focus.Value, word) });
                             }
                         }
                         else if (auto current = static_cast<int>(word.Type); TopParser->replaceableTokenTypes.contains(current))
@@ -684,8 +636,7 @@ private:
                                     goto ExpandRule;
                                 }
                             }
-                            co_yield unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, replaceable word: {}) when parse", focus.Value, word) });
-                            co_return;
+                            return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, replaceable word: {}) when parse", focus.Value, word) });
                         }
                         else if (TopParser->ignorableTokenTypes.contains(static_cast<int>(word.Type)))
                         {
@@ -693,10 +644,33 @@ private:
                         }
                         else
                         {
-                            co_yield unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, word: {}) when parse", focus.Value, word) });
-                            co_return;
+                            return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, word: {}) when parse", focus.Value, word) });
                         }
                     }
+                }
+            }
+
+            auto ContinueWith(vector<UnitParser*>& parsePath, vector<ParseTarget> continuations) const -> ParserResult<SubPartResult>
+            {
+                if (continuations.empty())
+                {
+                    println("parse success");
+                    return SubPartResult::Success;
+                }
+
+                auto target = move(continuations.back());
+                continuations.pop_back();
+                auto parser = Construct(TopParser, target.StartSymbol, move(target.StartRule), TokStream, Callback, ExternalParsers);
+                //parsePath.push_back(move(parser)); // ParseWithContinuation will change
+                if (auto r = parser.ParseWithContinuation(parsePath, move(continuations)); r.has_value() and r.value() == SubPartResult::Success)
+                {
+                    println("parse success");
+                    return SubPartResult::Success;
+                }
+                else
+                {
+                    //parsePath.pop_back();
+                    return r;
                 }
             }
 
@@ -734,7 +708,7 @@ private:
                 return not TopParser->grammars.contains(t.Value);
             }
 
-            static auto Construct(GLLParser const* const topParser, String startSymbol, SimpleRightSide startRule, decltype(TokStream)& stream, decltype(Callback)& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers)
+            static auto Construct(GLLParser const* topParser, String startSymbol, SimpleRightSide startRule, decltype(TokStream)& stream, decltype(Callback)& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers)
                 -> UnitParser
             {
                 stack<Symbol> symbolStack;
@@ -757,11 +731,8 @@ private:
             }
         };
 
-        vector<UnitParser> units;
-        vector<pair<Exchanger<ParserResult<UnitContinuation>, SubPartResult>, int>> parsings; // use list
-        units.reserve(100);
-        parsings.reserve(100);
-        auto current = 0;
+        vector<UnitParser*> units; // use list to represent parsePath
+        vector<ParseTarget> continuations;
 
         auto p = UnitParser
         {
@@ -772,95 +743,13 @@ private:
             .ExternalParsers = externalParsers,
             .TopParser = this, 
         };
-        units.push_back(move(p));
-        parsings.push_back({ units.back().Parse(units), -1 });
-        for (;;)
+        units.push_back(&p);
+        auto r = p.ParseWithContinuation(units, continuations);
+        if (r.has_value() and r.value() == SubPartResult::Success)
         {
-            println("current parsing: {} of {}, units size: {}", current, parsings.size(), units.size());
-            auto& currentUnit = units.at(current);
-            auto& currentParsing = parsings.at(current).first; // this address changed, because parsing is the item in dynamic memory
-            auto const currentReturnAddr = parsings.at(current).second;
-            println("current parsing: {}({} symbols, parsing addr {}), tok pos: {}", currentUnit.Root.Name, currentUnit.SymbolStack.size(), static_cast<void*>(std::addressof(currentParsing)), currentUnit.TokStream.CurrentPosition());
-            if (currentParsing.MoveNext())
-            {
-                if (currentParsing.Current().has_value())
-                {
-                    switch (currentParsing.Current().value())
-                    {
-                    case UnitContinuation::Wait2ParseNewUnit:
-                        println("Wait2ParseNewUnit");
-                        // each unit has fixed return address which is current
-                        parsings.push_back({ units.back().Parse(units), current });
-                        current = parsings.size() - 1;
-                        break;
-                    case UnitContinuation::OkOnThisChoice:
-                        println("OkOnThisChoice");
-                    case UnitContinuation::Done:
-                        println("Done");
-                        if (parsings.size() == 1 and units.size() == 1) // if all symbol parsed, all is done, return the result
-                        {
-                            return move(units.front().Root);
-                        }
-                        current = currentReturnAddr;
-                        if (current == -1)
-                        {
-                            return move(units.front().Root);
-                        }
-                        parsings.at(current).first.Input(SubPartResult::Success2ContinueRemain);
-                        break;
-                    }
-                }
-                else
-                {
-                    //if (current != parsings.size() - 1)
-                    //{
-                    //    throw std::logic_error(format("failed at {} of {} which is expected on top of stack", current, parsings.size()));
-                    //}
-
-                    println("parse failed: {}", currentParsing.Current().error().Message); // TODO may not error
-                    // pop to continue last parsing
-                    if (current == parsings.size() - 1)
-                    {
-                        units.pop_back();
-                        parsings.pop_back();
-                    }
-                    current = currentReturnAddr;
-
-                    // Input fail to return address parsing
-                    if (units.empty() and parsings.empty())
-                    {
-                        return unexpected(ParseFailResult{ .Message = "par" }); // TODO refine message
-                    }
-                    else if (current == -1)
-                    {
-                        for (current = parsings.size() - 1;;)
-                        {
-                            switch (parsings.at(current).first.Current().value())
-                            {
-                            case UnitContinuation::OkOnThisChoice:
-                                goto ContinueRetry;
-                            case UnitContinuation::Done:
-                                current = parsings.at(current).second;
-                                parsings.pop_back();
-                                break;
-                            default:
-                                throw std::logic_error("not handled UnitContinuation");
-                            }
-                        }
-                    ContinueRetry:
-                        ;
-                    }
-                    else
-                    {
-                        parsings.at(current).first.Input(SubPartResult::Fail); // may trigger non top item fail which is voilate the line 797 error
-                    }
-                }
-            }
-            else
-            {
-                throw std::logic_error("cannot move");
-            }
+            return move(units.front()->Root);
         }
+        return unexpected(move(r.error()));
     }
 
     template <typename Tok, typename Result>
