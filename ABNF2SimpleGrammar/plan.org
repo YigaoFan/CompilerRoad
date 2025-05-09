@@ -68,7 +68,7 @@
 	 * But when add back parens, regular expression has issue on nested parens handling. Fixed: remove a wrong optimization that remove the paren at head and tail which is not paired
      - [X] remove some lex rules which is unnecessary, like LINE-START, LINE-END and so on. Only reserve some needs. <2025-03-09 Sun>
      - [X] support using undersocre to concat two lines <2025-03-10 Mon>
-*** TODO Generate parse code[13/26] DEADLINE: <2025-03-17 Mon>
+*** TODO Generate parse code[14/26] DEADLINE: <2025-03-17 Mon>
 - [X] preparation for parse debug <2025-03-12 Wed>
   - [X] add language snippet loader
   - [X] add part grammars loader to make it independent from other noise grammars
@@ -89,12 +89,13 @@
 - [X] why grammar literal use vector not map? refactor refactor GrammarSet:<2025-04-15 Tue>
   - [X] replace string_view with String
   - [X] replace vector<SimpleGrammar> with SimpleGrammars(actual is map)
-- [ ] implement and test GLL. implement at <2025-04-17 Thu>
+- [X] implement and test GLL. implement at <2025-04-17 Thu> <2025-05-09 Fri>
   - GLL should also have memory mechanism to rollbck to retry each parse path
     - [X] add UnitParser to store parse state then to recover <2025-04-20 Sun>
   - add rollback when inner parse success <2025-04-18 Fri>
   - return root when symbol stack is empty <2025-04-18 Fri>
   - first time run pass the GLL parser <2025-04-28 Mon>
+  - first time perfect run the GLL parser, basic complete <2025-05-09 Fri>
 - [ ] refactor LLParser as GLLParser: add const to data member and simplify the Parse method
 - [ ] add grammar conflict resolver, ignore some conflicts
 - [ ] add comment for terminal token from parser part
