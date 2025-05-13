@@ -68,6 +68,10 @@ public:
 
     operator string_view() const
     {
+        if (share == nullptr)
+        {
+            return string_view();
+        }
         return string_view(share->Str + start, Length());
     }
 
