@@ -8,6 +8,46 @@ using std::coroutine_handle;
 using std::move;
 
 template <typename T>
+class Box
+{
+    optional<T> value;
+
+public:
+    Box() : value()
+    { }
+
+    Box(Box const&) = delete;
+    Box(Box&& that) : value(move(that.value))
+    {
+        that.value.reset();
+    }
+
+    auto operator= (Box const&) = delete;
+    auto operator= (Box&& that)
+    {
+        value = move(that.value);
+        that.value.reset();
+    }
+
+    auto Put(T t) -> void
+    {
+        value = move(t);
+    }
+
+    auto HasValue() -> bool
+    {
+        return value.has_value();
+    }
+
+    auto Get() -> T
+    {
+        auto t = move(value.value());
+        value.reset();
+        return t;
+    }
+};
+
+template <typename T>
 class Generator
 {
 public:
@@ -101,7 +141,7 @@ public:
     {
         using CoroHandle = coroutine_handle<Promise>;
         Output Out;
-        optional<Input> In;
+        Box<Input> In;
 
         auto initial_suspend() -> suspend_always
         {
@@ -138,7 +178,7 @@ public:
             struct Awaiter
             {
                 Promise* Mediator;
-                bool await_ready() noexcept { return Mediator->In.has_value(); }
+                bool await_ready() noexcept { return true; }
                 void await_suspend(std::coroutine_handle<>) noexcept {}
                 auto& await_resume() noexcept { return Mediator->In; }
             };
@@ -198,7 +238,7 @@ public:
 
     auto Input(Input in) -> void
     {
-        handle.promise().In = move(in);
+        handle.promise().In.Put(move(in));
     }
 };
 
@@ -208,4 +248,6 @@ export
     class Generator;
     template <typename Output, typename Input>
     class Exchanger;
+    template <typename T>
+    class Box;
 }
