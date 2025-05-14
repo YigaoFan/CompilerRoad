@@ -711,6 +711,30 @@ private:
                 return not TopParser->grammars.contains(t.Value);
             }
 
+            static auto GetUnfilledNodeTraceIn(SyntaxTreeNode<Tok, Result>& node) -> vector<SyntaxTreeNode<Tok, Result>*>
+            {
+                using std::holds_alternative;
+                using std::get;
+
+                if (not node.Children.empty())
+                {
+                    if (holds_alternative<SyntaxTreeNode<Tok, Result>>(node.Children.back()))
+                    {
+                        if (auto subResult = GetUnfilledNodeTraceIn(get<SyntaxTreeNode<Tok, Result>>(node.Children.back())); not subResult.empty())
+                        {
+                            subResult.push_back(&node);
+                            return subResult;
+                        }
+                    }
+                }
+                vector<SyntaxTreeNode<Tok, Result>*> trace;
+                if (node.Children.size() < node.ChildSymbols.size())
+                {
+                    trace.push_back(&node);
+                }
+                return trace;
+            }
+
             static auto Construct(int id, int parentId, GLLParser const* topParser, String startSymbol, SimpleRightSide startRule, decltype(TokStream)& stream, decltype(Callback)& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers)
                 -> UnitParser
             {
@@ -735,7 +759,7 @@ private:
                 return p;
             }
 
-            static auto Merge2OneNodeById(vector<UnitParser> parsePath) -> SyntaxTreeNode<Tok, Result>
+            static auto Merge2OneNodeById(decltype(Callback)& callback, vector<UnitParser> parsePath) -> SyntaxTreeNode<Tok, Result>
             {
                 map<int, pair<size_t, vector<int>>> depends; // <parent, <parent index, sons>>
                 for (size_t i = 0; auto const& x : parsePath)
@@ -775,18 +799,36 @@ private:
                 {
                     auto& childParser = parsePath.at(depends.at(x).first);
                     auto parentId = childParser.ParentId;
-                    auto& parent = parsePath.at(depends.at(parentId).first).Root;
-                    println("move {}({}) to parent {}({})", x, childParser.Root.Name, parentId, parent.Name);
+                    auto trace = GetUnfilledNodeTraceIn(parsePath.at(depends.at(parentId).first).Root);
+                    auto parent = trace.front();
+                    //println("move {}({}) to parent {}({})", x, childParser.Root.Name, parentId, parent.Name);
                     if (childParser.Root.Name.StartWith(string_view("remain-after-")))
                     {
                         for (auto& i : childParser.Root.Children)
                         {
-                            parent.Children.push_back(move(i));
+                            parent->Children.push_back(move(i));
                         }
                     }
                     else
                     {
-                        parent.Children.push_back(move(childParser.Root));
+                        parent->Children.push_back(move(childParser.Root));
+                    }
+
+                    if (parent->Children.size() > parent->ChildSymbols.size())
+                    {
+                        throw logic_error(format("invalid node({}) which Children count bigger than ChildSymbols", parent->Name));
+                    }
+                    for (auto i : trace)
+                    {
+                        if (i->Children.size() == i->ChildSymbols.size())
+                        {
+                            // Callback when an item is fullfilled
+                            callback(i); // also call up nodes
+                        }
+                        else
+                        {
+                            break;
+                        }
                     }
                 }
 
@@ -811,12 +853,12 @@ private:
         auto r = p.ParseWithContinuation(parserCounter, continuations);
         if (r.has_value())
         {
-            println("parsePath size: {}", r.value().ParsePath.size());
-            for (auto const& x : r.value().ParsePath)
-            {
-                println("name: {}", x.Root.Name);
-            }
-            return UnitParser::Merge2OneNodeById(move(r.value().ParsePath));
+            //println("parsePath size: {}", r.value().ParsePath.size());
+            //for (auto const& x : r.value().ParsePath)
+            //{
+            //    println("name: {}", x.Root.Name);
+            //}
+            return UnitParser::Merge2OneNodeById(callback, move(r.value().ParsePath));
         }
         return unexpected(move(r.error()));
     }
