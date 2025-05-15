@@ -822,8 +822,11 @@ private:
                     {
                         if (i->Children.size() == i->ChildSymbols.size())
                         {
-                            // Callback when an item is fullfilled
-                            callback(i); // also call up nodes
+                            if (not i->Name.StartWith(string_view("remain-after-")))
+                            {
+                                // Callback when an item is fullfilled
+                                callback(i); // also call up nodes
+                            }
                         }
                         else
                         {
