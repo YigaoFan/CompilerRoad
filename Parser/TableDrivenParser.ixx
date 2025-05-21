@@ -472,12 +472,10 @@ private:
     auto ParseWith(SyntaxTreeNode<Tok, Result> root, stack<Symbol> initSymbolStack, Stream<Tok> auto& stream, INodeCallback<Tok, Result> auto const& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers) const
         -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
-        struct UnitParser;
         struct SubPartResult
         {
-            vector<UnitParser> ParsePath;
+            vector<SyntaxTreeNode<Tok, Result>> Nodes;
         };
-
         struct ParseTarget
         {
             int ParentId;
@@ -487,8 +485,6 @@ private:
 
         struct UnitParser // use to store then recover parse
         {
-            int Id;
-            int ParentId;
             SyntaxTreeNode<Tok, Result> Root; // attention: move will make this root empty which maybe used in future retry
             decltype(stream)& TokStream; // attention: attention when retry parse
             stack<Symbol> SymbolStack;
@@ -497,7 +493,7 @@ private:
             map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(TokStream)&)>> const& ExternalParsers;
             GLLParser const* TopParser;
 
-            auto ParseWithContinuation(int& parserCounter, vector<ParseTarget> continuations) -> ParserResult<SubPartResult>
+            auto ParseWithContinuation(vector<ParseTarget> continuations) -> ParserResult<SubPartResult>
             {
                 stack<SyntaxTreeNode<Tok, Result>*> workingNodes;
                 workingNodes.push(&Root);
@@ -549,7 +545,7 @@ private:
                 {
                     if (SymbolStack.empty())
                     {
-                        return ContinueWith(parserCounter, move(continuations))
+                        return ContinueWith(move(continuations))
                             .or_else([this](ParseFailResult x) -> ParserResult<SubPartResult>
                             {
                                 println("remain parse failed: {}", x.Message);
@@ -557,19 +553,19 @@ private:
                             })
                             .and_then([this](SubPartResult x) -> ParserResult<SubPartResult>
                             {
-                                x.ParsePath.push_back(move(*this));
+                                x.Nodes.push_back(move(Root));
                                 return move(x);
                             });
                     }
                     auto const focus = SymbolStack.top();
-                    println("focus on {} at token {}", focus.Value, word);
+                    //println("focus on {} at token {}", focus.Value, word);
 
                     if (focus.IsEof() and MatchTerminal(focus, word))
                     {
                         TokStream.MoveNext();
                         Assert(continuations.empty(), "continuations should be empty when encounter EOF");
                         auto subResult = SubPartResult{};
-                        subResult.ParsePath.push_back(move(*this));
+                        subResult.Nodes.push_back(move(Root));
                         return subResult;
                     }
                     else if (ExternalParsers.contains(focus.Value))
@@ -627,9 +623,12 @@ private:
                                     rs.push_back(move(SymbolStack.top().Value));
                                     SymbolStack.pop();
                                 }
+                                auto hasContinuation = false;
+                                auto continuationName = String(format("remain-after-{}-in-{}", focus.Value, Root.Name));
                                 if (not rs.empty())
                                 {
-                                    continuations.push_back({ .ParentId = Id, .StartSymbol = String(format("remain-after-{}-in-{}", focus.Value, Root.Name)), .StartRule = move(rs), });
+                                    hasContinuation = true;
+                                    continuations.push_back({ .StartSymbol = continuationName, .StartRule = move(rs), });
                                 }
 
                                 for (auto i = 1; auto j : js)
@@ -637,16 +636,28 @@ private:
                                     println("start parse with {} option rule of {} options of {} at token {}", i++, js.size(), focus.Value, pos);
 
                                     auto const& rule = TopParser->grammars.at(focus.Value).at(j);
-                                    auto p = Construct(parserCounter++, Id, TopParser, focus.Value, rule, TokStream, Callback, ExternalParsers);
-                                    auto subResult = p.ParseWithContinuation(parserCounter, continuations); // make continuations copied to isolate change
+                                    auto p = Construct(TopParser, focus.Value, rule, TokStream, Callback, ExternalParsers);
+                                    auto subResult = p.ParseWithContinuation(continuations); // make continuations copied to isolate change
                                     if (subResult.has_value())
                                     {
-                                        // combine the result here?
-                                        //DoWhenGotChild(SyntaxTreeNode<Tok, Result>{ focus.Value, rule, }, bool_constant<false>{}, bool_constant<true>{});
-
-                                        return move(subResult).and_then([this](SubPartResult x) -> ParserResult<SubPartResult>
+                                        return move(subResult).and_then([this, hasContinuation, continuationName, &DoWhenGotChild](SubPartResult x) -> ParserResult<SubPartResult>
                                         {
-                                            x.ParsePath.push_back(move(*this));
+                                            Assert(not x.Nodes.empty(), "subResult shouldn't be empty");
+
+                                            DoWhenGotChild(move(x.Nodes.back()), bool_constant<true>{}, bool_constant<false>{});
+                                            x.Nodes.pop_back();
+
+                                            if (hasContinuation)
+                                            {
+                                                Assert(x.Nodes.back().Name == continuationName, "node name should be same");
+                                                for (auto& i : x.Nodes.back().Children)
+                                                {
+                                                    DoWhenGotChild(move(i), bool_constant<true>{}, bool_constant<false>{});
+                                                }
+                                                x.Nodes.pop_back();
+                                            }
+
+                                            x.Nodes.push_back(move(Root));
                                             return move(x);
                                         });
                                     }
@@ -682,7 +693,7 @@ private:
                 }
             }
 
-            auto ContinueWith(int& parserCounter, vector<ParseTarget> continuations) const -> ParserResult<SubPartResult>
+            auto ContinueWith(vector<ParseTarget> continuations) const -> ParserResult<SubPartResult>
             {
                 if (continuations.empty())
                 {
@@ -692,9 +703,9 @@ private:
 
                 auto target = move(continuations.back());
                 continuations.pop_back();
-                auto parser = Construct(parserCounter++, target.ParentId, TopParser, target.StartSymbol, move(target.StartRule), TokStream, Callback, ExternalParsers);
+                auto parser = Construct(TopParser, target.StartSymbol, move(target.StartRule), TokStream, Callback, ExternalParsers);
                 //parsePath.push_back(move(parser)); // ParseWithContinuation will change the back of vector
-                return parser.ParseWithContinuation(parserCounter, move(continuations));
+                return parser.ParseWithContinuation(move(continuations));
             }
 
             /// <summary>
@@ -731,44 +742,18 @@ private:
                 return not TopParser->grammars.contains(t.Value);
             }
 
-            static auto GetUnfilledNodeTraceIn(SyntaxTreeNode<Tok, Result>& node) -> vector<SyntaxTreeNode<Tok, Result>*>
-            {
-                using std::holds_alternative;
-                using std::get;
-
-                if (not node.Children.empty())
-                {
-                    if (holds_alternative<SyntaxTreeNode<Tok, Result>>(node.Children.back()))
-                    {
-                        if (auto subResult = GetUnfilledNodeTraceIn(get<SyntaxTreeNode<Tok, Result>>(node.Children.back())); not subResult.empty())
-                        {
-                            subResult.push_back(&node);
-                            return subResult;
-                        }
-                    }
-                }
-                vector<SyntaxTreeNode<Tok, Result>*> trace;
-                if (node.Children.size() < node.ChildSymbols.size())
-                {
-                    trace.push_back(&node);
-                }
-                return trace;
-            }
-
-            static auto Construct(int id, int parentId, GLLParser const* topParser, String startSymbol, SimpleRightSide startRule, decltype(TokStream)& stream, decltype(Callback)& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers)
+            static auto Construct(GLLParser const* topParser, String startSymbol, SimpleRightSide startRule, decltype(TokStream)& stream, decltype(Callback)& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers)
                 -> UnitParser
             {
                 stack<Symbol> symbolStack;
                 for (auto x : reverse(startRule))
                 {
-                    symbolStack.push(move(x)); // TODO when symbolStack is empty, exit parse method
+                    symbolStack.push(move(x));
                 }
                 SyntaxTreeNode<Tok, Result> root{ startSymbol, move(startRule) };
 
                 auto p = UnitParser
                 {
-                    .Id = id,
-                    .ParentId = parentId,
                     .Root = move(root),
                     .TokStream = stream,
                     .SymbolStack = move(symbolStack),
@@ -778,94 +763,12 @@ private:
                 };
                 return p;
             }
-
-            static auto Merge2OneNodeById(decltype(Callback)& callback, vector<UnitParser> parsePath) -> SyntaxTreeNode<Tok, Result>
-            {
-                map<int, pair<size_t, vector<int>>> depends; // <parent, <parent index, sons>>
-                for (size_t i = 0; auto const& x : parsePath)
-                {
-                    depends[x.Id].first = i;
-                    ++i;
-                    depends[x.ParentId].second.push_back(x.Id);
-                }
-
-                std::queue<int> workings; // ids
-                vector<int> ordered; // ordered parser ids
-                auto focus = move(depends.at(-1).second);
-                for (auto& x : focus)
-                {
-                    workings.push(move(x));
-                }
-
-                while (not workings.empty())
-                {
-                    auto x = move(workings.front());
-                    workings.pop();
-
-                    ordered.push_back(x);
-                    focus = move(depends.at(x).second);
-                    for (auto& x : focus)
-                    {
-                        workings.push(move(x));
-                    }
-                }
-
-                if (ordered.size() != parsePath.size())
-                {
-                    throw std::invalid_argument("size of ordered after Topological sort is different with parsePath");
-                }
-
-                for (auto& x : reverse(ordered | drop(1)))
-                {
-                    auto& childParser = parsePath.at(depends.at(x).first);
-                    auto parentId = childParser.ParentId;
-                    auto trace = GetUnfilledNodeTraceIn(parsePath.at(depends.at(parentId).first).Root);
-                    auto parent = trace.front();
-                    //println("move {}({}) to parent {}({})", x, childParser.Root.Name, parentId, parent.Name);
-                    if (childParser.Root.Name.StartWith(string_view("remain-after-")))
-                    {
-                        for (auto& i : childParser.Root.Children)
-                        {
-                            parent->Children.push_back(move(i));
-                        }
-                    }
-                    else
-                    {
-                        parent->Children.push_back(move(childParser.Root));
-                    }
-
-                    if (parent->Children.size() > parent->ChildSymbols.size())
-                    {
-                        throw logic_error(format("invalid node({}) which Children count bigger than ChildSymbols", parent->Name));
-                    }
-                    for (auto i : trace)
-                    {
-                        if (i->Children.size() == i->ChildSymbols.size())
-                        {
-                            if (not i->Name.StartWith(string_view("remain-after-")))
-                            {
-                                // Callback when an item is fullfilled
-                                callback(i); // also call up nodes
-                            }
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }
-                }
-
-                return move(parsePath.back().Root);
-            }
         };
 
         vector<ParseTarget> continuations;
-        int parserCounter = 0;
 
         auto p = UnitParser
         {
-            .Id = parserCounter++,
-            .ParentId = -1,
             .Root = move(root),
             .TokStream = stream,
             .SymbolStack = move(initSymbolStack),
@@ -873,17 +776,12 @@ private:
             .ExternalParsers = externalParsers,
             .TopParser = this, 
         };
-        auto r = p.ParseWithContinuation(parserCounter, continuations);
-        if (r.has_value())
+        auto r = p.ParseWithContinuation(continuations);
+        return move(r).and_then([](SubPartResult x) -> ParserResult<SyntaxTreeNode<Tok, Result>>
         {
-            //println("parsePath size: {}", r.value().ParsePath.size());
-            //for (auto const& x : r.value().ParsePath)
-            //{
-            //    println("name: {}", x.Root.Name);
-            //}
-            return UnitParser::Merge2OneNodeById(callback, move(r.value().ParsePath));
-        }
-        return unexpected(move(r.error()));
+            Assert(x.Nodes.size() == 1, "nodes size should be only 1");
+            return move(x.Nodes.back());
+        });
     }
 
     template <typename Tok, typename Result>
