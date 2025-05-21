@@ -157,6 +157,7 @@ auto LeftFactor(SimpleGrammar grammar) -> pair<SimpleGrammar, optional<vector<Si
     }
 
     vector<SimpleGrammar> newGrammars;
+    vector<size_t> toRemoves;
     for (auto& [prefix, ids] : prefix2Indexes | filter([](auto& i) { return i.second.size() > 1; }))
     {
         auto suffixOfCommon = String(format("{}-{}-{}", grammar.first, prefix, leftFactorSuffix));
@@ -168,12 +169,12 @@ auto LeftFactor(SimpleGrammar grammar) -> pair<SimpleGrammar, optional<vector<Si
         oldRs.erase(oldRs.begin() + 1, oldRs.end());
         oldRs.push_back(move(suffixOfCommon));
 
-        for (auto i : reverse(ids | drop(1)))
+        for (auto i : ids | drop(1))
         {
             auto& rs = grammar.second[i];
             rs.erase(rs.begin());
             suffixGrammar.second.push_back(move(rs));
-            grammar.second.erase(grammar.second.begin() + i);
+            toRemoves.push_back(i);
         }
         auto [newSuffixGrammar, addedGrammars] = LeftFactor(move(suffixGrammar));
         newGrammars.push_back(move(newSuffixGrammar));
@@ -181,6 +182,12 @@ auto LeftFactor(SimpleGrammar grammar) -> pair<SimpleGrammar, optional<vector<Si
         {
             newGrammars.append_range(move(addedGrammars.value()));
         }
+    }
+
+    std::sort(toRemoves.begin(), toRemoves.end(), std::greater<int>());
+    for (auto i : toRemoves)
+    {
+        grammar.second.erase(grammar.second.begin() + i);
     }
 
     if (not newGrammars.empty())
