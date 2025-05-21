@@ -96,6 +96,8 @@
   - return root when symbol stack is empty <2025-04-18 Fri>
   - first time run pass the GLL parser <2025-04-28 Mon>
   - first time perfect run the GLL parser, basic complete <2025-05-09 Fri>
+  - use call stack to acordinate the UnitParser <2025-05-09 Fri>
+  - correct the SyntaxNode combination and pass function-declaration <2025-05-21 Wed>
 - [ ] refactor LLParser as GLLParser: add const to data member and simplify the Parse method
 - [ ] add grammar conflict resolver, ignore some conflicts
 - [ ] add comment for terminal token from parser part
@@ -114,7 +116,9 @@
   - [ ] a token maybe belong to different tokens, like a token can be typed name or name, and typed name belong to name. Some parse rules need typed name, some rules need name. This is not fixed, priority is not suitable, how to fix it? Implement a token type compatiable check mechanism when parser check the token
     - [ ] generate compatiable token type from lexer construction
 - [X] pass actual grammar unit, simple to complex
-  - [X] enum
+  - [X] enum-declaration
+  - [X] public-type-declaration
+  - [X] function-declaration
 - [X] support EOS token <2025-03-14 Fri>
 - [ ] recover tree node as abnf form shown
 - [ ] support line concat
