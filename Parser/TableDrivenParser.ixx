@@ -165,7 +165,7 @@ public:
         stack<Symbol> symbolStack;
         symbolStack.push(String(eof));
         symbolStack.push(startSymbol);
-        auto word = stream.NextItem();
+        auto word = stream.Current();
         SyntaxTreeNode<Tok, Result> root{ "root", { startSymbol } }; // TODO why "root" is shown as "???" in VS debugger
         stack<SyntaxTreeNode<Tok, Result>*> workingNodes;
         workingNodes.push(&root);
@@ -199,7 +199,7 @@ public:
             }
             else if (externalParsers.contains(focus.Value))
             {
-                stream.Rollback(); // return the current word, to let external parser read it
+                //stream.Rollback(); // return the current word, to let external parser read it
                 auto subResult = externalParsers.at(focus.Value)(stream);
                 if (not subResult.has_value())
                 {
@@ -209,7 +209,7 @@ public:
                 symbolStack.pop();
                 workingNodes.top()->Children.push_back(move(subResult.value()));
                 PopAllFilledNodes();
-                word = stream.NextItem();
+                word = stream.Current(); // TODO check
             }
             else if (IsTerminal(focus) or focus.IsEof())
             {
@@ -220,11 +220,13 @@ public:
                     // validate the token here with the info in SyntaxTreeNode
                     workingNodes.top()->Children.push_back(word);
                     PopAllFilledNodes();
-                    word = stream.NextItem();
+                    stream.MoveNext();
+                    word = stream.Current();
                 }
                 else if (ignorableTokenTypes.contains(static_cast<int>(word.Type)))
                 {
-                    word = stream.NextItem();
+                    stream.MoveNext();
+                    word = stream.Current();
                 }
                 else
                 {
@@ -268,7 +270,8 @@ public:
                 }
                 else if (ignorableTokenTypes.contains(static_cast<int>(word.Type)))
                 {
-                    word = stream.NextItem();
+                    stream.MoveNext();
+                    word = stream.Current();
                 }
                 else
                 {
@@ -384,11 +387,12 @@ private:
     map<string_view, int> const terminal2IntTokenType;
     set<int> const ignorableTokenTypes;
     map<int, set<int>> const replaceableTokenTypes;
+    set<int> const repeatableTokenTypes;
 public:
     /// <summary>
     /// attention: make string_view in terminal2IntTokenType is alive when parse
     /// </summary>
-    static auto ConstructFrom(String startSymbol, SimpleGrammars grammars, map<string_view, int> terminal2IntTokenType, set<int> ignorableTokenTypes = {}, map<int, set<int>> replaceableTokenTypes = {}) -> GLLParser
+    static auto ConstructFrom(String startSymbol, SimpleGrammars grammars, map<string_view, int> terminal2IntTokenType, set<int> ignorableTokenTypes = {}, map<int, set<int>> replaceableTokenTypes = {}, set<int> repeatableTokenTypes = {}) -> GLLParser
     {
         vector<SimpleGrammar> newAddGrammars;
         for (auto& g : grammars)
@@ -434,11 +438,12 @@ public:
             ++i;
         }
         //std::println("parse table: {}", parseTable);
-        return GLLParser(move(startSymbol), move(grammars), move(parseTable), move(terminal2IntTokenType), move(ignorableTokenTypes), move(replaceableTokenTypes));
+        return GLLParser(move(startSymbol), move(grammars), move(parseTable), move(terminal2IntTokenType), move(ignorableTokenTypes), move(replaceableTokenTypes), move(repeatableTokenTypes));
     }
 
-    GLLParser(String startSymbol, SimpleGrammars grammars, map<pair<String, int>, vector<int>> parseTable, map<string_view, int> terminal2IntTokenType, set<int> ignorableTokenTypes, map<int, set<int>> replaceableTokenTypes)
-        : startSymbol(move(startSymbol)), grammars(move(grammars)), parseTable(move(parseTable)), terminal2IntTokenType(move(terminal2IntTokenType)), ignorableTokenTypes(move(ignorableTokenTypes)), replaceableTokenTypes(move(replaceableTokenTypes))
+    GLLParser(String startSymbol, SimpleGrammars grammars, map<pair<String, int>, vector<int>> parseTable, map<string_view, int> terminal2IntTokenType, set<int> ignorableTokenTypes, map<int, set<int>> replaceableTokenTypes, set<int> repeatableTokenTypes)
+        : startSymbol(move(startSymbol)), grammars(move(grammars)), parseTable(move(parseTable)), terminal2IntTokenType(move(terminal2IntTokenType)), 
+        ignorableTokenTypes(move(ignorableTokenTypes)), replaceableTokenTypes(move(replaceableTokenTypes)), repeatableTokenTypes(move(repeatableTokenTypes))
     {
     }
 
@@ -497,7 +502,7 @@ private:
                 stack<SyntaxTreeNode<Tok, Result>*> workingNodes;
                 workingNodes.push(&Root);
 
-                auto word = TokStream.NextItem();
+                auto word = TokStream.Current();
                 auto PopAllFilledNodes = [this, &workingNodes]()
                 {
                     while (not workingNodes.empty())
@@ -533,24 +538,35 @@ private:
                     PopAllFilledNodes();
                     if constexpr (IsTerminal and ContinueUseWord) // if continue use word, we should update it
                     {
-                        word = TokStream.NextItem();
+                        if (not TopParser->repeatableTokenTypes.contains(static_cast<int>(word.Type)))
+                        {
+                            TokStream.MoveNext();
+                            word = TokStream.Current();
+                        }
                     }
                 };
                 while (true)
                 {
                     if (SymbolStack.empty())
                     {
-                        TokStream.Rollback();
-                        return ContinueWith(parserCounter, move(continuations)).and_then([this](SubPartResult x) -> ParserResult<SubPartResult>
-                        {
-                            x.ParsePath.push_back(move(*this));
-                            return move(x);
-                        });
+                        return ContinueWith(parserCounter, move(continuations))
+                            .or_else([this](ParseFailResult x) -> ParserResult<SubPartResult>
+                            {
+                                println("remain parse failed: {}", x.Message);
+                                return unexpected(move(x));
+                            })
+                            .and_then([this](SubPartResult x) -> ParserResult<SubPartResult>
+                            {
+                                x.ParsePath.push_back(move(*this));
+                                return move(x);
+                            });
                     }
                     auto const focus = SymbolStack.top();
+                    println("focus on {} at token {}", focus.Value, word);
 
                     if (focus.IsEof() and MatchTerminal(focus, word))
                     {
+                        TokStream.MoveNext();
                         Assert(continuations.empty(), "continuations should be empty when encounter EOF");
                         auto subResult = SubPartResult{};
                         subResult.ParsePath.push_back(move(*this));
@@ -558,7 +574,6 @@ private:
                     }
                     else if (ExternalParsers.contains(focus.Value))
                     {
-                        TokStream.Rollback(); // return the current word, to let external parser read it
                         auto subResult = ExternalParsers.at(focus.Value)(TokStream);
                         if (not subResult.has_value())
                         {
@@ -572,13 +587,14 @@ private:
                         {
                             DoWhenGotChild(move(word), bool_constant<true>{}, bool_constant<true>{});
                         }
-                        else if (TopParser->ignorableTokenTypes.contains(static_cast<int>(word.Type)))
+                        else if (TopParser->ignorableTokenTypes.contains(static_cast<int>(word.Type)) or TopParser->repeatableTokenTypes.contains(static_cast<int>(word.Type)))
                         {
-                            word = TokStream.NextItem();
+                            TokStream.MoveNext();
+                            word = TokStream.Current();
                         }
                         else
                         {
-                            return unexpected(ParseFailResult{ .Message = format("cannot found token for terminal symbol({}) when parse", focus.Value) });
+                            return unexpected(ParseFailResult{ .Message = format("cannot found token for terminal symbol({}) when parse in {}", focus.Value, Root.Name) });
                         }
                     }
                     else
@@ -602,7 +618,6 @@ private:
                             }
                             else
                             {
-                                TokStream.Rollback();
                                 auto pos = TokStream.CurrentPosition();
 
                                 SymbolStack.pop();
@@ -614,27 +629,31 @@ private:
                                 }
                                 if (not rs.empty())
                                 {
-                                    continuations.push_back({ .ParentId = Id, .StartSymbol = String(format("remain-after-{}", focus.Value)), .StartRule = move(rs), });
+                                    continuations.push_back({ .ParentId = Id, .StartSymbol = String(format("remain-after-{}-in-{}", focus.Value, Root.Name)), .StartRule = move(rs), });
                                 }
 
                                 for (auto i = 1; auto j : js)
                                 {
-                                    println("start parse with {} option rule of {} options of {}", i++, js.size(), focus.Value);
+                                    println("start parse with {} option rule of {} options of {} at token {}", i++, js.size(), focus.Value, pos);
 
                                     auto const& rule = TopParser->grammars.at(focus.Value).at(j);
                                     auto p = Construct(parserCounter++, Id, TopParser, focus.Value, rule, TokStream, Callback, ExternalParsers);
                                     auto subResult = p.ParseWithContinuation(parserCounter, continuations); // make continuations copied to isolate change
                                     if (subResult.has_value())
                                     {
+                                        // combine the result here?
+                                        //DoWhenGotChild(SyntaxTreeNode<Tok, Result>{ focus.Value, rule, }, bool_constant<false>{}, bool_constant<true>{});
+
                                         return move(subResult).and_then([this](SubPartResult x) -> ParserResult<SubPartResult>
                                         {
                                             x.ParsePath.push_back(move(*this));
                                             return move(x);
                                         });
                                     }
+                                    println("sub parse failed: {}", subResult.error().Message);
                                     TokStream.RollbackTo(pos);
                                 }
-                                return unexpected(ParseFailResult{ .Message = format("try parse ambiguous (nonterminal: {}, word: {}) failed", focus.Value, word) });
+                                return unexpected(ParseFailResult{ .Message = format("try parse ambiguous (nonterminal: {}, word: {}) failed in {}", focus.Value, word, Root.Name) });
                             }
                         }
                         else if (auto current = static_cast<int>(word.Type); TopParser->replaceableTokenTypes.contains(current))
@@ -648,15 +667,16 @@ private:
                                     goto ExpandRule;
                                 }
                             }
-                            return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, replaceable word: {}) when parse", focus.Value, word) });
+                            return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, replaceable word: {}) when parse in {}", focus.Value, word, Root.Name) });
                         }
-                        else if (TopParser->ignorableTokenTypes.contains(static_cast<int>(word.Type)))
+                        else if (TopParser->ignorableTokenTypes.contains(static_cast<int>(word.Type)) or TopParser->repeatableTokenTypes.contains(static_cast<int>(word.Type)))
                         {
-                            word = TokStream.NextItem();
+                            TokStream.MoveNext();
+                            word = TokStream.Current();
                         }
                         else
                         {
-                            return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, word: {}) when parse", focus.Value, word) });
+                            return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, word: {}) when parse in {}", focus.Value, word, Root.Name) });
                         }
                     }
                 }

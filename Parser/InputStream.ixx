@@ -66,9 +66,14 @@ struct VectorStream
     vector<T> Tokens;
     size_t Index = 0;
 
-    auto NextItem() -> T
+    auto MoveNext() -> void
     {
-        return Tokens[Index++];
+        ++Index;
+    }
+
+    auto Current() -> T
+    {
+        return Tokens[Index];
     }
 
     auto Rollback() -> void
@@ -95,7 +100,8 @@ export
     template <typename T, typename Item>
     concept Stream = requires (T t, size_t i)
     {
-        { t.NextItem() } -> std::same_as<Item>;
+        { t.MoveNext() };
+        { t.Current() } -> std::same_as<Item>;
         { t.Rollback() } -> std::same_as<void>;
         { t.RollbackTo(i) } -> std::same_as<void>;
         { t.CurrentPosition() } -> std::same_as<size_t>;
