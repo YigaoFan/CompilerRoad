@@ -4,14 +4,15 @@ line-terminator -> "\r\n" | "\r" | "\n"
 non-line-termination-character -> r"[^\r\n]"
 
 whitespace-char -> (tab-character | space-character) ; | DBCS-whitespace) 
-line-continuation -> Whitespace underscore [Whitespace] line-terminator 
+Line-continuation -> Whitespace underscore [Whitespace] line-terminator
 tab-character -> "\t"
 space-character -> " "
 underscore -> "_"
 ;DBCS-whitespace -> "%x3000"
 
 Whitespace -> 1*(whitespace-char)
-EOL -> [Whitespace] [single-quote comment-body] line-terminator | line-continuation
+Comment -> single-quote comment-body
+Comment-end-of-line -> [Whitespace] [Comment] line-terminator
 single-quote -> "'" 
 comment-body -> *(non-line-termination-character)
 Rem-statement -> "Rem" whitespace-char comment-body
@@ -50,29 +51,35 @@ second-value -> decimal-literal
 time-separator -> *whitespace-char (":" | ".") *whitespace-char
 ampm -> *whitespace-char ("am" | "pm" | "a" | "p")
 
-String -> double-quote *string-char (double-quote | line-continuation | line-terminator)
+; below two token types overlap, merge it as String in Parse rule
+Quoted-identifier -> double-quote Identifier double-quote
+Normal-string -> double-quote *string-char (double-quote | Line-continuation | line-terminator)
 double-quote -> "\""
 string-char -> ((double-quote double-quote) | non-line-termination-character)
 
 Identifier -> r"[a-zA-Z][a-zA-Z0-9_\-]*"
-Reserved-type-identifier -> "Boolean" | "Byte" | "Currency" | "Date" | "Double" | "Integer" | "Long" | "LongLong" | "LongPtr" | "Single" | "String" | "Variant" 
 
 Foreign-name -> "[" foreign-identifier "]" 
 foreign-identifier -> 1*non-line-termination-character
 
-Typed-name -> Identifier type-suffix 
-type-suffix -> "%" | "&" | "^" | "!" | "#" | "@" | "$"
+Typed-name -> Identifier Type-suffix 
+Type-suffix -> "%" | "&" | "^" | "!" | "#" | "@" | "$"
 
 - Parse -
+EOL -> Comment-end-of-line | Line-continuation
 EOS -> EOL | ":" ;End Of Statement 
+LINE-END -> EOL
+
+String -> Quoted-identifier | Normal-string
 
 Builtin-type -> Reserved-type-identifier | ("[" Reserved-type-identifier "]") | "object" | "[object]" 
-Reserved-identifier -> statement-keyword | marker-keyword | operator-identifier | special-form | Reserved-type-identifier | reserved-name | literal-identifier | rem-keyword | reserved-for-implementation-use | future-reserved
+Reserved-type-identifier -> "Boolean" | "Byte" | "Currency" | "Date" | "Double" | "Integer" | "Long" | "LongLong" | "LongPtr" | "Single" | "String" | "Variant" 
+Reserved-name -> "Abs" | "CBool" | "CByte" | "CCur" | "CDate" | "CDbl" | "CDec" | "CInt" | "CLng" | "CLngLng" | "CLngPtr" | "CSng" | "CStr" | "CVar" | "CVErr" | "Date" | "Debug" | "DoEvents" | "Fix" | "Int" | "Len" | "LenB" | "Me" | "PSet" | "Scale" | "Sgn" | "String" 
+Reserved-identifier -> statement-keyword | marker-keyword | operator-identifier | special-form | Reserved-type-identifier | Reserved-name | literal-identifier | rem-keyword | reserved-for-implementation-use | future-reserved
 statement-keyword -> "Call" | "Case" |"Close" | "Const"| "Declare" | "DefBool" | "DefByte" | "DefCur" | "DefDate" | "DefDbl" | "DefInt" | "DefLng" | "DefLngLng" | "DefLngPtr" | "DefObj" | "DefSng" | "DefStr" | "DefVar" | "Dim" | "Do" | "Else" | "ElseIf" | "End" | "End If" | "Enum" | "Erase" | "Event" | "Exit" | "For" | "Friend" | "Function" | "Get" | "Global" | "GoSub" | "GoTo" | "If" | "Implements"| "Input" | "Let" | "Lock" | "Loop" | "LSet" | "Next" | "On" | "Open" | "Option" | "Print" | "Private" | "Public" | "Put" | "RaiseEvent" | "ReDim" | "Resume" | "Return" | "RSet" | "Seek" | "Select" | "Set" | "Static" | "Stop" | "Sub" | "Type" | "Unlock" | "Wend" | "While" | "With" | "Write" 
 rem-keyword -> "Rem" 
 marker-keyword -> "Any" | "As"| "ByRef" | "ByVal "|"Case" | "Each" | "Else" |"In"| "New" | "Shared" | "Until" | "WithEvents" | "Write" | "Optional" | "ParamArray" | "Preserve" | "Spc" | "Tab" | "Then" | "To" 
 operator-identifier -> "AddressOf" | "And" | "Eqv" | "Imp" | "Is" | "Like" | "New" | "Mod" | "Not" | "Or" | "TypeOf" | "Xor"
-reserved-name -> "Abs" | "CBool" | "CByte" | "CCur" | "CDate" | "CDbl" | "CDec" | "CInt" | "CLng" | "CLngLng" | "CLngPtr" | "CSng" | "CStr" | "CVar" | "CVErr" | "Date" | "Debug" | "DoEvents" | "Fix" | "Int" | "Len" | "LenB" | "Me" | "PSet" | "Scale" | "Sgn" | "String" 
 special-form -> "Array" | "Circle" | "Input" | "InputB" | "LBound" | "Scale" | "UBound" 
 literal-identifier -> boolean-literal-identifier | object-literal-identifier | variant-literal-identifier 
 boolean-literal-identifier -> "true" | "false" 
@@ -81,17 +88,16 @@ variant-literal-identifier -> "empty" | "null"
 reserved-for-implementation-use -> "Attribute" | "LINEINPUT" | "VB_Base" | "VB_Control" | "VB_Creatable" | "VB_Customizable" | "VB_Description" | "VB_Exposed" | "VB_Ext_KEY " | "VB_GlobalNameSpace" | "VB_HelpID" | "VB_Invoke_Func" | "VB_Invoke_Property " | "VB_Invoke_PropertyPut" | "VB_Invoke_PropertyPutRef" | "VB_MemberFlags" | "VB_Name" | "VB_PredeclaredId" | "VB_ProcData" | "VB_TemplateDerived" | "VB_UserMemId" | "VB_VarDescription" | "VB_VarHelpID" | "VB_VarMemberFlags" | "VB_VarProcData " | "VB_VarUserMemId" 
 future-reserved -> "CDecl" | "Decimal" | "DefDec"
 
-Procedural-module -> LINE-START procedural-module-header EOS LINE-START procedural-module-body 
-Class-module -> LINE-START class-module-header LINE-START class-module-body 
-procedural-module-header -> attribute "VB_Name" attr-eq quoted-identifier attr-end 
+Procedural-module -> procedural-module-header EOS procedural-module-body 
+Class-module -> class-module-header class-module-body 
+procedural-module-header -> attribute "VB_Name" attr-eq Quoted-identifier attr-end 
 class-module-header -> 1*class-attr 
-class-attr -> attribute "VB_Name" attr-eq quoted-identifier attr-end | attribute "VB_GlobalNameSpace" attr-eq "False" attr-end | attribute "VB_Creatable" attr-eq "False" attr-end | attribute "VB_PredeclaredId" attr-eq boolean-literal-identifier attr-end | attribute "VB_Exposed" attr-eq boolean-literal-identifier attr-end | attribute "VB_Customizable" attr-eq boolean-literal-identifier attr-end 
-attribute -> LINE-START "Attribute" 
+class-attr -> attribute "VB_Name" attr-eq Quoted-identifier attr-end | attribute "VB_GlobalNameSpace" attr-eq "False" attr-end | attribute "VB_Creatable" attr-eq "False" attr-end | attribute "VB_PredeclaredId" attr-eq boolean-literal-identifier attr-end | attribute "VB_Exposed" attr-eq boolean-literal-identifier attr-end | attribute "VB_Customizable" attr-eq boolean-literal-identifier attr-end 
+attribute -> "Attribute" 
 attr-eq -> "->"
 attr-end -> LINE-END
-quoted-identifier -> double-quote Identifier double-quote
-procedural-module-body -> LINE-START procedural-module-declaration-section LINE-START procedural-module-code-section 
-class-module-body -> LINE-START class-module-declaration-section
+procedural-module-body -> procedural-module-declaration-section procedural-module-code-section 
+class-module-body -> class-module-declaration-section
 
 unrestricted-name -> name | Reserved-identifier 
 name -> untyped-name | Typed-name | file-number
@@ -129,16 +135,16 @@ variable-dcl -> typed-variable-dcl | untyped-variable-dcl
 typed-variable-dcl -> Typed-name [array-dim]
 untyped-variable-dcl -> Identifier [array-clause | as-clause]
 array-clause -> array-dim [as-clause]
-as-clause -> as-auto-object | as-type
+as-clause -> "as" (as-auto-object | as-type)
 withevents-variable-dcl -> "withevents" Identifier "as" class-type-name
 class-type-name -> defined-type-expression
 array-dim -> "(" [bounds-list] ")"
 bounds-list -> dim-spec *("," dim-spec)
-dim-spec -> [lower-bound] upper-bound
+dim-spec -> constant-expression "to" constant-expression | constant-expression
 lower-bound -> constant-expression "to"
 upper-bound -> constant-expression 
-as-auto-object -> "as" "new" class-type-name
-as-type -> "as" type-spec
+as-auto-object -> "new" class-type-name
+as-type -> type-spec
 type-spec -> fixed-length-string-spec | type-expression
 fixed-length-string-spec -> "string" "*" string-length
 string-length -> constant-name | Integer
@@ -162,7 +168,7 @@ udt-member -> reserved-name-member-dcl  | untyped-name-member-dcl
 untyped-name-member-dcl -> Identifier optional-array-clause
 reserved-name-member-dcl -> reserved-member-name as-clause
 optional-array-clause -> [array-dim] as-clause
-reserved-member-name -> statement-keyword  | marker-keyword  | operator-identifier  | special-form  | reserved-name  | literal-identifier  | reserved-for-implementation-use  | future-reserved
+reserved-member-name -> statement-keyword  | marker-keyword  | operator-identifier  | special-form  | Reserved-name  | literal-identifier  | reserved-for-implementation-use  | future-reserved
 
 global-enum-declaration -> "global" enum-declaration
 public-enum-declaration -> ["public"] enum-declaration
@@ -185,8 +191,8 @@ implements-directive -> "Implements" class-type-name
 event-declaration -> ["Public"] "Event" Identifier [event-parameter-list]
 event-parameter-list -> "(" [positional-parameters] ")" 
 
-procedural-module-code-section -> *( LINE-START procedural-module-code-element LINE-END)
-class-module-code-section -> *( LINE-START class-module-code-element LINE-END)
+procedural-module-code-section -> *(procedural-module-code-element LINE-END)
+class-module-code-section -> *(class-module-code-element LINE-END)
 procedural-module-code-element -> common-module-code-element
 class-module-code-element -> common-module-code-element  | implements-directive
 common-module-code-element -> Rem-statement  | procedure-declaration
@@ -197,7 +203,7 @@ function-declaration -> procedure-scope [initial-static] "function" function-nam
 property-get-declaration -> procedure-scope [initial-static] "Property" "Get" function-name [procedure-parameters] [function-type] [trailing-static] EOS [procedure-body EOS] [end-label] "end" "property" procedure-tail
 property-lhs-declaration -> procedure-scope [initial-static] "Property" ("Let"  | "Set") subroutine-name property-parameters [trailing-static] EOS [procedure-body EOS] [end-label] "end" "property" procedure-tail
 end-label -> statement-label-definition
-procedure-tail -> [Whitespace] LINE-END  | single-quote comment-body  | ":" Rem-statement
+procedure-tail -> [Whitespace] LINE-END  | Comment  | ":" Rem-statement
 procedure-scope -> ["global" | "public" | "private" | "friend"]
 initial-static -> "static"
 trailing-static -> "static" 
@@ -234,10 +240,10 @@ procedure-body -> statement-block
 
 statement-block -> *(block-statement EOS)
 block-statement -> statement-label-definition | Rem-statement | statement | attribute-statement
-attribute-statement -> attribute [Identifier "."] reserved-for-implementation-use attr-eq [quoted-identifier | boolean-literal-identifier]
+attribute-statement -> attribute [Identifier "."] reserved-for-implementation-use attr-eq [Quoted-identifier | boolean-literal-identifier]
 statement -> control-statement | data-manipulation-statement | error-handling-statement | file-statement
 
-statement-label-definition -> LINE-START ((identifier-statement-label ":") | (line-number-label [":"] ))
+statement-label-definition -> ((identifier-statement-label ":") | (line-number-label [":"] ))
 statement-label -> identifier-statement-label | line-number-label
 statement-label-list -> statement-label ["," statement-label]
 identifier-statement-label -> Identifier
@@ -267,9 +273,9 @@ condition-clause -> while-clause | until-clause
 while-clause -> "While" boolean-expression
 until-clause -> "Until" boolean-expression 
 exit-do-statement -> "Exit" "Do" 
-if-statement -> LINE-START "If" boolean-expression "Then" EOL statement-block *[else-if-block] [else-block] LINE-START (("End" "If") | "End If")
-else-if-block -> (LINE-START "ElseIf" boolean-expression "Then" EOL LINE-START statement-block) | ("ElseIf" boolean-expression "Then" statement-block)
-else-block -> LINE-START "Else" statement-block
+if-statement -> "If" boolean-expression "Then" EOL statement-block *(else-if-block) [else-block] (("End" "If") | "End If")
+else-if-block -> ("ElseIf" boolean-expression "Then" EOL statement-block) | ("ElseIf" boolean-expression "Then" statement-block)
+else-block -> "Else" statement-block
 single-line-if-statement -> if-with-non-empty-then | if-with-empty-then
 if-with-non-empty-then -> "If" boolean-expression "Then" list-or-label [single-line-else-clause]
 if-with-empty-then -> "If" boolean-expression "Then" single-line-else-clause
@@ -382,7 +388,7 @@ variable -> variable-expression
 expression -> value-expression | l-expression
 value-expression -> literal-expression | parenthesized-expression | typeof-is-expression | new-expression | operator-expression
 l-expression -> simple-name-expression | instance-expression | member-access-expression | index-expression | dictionary-access-expression | with-expression 
-literal-expression -> Integer | Float | Date-or-time | String | (literal-identifier [type-suffix])
+literal-expression -> Integer | Float | Date-or-time | String | (literal-identifier [Type-suffix])
 parenthesized-expression -> "(" expression ")" 
 typeof-is-expression -> "typeof" expression "is" type-expression
 new-expression -> "New" type-expression 
@@ -422,9 +428,9 @@ or-operator-expression -> expression "or" expression
 xor-operator-expression -> expression "xor" expression 
 eqv-operator-expression -> expression "eqv" expression
 imp-operator-expression -> expression "imp" expression 
-simple-name-expression -> name | special-form | reserved-name 
+simple-name-expression -> name | special-form | Reserved-name 
 instance-expression -> "me" 
-member-access-expression -> (l-expression "." unrestricted-name) | (l-expression line-continuation "." unrestricted-name)
+member-access-expression -> (l-expression "." unrestricted-name) | (l-expression Line-continuation "." unrestricted-name)
 index-expression -> l-expression "(" argument-list ")" 
 argument-list -> [positional-or-named-argument-list]
 positional-or-named-argument-list -> (*(positional-argument ",") required-positional-argument) | (*(positional-argument ",") named-argument-list)
@@ -433,7 +439,7 @@ required-positional-argument -> argument-expression
 named-argument-list -> named-argument *("," named-argument)
 named-argument -> unrestricted-name ":""=" argument-expression
 argument-expression -> (["byval"] expression) | addressof-expression 
-dictionary-access-expression -> (l-expression "!" unrestricted-name) | (l-expression line-continuation "!" unrestricted-name) | (l-expression line-continuation "!" line-continuation unrestricted-name)
+dictionary-access-expression -> (l-expression "!" unrestricted-name) | (l-expression Line-continuation "!" [Line-continuation] unrestricted-name)
 with-expression -> with-member-access-expression | with-dictionary-access-expression
 with-member-access-expression -> "." unrestricted-name
 with-dictionary-access-expression -> "!" unrestricted-name
@@ -444,6 +450,6 @@ integer-expression -> expression
 variable-expression -> l-expression 
 bound-variable-expression -> l-expression 
 type-expression -> Builtin-type | defined-type-expression
-defined-type-expression -> simple-name-expression | member-access-expression
+defined-type-expression -> member-access-expression
 addressof-expression -> "addressof" procedure-pointer-expression
 procedure-pointer-expression -> simple-name-expression | member-access-expression 

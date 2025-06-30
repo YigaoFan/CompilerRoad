@@ -13,6 +13,7 @@ using std::pair;
 using std::vector;
 using std::size_t;
 using std::shared_ptr;
+using std::map;
 using std::move;
 
 auto ReadFileAsync(string filename) -> std::generator<char>
@@ -55,7 +56,7 @@ int main()
         pair<string, TokType>{ "\\- Parse \\-\n", TokType::ParseRuleHeader },
     };
     auto l = Lexer<TokType>::New(rules);
-    auto p = TableDrivenParser::ConstructFrom("all-grammars",
+    auto p = LLParser::ConstructFrom("all-grammars",
     {// how to represent empty in current grammar
         { "all-grammars", {
             { "lex-header", "grammars", "parse-header", "grammars" },
@@ -93,7 +94,7 @@ int main()
             { },
         }},
         { "more-productions", {
-            { "|", "productions" }, // ref productions to support "| [end]" to represent empty production
+            { "|", "productions" }, // ref productions to support "| [end]" to represent empty production, not implement now
             { },
         }},
         { "production", { // once production occurs, it means not empty, so production doesn't have {} right side
@@ -171,8 +172,47 @@ int main()
             using std::dynamic_pointer_cast;
 
             //std::println("ast: {}", st.value());
+            auto tokRefChecker = PrivateTokenRefChecker();
             auto ast = dynamic_pointer_cast<AllGrammars>(std::get<1>(st.value().Children.front()).Result);
+            std::ofstream astDefFile{ "vba-ast.ixx" };
+            AstGenerator::GenerateFrom(ast->ParseRules.get(), astDefFile);
+            return 0;
+            tokRefChecker.Check(ast.get());
             auto grammarsInfo = ParseRule2SimpleGrammarTransformer::Transform(ast->ParseRules.get());
+
+            //auto starts = Starts("", { grammarsInfo.Grammars.begin(), grammarsInfo.Grammars.end() });
+            //map<pair<String, String>, vector<int>> conflicts;
+            //for (auto i = 0; auto const& g : grammarsInfo.Grammars)
+            //{
+            //    auto const& symbol = g.first;
+            //    auto const& start = starts.at(i);
+            //    if (start.size() != g.second.size())
+            //    {
+            //        throw std::logic_error("start set for rules size is not same as the grammar rules");
+            //    }
+            //    for (auto j = 0; j < start.size(); ++j)
+            //    {
+            //        for (auto const& termin : start.at(j))
+            //        {
+            //            conflicts[pair{ symbol, String(termin) }].push_back(j);
+            //        }
+            //    }
+            //    ++i;
+            //}
+            //vector<pair<String, String>> toRemoves;
+            //for (auto const& x : conflicts)
+            //{
+            //    if (x.second.size() <= 1)
+            //    {
+            //        toRemoves.push_back(x.first);
+            //    }
+            //}
+            //for (auto const& x : toRemoves)
+            //{
+            //    conflicts.erase(x);
+            //}
+            //auto leftFactoredGrammar = DeepLeftFactor(conflicts, { grammarsInfo.Grammars.begin(), grammarsInfo.Grammars.end() });
+
             //std::println("simple grammar: {}", grammarsInfo);
             std::ofstream codeFile{ "vba-spec.ixx" };
             std::print(codeFile, "export module VbaSpec;\n");

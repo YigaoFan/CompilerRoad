@@ -31,34 +31,34 @@ public:
     }
 };
 
-class FileStream
-{
-private:
-    ifstream instream;
-public:
-    static auto New(string_view filename) -> FileStream
-    {
-        ifstream istrm(filename.data(), std::ios::binary);
-    }
-
-    FileStream(ifstream instream) : instream(move(instream))
-    { }
-
-    auto NextItem() -> Char
-    {
-        return instream.get();
-    }
-
-    auto RollbackTo(size_t i) -> void
-    {
-        throw; // not implement
-    }
-
-    auto CurrentPosition() -> size_t
-    {
-        throw; // not implement
-    }
-};
+//class FileStream
+//{
+//private:
+//    ifstream instream;
+//public:
+//    static auto New(string_view filename) -> FileStream
+//    {
+//        ifstream istrm(filename.data(), std::ios::binary);
+//    }
+//
+//    FileStream(ifstream instream) : instream(move(instream))
+//    { }
+//
+//    auto NextItem() -> Char
+//    {
+//        return instream.get();
+//    }
+//
+//    auto RollbackTo(size_t i) -> void
+//    {
+//        throw; // not implement
+//    }
+//
+//    auto CurrentPosition() -> size_t
+//    {
+//        throw; // not implement
+//    }
+//};
 
 template <typename T>
 struct VectorStream

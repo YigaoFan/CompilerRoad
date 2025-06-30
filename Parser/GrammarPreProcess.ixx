@@ -105,7 +105,7 @@ auto RemoveIndirectLeftRecur(String startSymbol, vector<SimpleGrammar> grammars)
         }
         focus.second = move(newRss);
         
-        auto [recursive, gs] = DirectLeftRecur2RightRecur(move(focus));
+        auto [recursive, gs] = DirectLeftRecur2RightRecur(move(focus)); // does it change rule orders in it?
         auto&& [original, newNontermin] = gs;
         focus = move(original);
         if (recursive)
@@ -183,7 +183,7 @@ auto LeftFactor(SimpleGrammar grammar) -> pair<SimpleGrammar, optional<vector<Si
             newGrammars.append_range(move(addedGrammars.value()));
         }
     }
-
+    
     std::sort(toRemoves.begin(), toRemoves.end(), std::greater<int>());
     for (auto i : toRemoves)
     {
@@ -200,8 +200,97 @@ auto LeftFactor(SimpleGrammar grammar) -> pair<SimpleGrammar, optional<vector<Si
     }
 }
 
+
+// move this function to GrammarPreProcess
+// precondition: this grammar has conflict start of rules, not left-recursive grammar
+
+/// <param name="conflicts">(Nonterminal, Terminal) to conflict rule indexes</param>
+auto DeepLeftFactor(map<pair<String, String>, vector<int>> conflicts, map<LeftSide, vector<SimpleRightSide>> grammars) -> map<LeftSide, vector<SimpleRightSide>>
+{
+    using std::ranges::views::drop;
+    using std::ranges::reverse;
+
+    map<String, vector<int>> toRemoves;
+    map<String, vector<SimpleRightSide>> toAdds;
+    for (auto const& conflict : conflicts)
+    {
+        // only need to focus on the initial rules
+        vector<SimpleRightSide> reversedIssueRules; // add expand history progress here
+        for (auto const i : conflict.second)
+        {
+            auto rule = grammars.at(conflict.first.first).at(i); // make a copy to isolate change, TODO maybe not need
+            toRemoves[conflict.first.first].push_back(i);
+            reverse(rule);
+            reversedIssueRules.push_back(move(rule)); // only part of rules, so we cannot assign it back directly TODO
+        }
+
+        set<pair<String, int>> expandHistory;
+        for (auto changed = true; changed;)
+        {
+            changed = false;
+            for (size_t i = 0, size = reversedIssueRules.size(); i < size; ++i)
+            {
+                // handle the left recursive item
+                auto& rule = reversedIssueRules.at(i);
+                if (rule.empty())
+                {
+                    continue;
+                }
+                if (auto symbol = rule.back(); symbol != conflict.first.second and grammars.contains(symbol) and not expandHistory.contains({ symbol, static_cast<int>(i) }))// when grammars is map, we don't need get NonTermins manually TODO
+                {
+                    changed = true;
+                    expandHistory.insert({ symbol, i });
+
+                    rule.pop_back();
+
+                    for (auto rule : grammars.at(symbol) | drop(1))
+                    {
+                        reversedIssueRules.push_back(rule); // may change the valid of reference rule
+                        reverse(rule);
+                        reversedIssueRules.back().append_range(move(rule));
+                    }
+
+                    auto firstRule = grammars.at(symbol).front();
+                    reverse(firstRule);
+                    reversedIssueRules.at(i).append_range(move(firstRule));
+                }
+            }
+        }
+
+        for (auto& x : reversedIssueRules)
+        {
+            reverse(x);
+        }
+
+        auto [newG, addGrammars] = LeftFactor({ conflict.first.first, move(reversedIssueRules) });
+        // Left Factor will make the reduce the rules, how to make it not affect other rules index. possible some rule here is left recursive
+        toAdds[newG.first] = move(newG.second);
+        if (addGrammars.has_value())
+        {
+            toAdds.insert_range(move(addGrammars.value()));
+        }
+    }
+
+    for (auto& x : toRemoves)
+    {
+        std::ranges::sort(x.second, std::ranges::greater());
+        for (auto i : x.second)
+        {
+            auto& rules = grammars.at(x.first);
+            rules.erase(rules.begin() + i);
+        }
+    }
+    for (auto& x : toAdds)
+    {
+        grammars[x.first].append_range(move(x.second));
+    }
+
+    return grammars;
+}
+
 export
 {
     auto LeftFactor(SimpleGrammar grammar) -> pair<SimpleGrammar, optional<vector<SimpleGrammar>>>;
+    auto DeepLeftFactor(map<pair<String, String>, vector<int>> conflicts, map<LeftSide, vector<SimpleRightSide>> grammars) -> map<LeftSide, vector<SimpleRightSide>>;
     auto RemoveIndirectLeftRecur(String startSymbol, vector<SimpleGrammar> grammars) -> vector<SimpleGrammar>;
 }

@@ -155,6 +155,11 @@ export
         string code = "r\"ab\" \"abc\" \"\\r\\n\" \n \"\\r\" \"\\n\" \n r\"[^\\r\\n]\"";
         auto toks = l.Lex(code) | filter([](auto& x) -> bool { return x.Type != TokType::Whitespace and x.Type != TokType::Comment and x.Type != TokType::Newline; }) | to<vector<Token<TokType>>>();
 
+        SimpleGrammars grammars
+        {
+            { "", { }},
+        };
+
         auto p = GLLParser::ConstructFrom("", {}, {});
         p.Parse<Token<TokType>, void>(VectorStream{ .Tokens = move(toks) }, [](auto) {});
         // TODO

@@ -218,7 +218,7 @@ int main()
         pair<string, TokType>{ "\\[", TokType::LeftSquareBracket },
         pair<string, TokType>{ "\\]", TokType::RightSquareBracket },
         pair<string, TokType>{ ":", TokType::Colon },
-        pair<string, TokType>{ ".", TokType::Colon },
+        pair<string, TokType>{ ".", TokType::Dot },
         pair<string, TokType>{ "\\+", TokType::AddOperator }, // TODO conflict with PrefixOperator
         pair<string, TokType>{ "\\-", TokType::MinOperator },
         pair<string, TokType>{ "\\*", TokType::MulOperator },
@@ -230,7 +230,7 @@ int main()
     //string code = "func a (b, c) { var a = 1 } ";
     string code = "func a (b, c) { if (false) { var d = 1 } }";
     auto tokens = l.Lex(code) | filter([](auto& x) -> bool { return x.Type != TokType::Space; }) | to<vector<Token<TokType>>>();
-    auto p = TableDrivenParser::ConstructFrom("program", // support like "exp"s
+    auto p = LLParser::ConstructFrom("program", // support like "exp"s
     {
         { "program", {
             { "function" }

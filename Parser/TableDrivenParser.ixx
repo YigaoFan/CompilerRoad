@@ -387,12 +387,11 @@ private:
     map<string_view, int> const terminal2IntTokenType;
     set<int> const ignorableTokenTypes;
     map<int, set<int>> const replaceableTokenTypes;
-    set<int> const repeatableTokenTypes;
 public:
     /// <summary>
     /// attention: make string_view in terminal2IntTokenType is alive when parse
     /// </summary>
-    static auto ConstructFrom(String startSymbol, SimpleGrammars grammars, map<string_view, int> terminal2IntTokenType, set<int> ignorableTokenTypes = {}, map<int, set<int>> replaceableTokenTypes = {}, set<int> repeatableTokenTypes = {}) -> GLLParser
+    static auto ConstructFrom(String startSymbol, SimpleGrammars grammars, map<string_view, int> terminal2IntTokenType, set<int> ignorableTokenTypes = {}, map<int, set<int>> replaceableTokenTypes = {}) -> GLLParser
     {
         vector<SimpleGrammar> newAddGrammars;
         for (auto& g : grammars)
@@ -438,12 +437,12 @@ public:
             ++i;
         }
         //std::println("parse table: {}", parseTable);
-        return GLLParser(move(startSymbol), move(grammars), move(parseTable), move(terminal2IntTokenType), move(ignorableTokenTypes), move(replaceableTokenTypes), move(repeatableTokenTypes));
+        return GLLParser(move(startSymbol), move(grammars), move(parseTable), move(terminal2IntTokenType), move(ignorableTokenTypes), move(replaceableTokenTypes));
     }
 
-    GLLParser(String startSymbol, SimpleGrammars grammars, map<pair<String, int>, vector<int>> parseTable, map<string_view, int> terminal2IntTokenType, set<int> ignorableTokenTypes, map<int, set<int>> replaceableTokenTypes, set<int> repeatableTokenTypes)
+    GLLParser(String startSymbol, SimpleGrammars grammars, map<pair<String, int>, vector<int>> parseTable, map<string_view, int> terminal2IntTokenType, set<int> ignorableTokenTypes, map<int, set<int>> replaceableTokenTypes)
         : startSymbol(move(startSymbol)), grammars(move(grammars)), parseTable(move(parseTable)), terminal2IntTokenType(move(terminal2IntTokenType)), 
-        ignorableTokenTypes(move(ignorableTokenTypes)), replaceableTokenTypes(move(replaceableTokenTypes)), repeatableTokenTypes(move(repeatableTokenTypes))
+        ignorableTokenTypes(move(ignorableTokenTypes)), replaceableTokenTypes(move(replaceableTokenTypes))
     {
     }
 
@@ -534,11 +533,8 @@ private:
                     PopAllFilledNodes();
                     if constexpr (IsTerminal and ContinueUseWord) // if continue use word, we should update it
                     {
-                        if (not TopParser->repeatableTokenTypes.contains(static_cast<int>(word.Type)))
-                        {
-                            TokStream.MoveNext();
-                            word = TokStream.Current();
-                        }
+                        TokStream.MoveNext();
+                        word = TokStream.Current();
                     }
                 };
                 while (true)
@@ -583,7 +579,7 @@ private:
                         {
                             DoWhenGotChild(move(word), bool_constant<true>{}, bool_constant<true>{});
                         }
-                        else if (TopParser->ignorableTokenTypes.contains(static_cast<int>(word.Type)) or TopParser->repeatableTokenTypes.contains(static_cast<int>(word.Type)))
+                        else if (TopParser->ignorableTokenTypes.contains(static_cast<int>(word.Type)))
                         {
                             TokStream.MoveNext();
                             word = TokStream.Current();
@@ -680,7 +676,7 @@ private:
                             }
                             return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, replaceable word: {}) when parse in {}", focus.Value, word, Root.Name) });
                         }
-                        else if (TopParser->ignorableTokenTypes.contains(static_cast<int>(word.Type)) or TopParser->repeatableTokenTypes.contains(static_cast<int>(word.Type)))
+                        else if (TopParser->ignorableTokenTypes.contains(static_cast<int>(word.Type)))
                         {
                             TokStream.MoveNext();
                             word = TokStream.Current();

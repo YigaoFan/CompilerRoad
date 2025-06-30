@@ -166,7 +166,8 @@ struct formatter<CppCodeForm<TokensInfo>, char>
     {
         format_to(fc.out(), "export enum class TokType : int\n");
         format_to(fc.out(), "{{\n");
-        format_to(fc.out(), "    EOF,\n");
+        format_to(fc.out(), "    EOF,\n"); // make expression and eof as built-in items which is passed by user
+        format_to(fc.out(), "    Expression,\n");
         for (auto const& x : t.Value.PrioritySymbols)
         {
             format_to(fc.out(), "    {},\n", t.Value.Symbol2EnumNameRegExp.at(x).first); // print by priority
@@ -190,6 +191,8 @@ struct formatter<TokType, char>
         {{)");
         format_to(fc.out(), R"(
         case TokType::EOF: s = "EOF"; break;)");
+        format_to(fc.out(), R"(
+        case TokType::Expression: s = "Expression"; break;)");
         for (auto const& x : t.Value.Symbol2EnumNameRegExp)
         {
             format_to(fc.out(), R"(
@@ -216,6 +219,7 @@ struct formatter<TokType, char>
         format_to(fc.out(), "export map<string_view, int> terminal2IntTokenType =\n");
         format_to(fc.out(), "{{\n");
         format_to(fc.out(), "    {{ eof, static_cast<int>(TokType::EOF) }},\n");
+        format_to(fc.out(), "    {{ \"expression\", static_cast<int>(TokType::Expression) }},\n");
         for (auto const& x : t.Value.Symbol2EnumNameRegExp)
         {
             format_to(fc.out(), "    {{ \"{}\", static_cast<int>(TokType::{}) }},\n", x.first, x.second.first);
@@ -354,13 +358,13 @@ public:
             else
             {
                 // why need create a new symbol? because SimpleGrammar not support alter semantic in a rule
-            String auxGrammarName{ format("{}_com_{}", info->Left, info->Counter++) };
-            GrammarTransformInfo subInfo = info->CreateSubInfo(auxGrammarName);
-            ParseRule2SimpleGrammarTransformer::Transform(combine->Productions.get(), &subInfo);
+                String auxGrammarName{ format("{}_com_{}", info->Left, info->Counter++) };
+                GrammarTransformInfo subInfo = info->CreateSubInfo(auxGrammarName);
+                ParseRule2SimpleGrammarTransformer::Transform(combine->Productions.get(), &subInfo);
 
-            info->OtherGrammars.push_back({ subInfo.Left, move(subInfo.MainRights) });
-            info->AppendOnLastRule(auxGrammarName);
-        }
+                info->OtherGrammars.push_back({ subInfo.Left, move(subInfo.MainRights) });
+                info->AppendOnLastRule(auxGrammarName);
+            }
         }
 
         auto Transform(Optional const* optional, GrammarTransformInfo* info) -> void
@@ -731,8 +735,6 @@ struct LexRule2RegExpTransformer
         return regExp;
     }
 
-    // TODO return value should be vector to control the print order which means priority
-
     /// <returns>(symbol name, (enum name, regular expression))</returns>
     static auto MergeTokInfo(TokensInfo tokInfoFromLexRules, TokensInfo tokInfoFromParseRules) -> TokensInfo
     {
@@ -743,10 +745,35 @@ struct LexRule2RegExpTransformer
     }
 };
 
+struct A
+{
+    vector<int> Ints;
+    int& Num = Ints[0];
+};
+struct AstGenerator
+{
+    static auto GenerateFrom(Grammars const* grammars, std::ofstream& file) -> void
+    {
+        file << R"(struct IVisitor;
+struct AstNode
+{
+    virtual auto Visit(IVisitor* visitor) -> void = 0;
+    virtual ~AstNode() = default;
+};
+)";
+        for (auto const& x : grammars->Items)
+        {
+            file << "struct " << format("{} : public AstNode ", GetEnumName(x->Left, true)) << "{};" << '\n';
+        }
+        file.flush();
+    }
+};
+
 export
 {
     class ParseRule2SimpleGrammarTransformer;
     struct LexRule2RegExpTransformer;
     template<>
     struct formatter<CppCodeForm<TokensInfo>, char>;
+    struct AstGenerator;
 }

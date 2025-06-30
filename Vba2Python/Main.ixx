@@ -13,24 +13,8 @@ using std::vector;
 using std::ranges::views::filter;
 using std::ranges::to;
 
-auto GenNums() -> Exchanger<int, string>
-{
-    co_yield 1;
-    auto s = co_await false;
-    std::println("got {} from outside", s.value());
-    co_yield 2;
-    co_yield 3;
-}
-
 int main()
 {
-    auto g = GenNums();
-    g.Input("Hello inside");
-    while (g.MoveNext())
-    {
-        std::println("num: {}", g.Current());
-    }
-    return 0;
     auto gs = GrammarUnitLoader({ grammars.begin(), grammars.end() });
     //auto [g0, g1] = gs.SeparateGrammarBaseOn("expression", "Procedural-module");
     auto l = Lexer<TokType>::New(lexRules);
@@ -44,7 +28,9 @@ int main()
 
     string f = "VbaGrammarUnit.vba";
     //String focusSymbol = "enum-declaration";
-    String focusSymbol = "public-type-declaration";
+    //String focusSymbol = "public-type-declaration";
+    String focusSymbol = "function-declaration";
+    //String focusSymbol = "if-statement";
     auto [_, partGrammars] = gs.SeparateGrammarBaseOn("expression", focusSymbol);
     for (auto const& x : LoadSource(f))
     {
@@ -60,11 +46,11 @@ int main()
         auto p = GLLParser::ConstructFrom(focusSymbol, partGrammars, terminal2IntTokenType, 
             { static_cast<int>(TokType::CommentEndOfLine), static_cast<int>(TokType::RemStatement), },
             {
-                // terminalXXX will change if change vba.abnf file
-                { static_cast<int>(TokType::Terminal200)/*0*/, { static_cast<int>(TokType::Integer), static_cast<int>(TokType::Expression), } }, // Integer also can replace Expression. All Expression atom's prefix can replace/trigger Expression
+                // terminalXXX will change if change vba.abnf file, We can specify a name for the terminal in abnf
+                { static_cast<int>(TokType::Terminal209)/*0*/, { static_cast<int>(TokType::Integer), static_cast<int>(TokType::Expression), } }, // Integer also can replace Expression. All Expression atom's prefix can replace/trigger Expression
                 { static_cast<int>(TokType::Integer), { static_cast<int>(TokType::Expression), } },
             });
-        auto st = p.Parse<Token<TokType>, void>(VectorStream{ .Tokens = move(toks) }, [](auto) { },
+        auto st = p.Parse<Token<TokType>, void>(VectorStream{ .Tokens = move(toks) }, [](auto n) { /*std::println("encounter {}", n->Name);*/ },
             {
                 { "expression", [](auto& stream) { return ParseExp<Token<TokType>, void>(stream, 0); }},
             }
@@ -72,11 +58,13 @@ int main()
 
         if (st.has_value())
         {
-            std::println("parse done");
+            std::println("ast:\n{}", st.value());
+            std::println("---------parse done---------");
         }
         else
         {
-            std::println("parse failed");
+            std::println("failed: {}", st.error().Message);
+            std::println("---------parse failed---------");
         }
         //std::println("{}: {}", x.first, x.second);
     }

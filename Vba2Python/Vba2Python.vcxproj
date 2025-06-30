@@ -134,6 +134,7 @@
     <ClCompile Include="..\ABNF2SimpleGrammar\vba-spec.ixx" />
     <ClCompile Include="GrammarUnitLoader.ixx" />
     <ClCompile Include="Main.ixx" />
+    <ClCompile Include="PrattParser.ixx" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Base\Base.vcxproj">
@@ -145,6 +146,9 @@
     <ProjectReference Include="..\Parser\Parser.vcxproj">
       <Project>{fa5d972e-26e4-470b-bec1-cd4c634861fe}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="VbaGrammarUnit.vba" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
