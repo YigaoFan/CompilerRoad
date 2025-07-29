@@ -1,0 +1,55 @@
+- Lex -
+Whitespace -> 1*(tab-character | space-character)
+tab-character -> "\t"
+space-character -> " "
+
+Newline -> "\r\n" | "\r" | "\n"
+
+Comment -> "//" *(non-line-termination-character) ;only support single line comment
+non-line-termination-character -> r"[^\r\n]"
+
+Keyword ->  "alignof" | "auto" | "break" | "case" | "char" | "const" | "continue" | "default" | "do" | "double" | "else" | "enum" | "extern" | "float" | "for" | "Semantics" | "goto" | "if" | "inline" | "int" | "long" | "register" | "restrict" | "return" | "short" | "signed" | "sizeof" | "static" | "struct" | "switch" | "typedef" | "union" | "unsigned" | "void" | "volatile" | "while" | "_Alignas" | "_Atomic" | "_Bool" | "_Complex" | "_Generic" | "_Imaginary" | "_Noreturn" | "_Static_assert" | "_Thread_local"
+
+Identifier -> r"[a-zA-Z_][a-zA-Z0-9_]*" ;no support for universal character
+
+Constant -> intger-constant | floating-constant | enumeration-constant | character-constant
+intger-constant -> (decimal-constant | octal-constant | hexadecimal-constant) [integer-suffix]
+integer-suffix -> "U" | "u" | "l" | "L" | "LL" | "ll"
+decimal-constant -> r"[1-9][0-9]*"
+octal-constant -> r"0[0-7]*"
+hexadecimal-prefix -> "0x" | "0X"
+hexadecimal-constant -> hexadecimal-prefix 1*r"[0-9a-fA-F]"
+floating-constant -> decimal-floating-constant | hexadecimal-floating-constant
+decimal-floating-constant -> fractional-constant [exponent-part] [floating-suffix] | 1*r"[0-9]" exponent-part [floating-suffix]
+fractional-constant -> r"[0-9]*." 1*"[0-9]" | 1*r"[0-9]" "."
+exponent-part -> ("e" | "E") ["+" | "-"] 1*r"[0-9]"
+floating-suffix -> "f" | "F" | "l" | "L"
+hexadecimal-floating-constant -> hexadecimal-prefix (hexadecimal-fractional-constant | r"[0-9a-fA-F]+") binary-exponent-part [floating-suffix]
+hexadecimal-fractional-constant -> r"[0-9a-fA-F]*.[0-9a-fA-F]+" | r"[0-9a-fA-F]+."
+binary-exponent-part -> ("p" | "P") ["+" | "-"] r"[0-9]+"
+enumeration-constant -> Identifier
+; not same as std: replace c-char-sequence with c-char
+character-constant -> "'" c-char "'" | "u'" c-char "'" | "U'" c-char "'" | "L'" c-char "'"
+c-char -> r"[^\\'\n\r]" | escape-sequence
+escape-sequence -> simple-escape-sequence | octal-escape-sequence | hexadecimal-escape-sequence | universal-character-name
+simple-escape-sequence -> "\\" ("a" | "b" | "f" | "n" | "r" | "t" | "v" | "\"" | "'" | "\\")
+octal-escape-sequence -> "\\" r"[0-3][0-7][0-7]" | "\\" r"[0-7][0-7]" | "\\" r"[0-7]" ;TODO check digit range
+hexadecimal-escape-sequence -> "\\x" r"[0-9a-fA-F]+"
+universal-character-name -> "\\u" hex-quad | "\\U" hex-quad hex-quad
+hex-quad -> 4*4(r"[0-9a-fA-F]")
+
+StringLiteral -> [encoding-prefix] "\"" s-char-sequence "\""
+encoding-prefix -> "u8" | "u" | "U" | "L"
+s-char-sequence -> *s-char
+s-char -> "\\\"" | non-line-termination-character
+
+; <% replaces {
+; %> replaces }
+; <: replaces [
+; :> replaces ]
+; %: replaces # preprocessor directive
+; %:%: replaces ## concatenation operator in preprocessor
+Punctuator -> "[" | "]" | "(" | ")" | "{" | "}" | "." | "->" | "++" | "--" | "&" | "*" | "+" | "-" | "~" | "!" | "/" | "%" | "<<" | ">>" | "<" | ">" | "<=" | ">=" | "==" | "!=" | "^" | "|" | "&&" | "||" | "?" | ":" | ";" | "..." | "=" | "*=" | "/=" | "%=" | "+=" | "-=" | "<<=" | ">>=" | "&=" | "^=" | "|=" | "," | "#" | "##" | "<:" | ":>" | "<%" | "%>" | "%:" | "%:%:"
+
+- Parse -
+A -> B
