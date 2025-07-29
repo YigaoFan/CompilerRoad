@@ -108,9 +108,9 @@ public:
             switch (Signal)
             {
             case Strategy::PassOne:
-            case Strategy::PassRange:
-                return Data < that.Data;
             case Strategy::BlockOne:
+                return Data < that.Data;
+            case Strategy::PassRange:
             case Strategy::BlockRange:
                 return Left + Right < that.Left + that.Right;
             case Strategy::Multiple:
@@ -537,6 +537,7 @@ struct std::formatter<Step<T>, char>
 
 export
 {
+    enum class Strategy;
     template <typename T>
     struct Step;
     template <typename Input, typename Result>
