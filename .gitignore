@@ -35,3 +35,8 @@
 /x64/Debug
 /*/x64/Release
 /x64/Release
+
+# AI related files
+.claude/
+_bmad/
+_bmad_output/
