@@ -30,11 +30,8 @@
 *.exe
 *.out
 *.app
-/.vs/CompilerRoad
-/*/x64/Debug
-/x64/Debug
-/*/x64/Release
-/x64/Release
+.vs/
+**/x64/
 
 # AI related files
 .claude/
