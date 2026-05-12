@@ -276,7 +276,7 @@ struct MoreProductions : public AstNode
         case 0:
             return make_shared<MoreProductions>(nullptr);
         case 2:
-            return make_shared<MoreProductions>(GetAstOfChildAs<::Productions>(node, 1));
+            return make_shared<MoreProductions>(GetAstOfChildAs<::Productions>(node, 1)); // handle here to support | [end]
         default:
             throw logic_error(format("not handled MoreProductions Item symbols {}", node->ChildSymbols));
         }
@@ -300,11 +300,20 @@ struct Productions : public AstNode
         switch (node->ChildSymbols.size())
         {
         case 0:
-            return ApplyVisitor(make_shared<Productions>(vector<shared_ptr<Production>>{}), visitor);
+            return ApplyVisitor(make_shared<Productions>(vector{ make_shared<Production>(Production({})) }), visitor);
         case 2:
         {
             vector ps{ GetAstOfChildAs<Production>(node, 0) };
             if (auto mps = GetAstOfChildAs<MoreProductions>(node, 1)->Productions; mps != nullptr)
+            {
+                ps.append_range(mps->Items);
+            }
+            return ApplyVisitor(make_shared<Productions>(move(ps)), visitor);
+        }
+        case 3:
+        {
+            vector ps{ GetAstOfChildAs<Production>(node, 0) };
+            if (auto mps = GetAstOfChildAs<MoreProductions>(node, 2)->Productions; mps != nullptr)
             {
                 ps.append_range(mps->Items);
             }

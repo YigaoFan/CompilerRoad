@@ -6,6 +6,7 @@ using std::string_view;
 
 enum class TokType : int
 {
+    PipeMark,
     Newline,
     LexRuleHeader,
     ParseRuleHeader,
@@ -19,7 +20,6 @@ enum class TokType : int
     LeftBracket,
     RightBracket,
     StarMark,
-    PipeMark,
     Hyphen,
     Whitespace,
     RegularExpression,

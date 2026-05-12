@@ -62,15 +62,15 @@ auto NormalEscape2RegExpAsPrintLiteral(String normalString) -> String
             {
                 AppendCppStringLiteralSlash(regExp);
             }
-            else if (std::isalpha(c)) // alphabet in string ignore case
-            {
-                regExp.push_back('(');
-                regExp.push_back(std::toupper(c));
-                regExp.push_back('|');
-                regExp.push_back(std::tolower(c));
-                regExp.push_back(')');
-                break;
-            }
+            //else if (std::isalpha(c)) // alphabet in string ignore case
+            //{
+            //    regExp.push_back('(');
+            //    regExp.push_back(std::toupper(c));
+            //    regExp.push_back('|');
+            //    regExp.push_back(std::tolower(c));
+            //    regExp.push_back(')');
+            //    break;
+            //}
             
             regExp.push_back(c);
             break;
@@ -351,11 +351,15 @@ public:
 
         auto Transform(Combine const* combine, GrammarTransformInfo* info) -> void
         {
-            if (combine->Productions->Items.size() == 1)
+            switch (combine->Productions->Items.size())
             {
+            case 0:
+                info->MainRights.push_back({});
+                break;
+            case 1:
                 ParseRule2SimpleGrammarTransformer::Transform(combine->Productions->Items.front().get(), info);
-            }
-            else
+                break;
+            default:
             {
                 // why need create a new symbol? because SimpleGrammar not support alter semantic in a rule
                 String auxGrammarName{ format("{}_com_{}", info->Left, info->Counter++) };
@@ -364,6 +368,8 @@ public:
 
                 info->OtherGrammars.push_back({ subInfo.Left, move(subInfo.MainRights) });
                 info->AppendOnLastRule(auxGrammarName);
+                break;
+            }
             }
         }
 
@@ -393,14 +399,18 @@ public:
 
         auto Transform(Terminal const* terminal, GrammarTransformInfo* info) -> void
         {
-            auto name = info->RegisterTerminalName(NormalEscape2RegExpAsPrintLiteral(terminal->Value));
-            info->AppendOnLastRule(name);
+            // control if register terminal into TokensInfo
+            //auto name = info->RegisterTerminalName(NormalEscape2RegExpAsPrintLiteral(terminal->Value));
+			auto l = terminal->Value.Length();
+			info->AppendOnLastRule(terminal->Value.Substring(1, l - 2)); // ignore the first and last double quote
         }
 
         auto Transform(RegExp const* regExp, GrammarTransformInfo* info) -> void
         {
-            auto name = info->RegisterTerminalName(RegExpEscape2PrintLiteral(regExp->Value));
-            info->AppendOnLastRule(name);
+            // TODO lex will call here?
+			throw std::logic_error("not support RegExp in parse rule, use it in Lex part instead");
+            //auto name = info->RegisterTerminalName(RegExpEscape2PrintLiteral(regExp->Value));
+            //info->AppendOnLastRule(name);
         }
     };
 
@@ -448,10 +458,18 @@ public:
 
     static auto Transform(Production const* production, GrammarTransformInfo* info) -> void
     {
-        for (auto const& item : production->Items)
+        if (production->Items.empty())
         {
-            Transform(item.get(), info);
+            info->MainRights.push_back({});
         }
+        else
+        {
+            for (auto const& item : production->Items)
+            {
+                Transform(item.get(), info);
+            }
+        }
+        // is it ok when production is empty?
     }
 };
 

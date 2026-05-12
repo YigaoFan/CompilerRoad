@@ -40,7 +40,7 @@ int main()
         pair<string, TokType>{ "{", TokType::LeftBracket },
         pair<string, TokType>{ "}", TokType::RightBracket },
         pair<string, TokType>{ "\\*", TokType::StarMark },
-        pair<string, TokType>{ "\\|", TokType::PipeMark },
+        pair<string, TokType>{ "\n?( |\t)*\\|", TokType::PipeMark },
         pair<string, TokType>{ " |\t", TokType::Whitespace },
         pair<string, TokType>{ "[a-zA-Z][a-zA-Z0-9_\\-]*", TokType::Symbol },
         pair<string, TokType>{ "[1-9][0-9]*", TokType::Number },
@@ -62,7 +62,7 @@ int main()
             { "lex-header", "grammars", "parse-header", "grammars" },
             { },
         }},
-        { "grammars", {
+        { "grammars", { // cannot place newlines if lex or parse part is empty
             { "optional-newlines", "grammar", "more-grammars", },
             { },
         }},
@@ -94,11 +94,11 @@ int main()
             { },
         }},
         { "more-productions", {
-            { "|", "productions" }, // ref productions to support "| [end]" to represent empty production, not implement now
+            { "|", "productions" },
             { },
         }},
         { "production", { // once production occurs, it means not empty, so production doesn't have {} right side
-            { "item", "more-items" },
+            { "item", "more-items" }, // use () to represent empty
         }},
         { "more-items", {
             { "item", "more-items" },
@@ -224,7 +224,16 @@ int main()
             auto terminals = LexRule2RegExpTransformer::MergeTokInfo(LexRule2RegExpTransformer::Transform(ast->LexRules.get()), move(grammarsInfo.ToksInfo));
             std::print(codeFile, "{}\n", CppCodeForm{ .Value = terminals });
             std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Grammars });
+            std::print(codeFile, "export ParseInfo parseInfo =\n");
+            std::print(codeFile, "{{\n");
+            std::print(codeFile, "   .Grammars = grammars,\n");
+            std::print(codeFile, "   .Terminal2IntTokenType = terminal2IntTokenType,\n");
+            std::print(codeFile, "}};");
             std::println("code generate done");
+        }
+        else
+        {
+			std::println("parse failed: {}", st.error().Message);
         }
         checker.Check();
     }
