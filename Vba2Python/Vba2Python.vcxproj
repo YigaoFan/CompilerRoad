@@ -132,7 +132,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\ABNF2SimpleGrammar\vba-spec.ixx" />
-    <ClCompile Include="GrammarUnitLoader.ixx" />
     <ClCompile Include="Main.ixx" />
     <ClCompile Include="PrattParser.ixx" />
   </ItemGroup>
@@ -148,6 +147,7 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <None Include="vba.abnf" />
     <None Include="VbaGrammarUnit.vba" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

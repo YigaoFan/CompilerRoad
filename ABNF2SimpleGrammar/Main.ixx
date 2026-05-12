@@ -14,21 +14,30 @@ using std::vector;
 using std::size_t;
 using std::shared_ptr;
 using std::map;
+using std::format;
 using std::move;
 
-auto ReadFileAsync(string filename) -> std::generator<char>
-{
-    std::ifstream file(filename);
-    while (file.eof())
-    {
-        co_yield file.get();
-    }
-}
-
-int main()
+int main(int argc, char* argv[])
 {
     using std::ranges::views::filter;
     using std::ranges::to;
+
+    if (argc < 2)
+    {
+        std::println("usage: ABNF2SimpleGrammar <abnf-filename> [spec-output-path]");
+        return 1;
+    }
+    auto abnfPath = std::filesystem::path(argv[1]);
+    if (!std::filesystem::exists(abnfPath))
+    {
+        std::println("file not found: {}", argv[1]);
+        return 1;
+    }
+    auto language = abnfPath.stem().generic_string();
+    auto specPath = argc >= 3
+        ? std::filesystem::path(argv[2])
+        : abnfPath.parent_path() / (language + "-spec.ixx");
+    auto astPath = specPath.parent_path() / (language + "-ast.ixx");
 
     std::array rules =
     {
@@ -145,12 +154,11 @@ int main()
         { "parse-header" , static_cast<int>(TokType::ParseRuleHeader) },
     });
 
-    auto filename = "vba.abnf";
-    std::ifstream file(filename);
+    std::ifstream file(abnfPath);
     string content;
     if (file.is_open())
     {
-        content.reserve(std::filesystem::file_size(filename));
+        content.reserve(std::filesystem::file_size(abnfPath));
         std::string line;
 
         while (std::getline(file, line))
@@ -163,7 +171,7 @@ int main()
         toks.push_back({ .Type = TokType::EOF, .Value = "" }); // add eof
         // add line and word info in toks
         auto checker = Checker();
-        auto st = p.Parse<Token<TokType>, shared_ptr<AstNode>>(VectorStream{ .Tokens = move(toks) }, [&checker](auto n) -> void
+        auto st = p.Parse<shared_ptr<AstNode>>(VectorStream{ .Tokens = move(toks) }, [&checker](auto n) -> void
         {
             AstFactory::Create(&checker, n);
         }); // TODO std::bind(AstFactory::Create, &checker)
@@ -174,9 +182,8 @@ int main()
             //std::println("ast: {}", st.value());
             auto tokRefChecker = PrivateTokenRefChecker();
             auto ast = dynamic_pointer_cast<AllGrammars>(std::get<1>(st.value().Children.front()).Result);
-            std::ofstream astDefFile{ "vba-ast.ixx" };
+            std::ofstream astDefFile{ astPath };
             AstGenerator::GenerateFrom(ast->ParseRules.get(), astDefFile);
-            return 0;
             tokRefChecker.Check(ast.get());
             auto grammarsInfo = ParseRule2SimpleGrammarTransformer::Transform(ast->ParseRules.get());
 
@@ -214,8 +221,8 @@ int main()
             //auto leftFactoredGrammar = DeepLeftFactor(conflicts, { grammarsInfo.Grammars.begin(), grammarsInfo.Grammars.end() });
 
             //std::println("simple grammar: {}", grammarsInfo);
-            std::ofstream codeFile{ "vba-spec.ixx" };
-            std::print(codeFile, "export module VbaSpec;\n");
+            std::ofstream codeFile{ specPath };
+            std::print(codeFile, "export module {}Spec;\n", language);
             std::print(codeFile, "\n");
             std::print(codeFile, "import std;\n");
             std::print(codeFile, "import Parser;\n");
@@ -239,7 +246,7 @@ int main()
     }
     else
     {
-        std::println("open file({}) failed", filename);
+        std::println("open file({}) failed", argv[1]);
     }
     return 0;
 }
