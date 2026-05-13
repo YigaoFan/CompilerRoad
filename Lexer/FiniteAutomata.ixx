@@ -263,8 +263,7 @@ template <typename Input, typename AcceptStateResult>
 class FiniteAutomataDraft
 {
 private:
-    template <typename T, typename Char>
-    friend struct std::formatter;
+    friend struct std::formatter<FiniteAutomataDraft, char>;
     template <typename Input, typename AcceptStateResult>
     friend auto NFA2DFA(FiniteAutomataDraft<Input, AcceptStateResult> nfa) -> FiniteAutomataDraft<Input, AcceptStateResult>;
     template <bool DivideAccepts, typename Input, typename AcceptStateResult>

@@ -54,8 +54,7 @@ template <typename InputItem>
 class GraphDraft
 {
 private:
-    template <typename T, typename Char>
-    friend struct std::formatter;
+    friend struct std::formatter<GraphDraft, char>;
     vector<pair<State, vector<pair<InputItem, State>>>> transitions;
 
 public:
