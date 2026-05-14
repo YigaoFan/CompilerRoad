@@ -149,12 +149,6 @@
       <Project>{fa5d972e-26e4-470b-bec1-cd4c634861fe}</Project>
     </ProjectReference>
   </ItemGroup>
-  <ItemGroup>
-    <CopyFileToFolders Include="vba.abnf">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <FileType>Document</FileType>
-    </CopyFileToFolders>
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

@@ -1,6 +1,7 @@
 export module TokType;
 
 import std;
+import Base;
 
 using std::string_view;
 
@@ -32,21 +33,8 @@ enum class TokType : int
 };
 
 template<>
-struct std::formatter<TokType, char>
+struct std::formatter<TokType, char> : NoSpecialProcessParse
 {
-    constexpr auto parse(std::format_parse_context& ctx)
-    {
-        // not implement
-        auto it = ctx.begin();
-        if (it == ctx.end())
-            return it;
-
-        if (it != ctx.end() && *it != '}')
-            throw std::format_error("Invalid format args for QuotableString.");
-
-        return it;
-    }
-
     template<class FormatContext>
     constexpr auto format(TokType const& t, FormatContext& fc) const
     {

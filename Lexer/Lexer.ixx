@@ -38,13 +38,13 @@ private:
     using Token = Token<T>;
 public:
     template <size_t Size>
-    static auto New(array<pair<string, T>, Size> const& identifyGroup) -> Lexer
+    static auto New(array<pair<T, string>, Size> const& identifyGroup) -> Lexer
     {
         vector<FiniteAutomataDraft<char, T>> fas{};
         vector<pair<set<State>, T>> accepts2TokenType;
         for (auto& i : identifyGroup)
         {
-            fas.push_back(Minimize<false>(NFA2DFA(ConstructNFAFrom(i.first, i.second))));
+            fas.push_back(Minimize<false>(NFA2DFA(ConstructNFAFrom(i.second, i.first))));
         }
 
         auto fullFa = OrWithoutMergeAcceptState(move(fas));

@@ -34,7 +34,4 @@
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
-  <ItemGroup>
-    <CopyFileToFolders Include="vba.abnf" />
-  </ItemGroup>
 </Project>
