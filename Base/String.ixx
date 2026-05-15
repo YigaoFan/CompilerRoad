@@ -20,10 +20,10 @@ private:
     Share* share;
     // [start, end)
     size_t start;
-    size_t end;
+    size_t stop;
     
-    String(Share* share, size_t start, size_t end)
-        : share(share), start(start), end(end)
+    String(Share* share, size_t start, size_t stop)
+        : share(share), start(start), stop(stop)
     { }
 
 public:
@@ -38,30 +38,30 @@ public:
     template <size_t N>
     String(char const(&literal)[N])
         : share(new Share{ .Str = literal, .RefCount = 1, .Releasable = false }),
-        start(0), end(N - 1)
+        start(0), stop(N - 1)
     {
     }
 
     explicit String(char ch)
-        : share(new Share{ .Str = new char[1], .RefCount = 1, .Releasable = true}), start(0), end(1)
+        : share(new Share{ .Str = new char[1], .RefCount = 1, .Releasable = true}), start(0), stop(1)
     {
         const_cast<char* const>(share->Str)[0] = ch;
     }
 
     explicit String(string_view s)
-        : share(new Share{ .Str = new char[s.size()], .RefCount = 1, .Releasable = true }), start(0), end(s.size())
+        : share(new Share{ .Str = new char[s.size()], .RefCount = 1, .Releasable = true }), start(0), stop(s.size())
     {
         s.copy(const_cast<char* const>(share->Str), s.size());
     }
 
     String(String const& that)
-        : share(that.share), start(that.start), end(that.end)
+        : share(that.share), start(that.start), stop(that.stop)
     {
         ++that.share->RefCount;
     }
 
     String(String&& that)
-        : share(that.share), start(that.start), end(that.end)
+        : share(that.share), start(that.start), stop(that.stop)
     {
         that.share = nullptr;
     }
@@ -85,7 +85,7 @@ public:
         ReduceCurrentShareRef();
         share = that.share;
         start = that.start;
-        end = that.end;
+        stop = that.stop;
 
         ++share->RefCount;
         return *this;
@@ -96,7 +96,7 @@ public:
         ReduceCurrentShareRef();
         share = that.share;
         start = that.start;
-        end = that.end;
+        stop = that.stop;
 
         that.share = nullptr;
         return *this;
@@ -104,13 +104,13 @@ public:
 
     auto operator== (String const& that) const -> bool
     {
-        if (share == that.share and start == that.start and end == that.end)
+        if (share == that.share and start == that.start and stop == that.stop)
         {
             return true;
         }
         if (Length() == that.Length())
         {
-            for (auto i = start, j = that.start; i < end; ++i, ++j)
+            for (auto i = start, j = that.start; i < stop; ++i, ++j)
             {
                 if (share->Str[i] != that.share->Str[j])
                 {
@@ -173,7 +173,7 @@ public:
     {
         auto len = Length() + 1;
         auto newShare = new Share{ .Str = new char[len], .RefCount = 1, .Releasable = true };
-        *copy(share->Str + start, share->Str + end, const_cast<char*>(newShare->Str)) = c;
+        *copy(share->Str + start, share->Str + stop, const_cast<char*>(newShare->Str)) = c;
         return String(newShare, 0, len);
     }
 
@@ -188,7 +188,7 @@ public:
         auto len = Length() + N - 1;
         auto newShare = new Share{ .Str = new char[len], .RefCount = 1, .Releasable = true};
         copy(literal, literal + N - 1,
-            copy(share->Str + start, share->Str + end, const_cast<char*>(newShare->Str)));
+            copy(share->Str + start, share->Str + stop, const_cast<char*>(newShare->Str)));
         return String(newShare, 0, len);
     }
 
@@ -197,7 +197,7 @@ public:
         auto len = Length() + s.length();
         auto newShare = new Share{ .Str = new char[len], .RefCount = 1, .Releasable = true};
         copy(s.begin(), s.end(),
-            copy(share->Str + start, share->Str + end, const_cast<char*>(newShare->Str)));
+            copy(share->Str + start, share->Str + stop, const_cast<char*>(newShare->Str)));
         return String(newShare, 0, len);
     }
 
@@ -214,25 +214,25 @@ public:
     auto Substring(size_t start, size_t length) const -> String
     {
         auto s{ *this };
-        if (auto newStart = s.start + start; newStart < s.end)
+        if (auto newStart = s.start + start; newStart < s.stop)
         {
             s.start = newStart;
         }
         else
         {
-            s.start = s.end;
+            s.start = s.stop;
         }
 
-        if (auto newEnd = s.start + length; newEnd < s.end)
+        if (auto newEnd = s.start + length; newEnd < s.stop)
         {
-            s.end = newEnd;
+            s.stop = newEnd;
         }
         return s;
     }
 
     auto Contains(char c) const -> bool
     {
-        for (size_t i = start; i < end; ++i)
+        for (size_t i = start; i < stop; ++i)
         {
             if (share->Str[i] == c)
             {
@@ -246,7 +246,7 @@ public:
     {
         if (share == s.share)
         {
-            if (s.start >= start and s.end <= end)
+            if (s.start >= start and s.stop <= stop)
             {
                 return true;
             }
@@ -271,7 +271,7 @@ public:
     {
         if (share == s.share)
         {
-            if (s.start == start and s.end <= end)
+            if (s.start == start and s.stop <= stop)
             {
                 return true;
             }
@@ -284,11 +284,17 @@ public:
         return static_cast<string_view>(*this).starts_with(s);
     }
 
+    template <size_t N>
+    auto StartWith(char const(&literal)[N]) const -> bool
+    {
+        return StartWith(string_view(literal));
+    }
+
     auto EndWith(String const& s) const -> bool
     {
         if (share == s.share)
         {
-            if (s.end == end and s.start >= start)
+            if (s.stop == stop and s.start >= start)
             {
                 return true;
             }
@@ -301,14 +307,30 @@ public:
         return static_cast<string_view>(*this).ends_with(s);
     }
 
+    template <size_t N>
+    auto EndWith(char const(&literal)[N]) const -> bool
+    {
+        return EndWith(string_view(literal));
+    }
+
     auto Empty() const -> bool
     {
-        return share == nullptr or start == end;
+        return share == nullptr or start == stop;
     }
 
     auto Length() const -> size_t
     {
-        return end - start;
+        return stop - start;
+    }
+
+    auto begin() const
+    {
+		return share->Str + start;
+    }
+
+    auto end() const
+    {
+		return share->Str + stop;
     }
     
     ~String()
