@@ -341,7 +341,8 @@ struct BasicItem : public Item
 struct Terminal : public BasicItem
 {
     String Value;
-    Terminal(String value) : Value(move(value))
+    String Alias;
+    Terminal(String value, String alias = {}) : Value(move(value)), Alias(move(alias))
     { }
 
     auto Visit(IVisitor* visitor) -> void override
@@ -464,8 +465,11 @@ auto BasicItem::Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* n
         }
         break;
     case 3:
-    {
-        if (node->ChildSymbols.front() == "digitOrAlphabet")
+        if (node->ChildSymbols.front() == "terminal") // terminal @ sym
+        {
+            return ApplyVisitor(make_shared<Terminal>(String(GetTokChild(node, 0).Value), String(GetTokChild(node, 2).Value)), visitor);
+        }
+        else if (node->ChildSymbols.front() == "digitOrAlphabet")
         {
             auto& left = GetTokChild(node, 0).Value;
             auto& right = GetTokChild(node, 2).Value;
@@ -488,7 +492,6 @@ auto BasicItem::Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* n
         }
         break;
     }
-    }
     throw logic_error(format("not handled BasicItem child symbols {}", node->ChildSymbols));
 }
 
@@ -496,13 +499,16 @@ struct Grammar : public AstNode
 {
     String Left;
     shared_ptr<Productions> Productions;
+    bool IsStarArrow;
 
     static auto Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, IVisitor* visitor) -> shared_ptr<Grammar>
     {
-        return ApplyVisitor(make_shared<Grammar>(String(GetTokChild(node, 0).Value), GetAstOfChildAs<::Productions>(node, 2)), visitor);
+        auto& arrowSubtree = std::get<1>(node->Children[1]);
+        auto isStarArrow = std::get<0>(arrowSubtree.Children[0]).Type == TokType::StarArrow;
+        return ApplyVisitor(make_shared<Grammar>(String(GetTokChild(node, 0).Value), GetAstOfChildAs<::Productions>(node, 2), isStarArrow), visitor);
     }
-    
-    Grammar(String left, shared_ptr<::Productions> productions) : Left(move(left)), Productions(move(productions))
+
+    Grammar(String left, shared_ptr<::Productions> productions, bool isStarArrow = false) : Left(move(left)), Productions(move(productions)), IsStarArrow(isStarArrow)
     { }
 
     auto Visit(IVisitor* visitor) -> void override

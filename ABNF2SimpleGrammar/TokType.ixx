@@ -12,6 +12,7 @@ enum class TokType : int
     LexRuleHeader,
     ParseRuleHeader,
     Arrow,
+    StarArrow,
     LeftAngle,
     RightAngle,
     LeftParen,
@@ -28,6 +29,7 @@ enum class TokType : int
     Terminal,
     Symbol,
     Number,
+    At,
     Comment,
     EOF,
 };
@@ -43,6 +45,9 @@ struct std::formatter<TokType, char> : NoSpecialProcessParse
         {
         case TokType::Arrow:
             s = "Arrow";
+            break;
+        case TokType::StarArrow:
+            s = "StarArrow";
             break;
         case TokType::LeftAngle:
             s = "LeftAngle";
@@ -85,6 +90,9 @@ struct std::formatter<TokType, char> : NoSpecialProcessParse
             break;
         case TokType::Number:
             s = "Number";
+            break;
+        case TokType::At:
+            s = "At";
             break;
         case TokType::Comment:
             s = "Comment";

@@ -41,7 +41,9 @@ int main(int argc, char* argv[])
 
     std::array rules =
     {
+        pair<TokType, string>{ TokType::StarArrow, "\\-\\*\\->" },
         pair<TokType, string>{ TokType::Arrow, "\\->" },
+        pair<TokType, string>{ TokType::At, "@" },
         pair<TokType, string>{ TokType::LeftAngle, "<" },
         pair<TokType, string>{ TokType::RightAngle, ">" },
         pair<TokType, string>{ TokType::LeftSquare, "\\[" },
@@ -81,11 +83,11 @@ int main(int argc, char* argv[])
             { },
         }},
         { "grammar", {
-            { "sym", "->", "productions", "optional-comment" },
+            { "sym", "arrow", "productions" },
         }},
-        { "optional-comment", {
-            { "comment" },
-            { },
+        { "arrow", {
+            { "->" },
+            { "-*->" },
         }},
         { "optional-newlines", {
             { "newlines", },
@@ -121,6 +123,7 @@ int main(int argc, char* argv[])
         }},
         { "item_0", {
             { "regExp" },
+            { "terminal", "@", "sym" },
             { "terminal" },
             { "sym" },
             { "digitOrAlphabet", "-", "digitOrAlphabet" },
@@ -130,6 +133,8 @@ int main(int argc, char* argv[])
     },
     {
         { "->", static_cast<int>(TokType::Arrow) },
+        { "-*->", static_cast<int>(TokType::StarArrow) },
+        { "@", static_cast<int>(TokType::At) },
         { "|", static_cast<int>(TokType::PipeMark) },
         { "<", static_cast<int>(TokType::LeftAngle) },
         { ">", static_cast<int>(TokType::RightAngle) },
@@ -170,7 +175,7 @@ int main(int argc, char* argv[])
         auto toks = l.Lex(content) | filter([](auto& x) -> bool { return x.Type != TokType::Whitespace and x.Type != TokType::Comment; }) | to<vector<Token<TokType>>>();
         toks.push_back({ .Type = TokType::EOF, .Value = "" }); // add eof
         // add line and word info in toks
-        auto checker = Checker();
+        auto checker = DefinitionChecker();
         auto st = p.Parse<shared_ptr<AstNode>>(VectorStream{ .Tokens = move(toks) }, [&checker](auto n) -> void
         {
             AstFactory::Create(&checker, n);
@@ -181,46 +186,14 @@ int main(int argc, char* argv[])
 
             //std::println("ast: {}", st.value());
             auto tokRefChecker = PrivateTokenRefChecker();
+            auto starArrowChecker = StarArrowChecker();
             auto ast = dynamic_pointer_cast<AllGrammars>(std::get<1>(st.value().Children.front()).Result);
             std::ofstream astDefFile{ astPath };
             AstGenerator::GenerateFrom(ast->ParseRules.get(), astDefFile);
+            starArrowChecker.CheckLexRules(ast->LexRules.get());
+            starArrowChecker.CheckParseRules(ast->ParseRules.get());
             tokRefChecker.Check(ast.get());
             auto grammarsInfo = ParseRule2SimpleGrammarTransformer::Transform(ast->ParseRules.get());
-
-            //auto starts = Starts("", { grammarsInfo.Grammars.begin(), grammarsInfo.Grammars.end() });
-            //map<pair<String, String>, vector<int>> conflicts;
-            //for (auto i = 0; auto const& g : grammarsInfo.Grammars)
-            //{
-            //    auto const& symbol = g.first;
-            //    auto const& start = starts.at(i);
-            //    if (start.size() != g.second.size())
-            //    {
-            //        throw std::logic_error("start set for rules size is not same as the grammar rules");
-            //    }
-            //    for (auto j = 0; j < start.size(); ++j)
-            //    {
-            //        for (auto const& termin : start.at(j))
-            //        {
-            //            conflicts[pair{ symbol, String(termin) }].push_back(j);
-            //        }
-            //    }
-            //    ++i;
-            //}
-            //vector<pair<String, String>> toRemoves;
-            //for (auto const& x : conflicts)
-            //{
-            //    if (x.second.size() <= 1)
-            //    {
-            //        toRemoves.push_back(x.first);
-            //    }
-            //}
-            //for (auto const& x : toRemoves)
-            //{
-            //    conflicts.erase(x);
-            //}
-            //auto leftFactoredGrammar = DeepLeftFactor(conflicts, { grammarsInfo.Grammars.begin(), grammarsInfo.Grammars.end() });
-
-            //std::println("simple grammar: {}", grammarsInfo);
             std::ofstream codeFile{ specPath };
             std::print(codeFile, "export module {}Spec;\n", language);
             std::print(codeFile, "\n");
