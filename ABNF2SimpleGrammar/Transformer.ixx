@@ -652,7 +652,7 @@ struct LexRule2RegExpTransformer
     }
 
     /// <returns>pair in map is (rule name, printable string literal without quote)</returns>
-    static auto Transform(Grammars const* grammars) -> TokensInfo
+    static auto Transform(Grammars const* grammars, bool debug = false) -> TokensInfo
     {
         using std::queue;
         using std::ranges::views::reverse;
@@ -744,7 +744,6 @@ struct LexRule2RegExpTransformer
             }
         }
 
-        auto debug = false;
         if (not debug)
         {
 			// remove if the head char is lower case alphabet, which means it is not used in parse rule, so it is only used in lex rule

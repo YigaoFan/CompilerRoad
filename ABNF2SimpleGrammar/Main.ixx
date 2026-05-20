@@ -24,7 +24,7 @@ int main(int argc, char* argv[])
 
     if (argc < 2)
     {
-        std::println("usage: ABNF2SimpleGrammar <abnf-filename> [spec-output-path]");
+        std::println("usage: ABNF2SimpleGrammar <abnf-filename> [spec-output-path] [--debug]");
         return 1;
     }
     auto abnfPath = std::filesystem::path(argv[1]);
@@ -33,10 +33,20 @@ int main(int argc, char* argv[])
         std::println("file not found: {}", argv[1]);
         return 1;
     }
+    auto debug = false;
     auto language = abnfPath.stem().generic_string();
-    auto specPath = argc >= 3
-        ? std::filesystem::path(argv[2])
-        : abnfPath.parent_path() / (language + "-spec.ixx");
+    auto specPath = abnfPath.parent_path() / (language + "-spec.ixx");
+    for (int i = 2; i < argc; ++i)
+    {
+        if (std::string_view(argv[i]) == "--debug")
+        {
+            debug = true;
+        }
+        else
+        {
+            specPath = argv[i];
+        }
+    }
     auto astPath = specPath.parent_path() / (language + "-ast.ixx");
 
     std::array rules =
@@ -201,7 +211,7 @@ int main(int argc, char* argv[])
             std::print(codeFile, "import Parser;\n");
             std::print(codeFile, "using namespace std;\n");
             std::print(codeFile, "\n");
-            auto terminals = LexRule2RegExpTransformer::MergeTokInfo(LexRule2RegExpTransformer::Transform(ast->LexRules.get()), move(grammarsInfo.ToksInfo));
+            auto terminals = LexRule2RegExpTransformer::MergeTokInfo(LexRule2RegExpTransformer::Transform(ast->LexRules.get(), debug), move(grammarsInfo.ToksInfo));
             std::print(codeFile, "{}\n", CppCodeForm{ .Value = terminals });
             std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Grammars });
             std::print(codeFile, "export ParseInfo parseInfo =\n");
