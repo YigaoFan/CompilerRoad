@@ -31,33 +31,8 @@ static auto ParseDeclaration(string code) -> ParseResult
         | filter([](auto& x) { return x.Type != TokType::Whitespace && x.Type != TokType::Newline && x.Type != TokType::Comment; })
         | to<vector<Token<TokType>>>();
 
-    // terminal2IntTokenType from C11Spec only has token type names.
-    // Grammar uses actual terminals like ";", "(", "int", etc.
-    // Build complete terminal map with all grammar terminals.
-    auto allTerminals = terminal2IntTokenType;
-    auto punctId = static_cast<int>(TokType::Punctuator);
-    auto kwId = static_cast<int>(TokType::Keyword);
-    auto identId = static_cast<int>(TokType::Identifier);
-    auto strLitId = static_cast<int>(TokType::StringLiteral);
-    auto constId = static_cast<int>(TokType::Constant);
-
-    auto addTerminal = [&allTerminals](string_view key, int val) {
-        if (not allTerminals.contains(key)) allTerminals[key] = val;
-    };
-    for (auto p : { ";"sv, "("sv, ")"sv, "{"sv, "}"sv, ","sv, "["sv, "]"sv, "*"sv, "="sv, ":"sv, "."sv, "->"sv, "++"sv, "--"sv, "..."sv })
-        addTerminal(p, punctId);
-    for (auto k : { "void"sv, "char"sv, "short"sv, "int"sv, "long"sv, "float"sv, "double"sv,
-                    "signed"sv, "unsigned"sv, "_Bool"sv, "_Complex"sv, "const"sv, "restrict"sv, "volatile"sv,
-                    "_Atomic"sv, "inline"sv, "_Noreturn"sv, "typedef"sv, "extern"sv, "static"sv,
-                    "_Thread_local"sv, "auto"sv, "register"sv, "struct"sv, "union"sv, "enum"sv,
-                    "_Static_assert"sv, "_Alignas"sv })
-        addTerminal(k, kwId);
-    addTerminal("Identifier"sv, identId);
-    addTerminal("StringLiteral"sv, strLitId);
-    addTerminal("Constant"sv, constId);
-
     auto resolver = C11ConflictResolver();
-    auto p = LLParser::ConstructFrom("declaration", grammars, allTerminals, resolver);
+    auto p = LLParser::ConstructFrom("declaration", grammars, terminal2IntTokenType, resolver);
     CustomParser customParser;
     return p.Parse<void>(VectorStream{ .Tokens = move(toks) }, [](auto) {}, {}, OptionalArg{ customParser });
 }
