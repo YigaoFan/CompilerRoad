@@ -6,7 +6,7 @@ import FiniteAutomataBuilder;
 import Graph;
 import Base;
 
-using std::array;
+using std::span;
 using std::string;
 using std::string_view;
 using std::vector;
@@ -37,8 +37,7 @@ private:
     FiniteAutomata<char, T> dfa;
     using Token = Token<T>;
 public:
-    template <size_t Size>
-    static auto New(array<pair<T, string>, Size> const& identifyGroup) -> Lexer
+    static auto New(span<pair<T, string>> identifyGroup) -> Lexer
     {
         vector<FiniteAutomataDraft<char, T>> fas{};
         vector<pair<set<State>, T>> accepts2TokenType;
