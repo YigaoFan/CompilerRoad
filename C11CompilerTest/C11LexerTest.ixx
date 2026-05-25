@@ -92,34 +92,34 @@ TEST_CASE("C11 Lexer - Constants", "[lexer]")
     {
         auto toks = Lex("0");
         REQUIRE(toks.size() == 1);
-        REQUIRE(toks[0].Type == TokType::Constant);
+        REQUIRE(toks[0].Type == TokType::IntgerConstant);
 
         toks = Lex("42");
         REQUIRE(toks.size() == 1);
-        REQUIRE(toks[0].Type == TokType::Constant);
+        REQUIRE(toks[0].Type == TokType::IntgerConstant);
 
         toks = Lex("0xFF");
         REQUIRE(toks.size() == 1);
-        REQUIRE(toks[0].Type == TokType::Constant);
+        REQUIRE(toks[0].Type == TokType::IntgerConstant);
 
         toks = Lex("077");
         REQUIRE(toks.size() == 1);
-        REQUIRE(toks[0].Type == TokType::Constant);
+        REQUIRE(toks[0].Type == TokType::IntgerConstant);
     }
 
     SECTION("Floating-point constants")
     {
          auto toks = Lex("3.14");
          REQUIRE(toks.size() == 1);
-         REQUIRE(toks[0].Type == TokType::Constant);
+         REQUIRE(toks[0].Type == TokType::FloatingConstant);
 
         toks = Lex("42");
          REQUIRE(toks.size() == 1);
-         REQUIRE(toks[0].Type == TokType::Constant);
+         REQUIRE(toks[0].Type == TokType::IntgerConstant);
 
         toks = Lex("1e10");
         REQUIRE(toks.size() == 1);
-        REQUIRE(toks[0].Type == TokType::Constant);
+        REQUIRE(toks[0].Type == TokType::FloatingConstant);
 
 		toks = Lex("1.0e-5");
 		REQUIRE(toks.size() == 1);
@@ -129,11 +129,11 @@ TEST_CASE("C11 Lexer - Constants", "[lexer]")
     {
         auto toks = Lex("'a'");
         REQUIRE(toks.size() == 1);
-        REQUIRE(toks[0].Type == TokType::Constant);
+        REQUIRE(toks[0].Type == TokType::CharacterConstant);
 
         toks = Lex("'\\n'");
         REQUIRE(toks.size() == 1);
-        REQUIRE(toks[0].Type == TokType::Constant);
+        REQUIRE(toks[0].Type == TokType::CharacterConstant);
     }
 }
 
@@ -241,7 +241,7 @@ TEST_CASE("C11 Lexer - Combined Code Snippets", "[lexer]")
         REQUIRE(toks[4].Type == TokType::Punctuator_LeftBrace);  // {
         REQUIRE(toks[5].Type == TokType::Keyword_Return);  // return
         REQUIRE(toks[5].Value == "return");
-        REQUIRE(toks[6].Type == TokType::Constant);        // 0
+        REQUIRE(toks[6].Type == TokType::IntgerConstant);        // 0
         REQUIRE(toks[7].Type == TokType::Punctuator_Semicolon);  // ;
         REQUIRE(toks[8].Type == TokType::Punctuator_RightBrace); // }
     }
@@ -261,7 +261,7 @@ TEST_CASE("C11 Lexer - Combined Code Snippets", "[lexer]")
         REQUIRE(toks[4].Type == TokType::Identifier);
         REQUIRE(toks[4].Value == "x");
         REQUIRE(toks[5].Type == TokType::Punctuator_Assign); // =
-        REQUIRE(toks[6].Type == TokType::Constant);           // 42
+        REQUIRE(toks[6].Type == TokType::IntgerConstant);           // 42
         REQUIRE(toks[7].Type == TokType::Punctuator_Semicolon); // ;
     }
 
