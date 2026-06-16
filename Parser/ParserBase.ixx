@@ -12,6 +12,7 @@ using std::pair;
 using std::variant;
 using std::size_t;
 using std::stack;
+using std::map;
 using std::move;
 
 template <typename A, typename B>
@@ -41,7 +42,7 @@ export
 {
     constexpr string_view epsilon = "";
     /// \0 in string means eof, note only work in grammar representation
-    constexpr auto eof = "\0";
+    constexpr string_view eof = "\0";
     //using Input = string; // TODO change
 
     struct ParseFailResult
@@ -54,7 +55,15 @@ export
     using LeftSide = String;
     using SimpleRightSide = vector<String>;
     using SimpleGrammar = pair<LeftSide, vector<SimpleRightSide>>;
-    using SimpleGrammars = std::map<LeftSide, vector<SimpleRightSide>>;
+    using SimpleGrammars = map<LeftSide, vector<SimpleRightSide>>;
+    struct ParseInfo
+    {
+        SimpleGrammars Grammars;
+		map<string_view, int> Terminal2IntTokenType; // terminal symbol -> int token type
+        map<string_view, vector<string_view>> Starts; // symbol -> starts
+        map<string_view, vector<string_view>> Firsts; // symbol -> firsts
+        map<string_view, vector<string_view>> Follows; // symbol -> follows
+    };
     template <typename T>
     concept IToken = requires (T t)
     {
@@ -63,16 +72,14 @@ export
         { t.IsEof() } -> std::same_as<bool>;
     };
 
-    template <IToken Token, typename Result>
-    struct SyntaxTreeNode;
-    template <IToken Token>
-    struct SyntaxTreeNode<Token, void>
+    template <IToken Token, typename ChildSyntaxNode>
+    struct SyntaxTreeNodeBase
     {
         String Name;
         vector<String> ChildSymbols;
-        vector<variant<Token, SyntaxTreeNode>> Children;// put all SyntaxTreeNode in a vector, here use raw pointer or deconstruct manually from bottom
+        vector<variant<Token, ChildSyntaxNode>> Children;// put all SyntaxTreeNode in a vector, here use raw pointer or deconstruct manually from bottom
 
-        SyntaxTreeNode(String name, vector<String> childSymbols, vector<variant<Token, SyntaxTreeNode>> children = {})
+        SyntaxTreeNodeBase(String name, vector<String> childSymbols, vector<variant<Token, ChildSyntaxNode>> children = {})
             : Name(move(name)), ChildSymbols(move(childSymbols)), Children(move(children)) // typo here, Kern invoke me
         {
             if (Name.Empty())
@@ -81,27 +88,27 @@ export
             }
         }
 
-        SyntaxTreeNode(SyntaxTreeNode&& that) = default;
+        SyntaxTreeNodeBase(SyntaxTreeNodeBase&& that) = default;
 
-        SyntaxTreeNode& operator= (SyntaxTreeNode const& that) = delete;
-        SyntaxTreeNode& operator= (SyntaxTreeNode&& that) = default;
+        SyntaxTreeNodeBase& operator= (SyntaxTreeNodeBase const& that) = delete;
+        SyntaxTreeNodeBase& operator= (SyntaxTreeNodeBase&& that) = default;
 
         /// <summary>
         /// due to this is recursive data structure, copy directly will cause deep recursive call in actual usage.
         /// so delete it explicitly
         /// </summary>
-        SyntaxTreeNode(SyntaxTreeNode const& that) = delete;
+        SyntaxTreeNodeBase(SyntaxTreeNodeBase const& that) = delete;
 
-        ~SyntaxTreeNode()
+        ~SyntaxTreeNodeBase()
         {
             using std::println;
-            stack<SyntaxTreeNode> workingNodes;
+            stack<ChildSyntaxNode> workingNodes;
             for (; not Children.empty(); Children.pop_back())
             {
                 auto& back = Children.back();
                 std::visit(overloads
                 {
-                    [&workingNodes](SyntaxTreeNode& n) -> void { workingNodes.push(move(n)); },
+                    [&workingNodes](ChildSyntaxNode& n) -> void { workingNodes.push(move(n)); },
                     [](Token) -> void {},
                 }, back);
             }
@@ -116,67 +123,53 @@ export
                     auto& back = working.Children.back();
                     std::visit(overloads
                     {
-                        [&workingNodes](SyntaxTreeNode& n) -> void { workingNodes.push(move(n)); },
+                        [&workingNodes](ChildSyntaxNode& n) -> void { workingNodes.push(move(n)); },
                         [](Token) -> void {},
                     }, back);
                 }
             }
+        }
+
+        template <typename Self, typename Node = std::decay_t<Self>>
+        auto PackOutChildrenAsNode(this Self&& self, int count, String name) -> Node
+        {
+            using std::make_move_iterator;
+            auto&& ChildSymbols = self.ChildSymbols;
+			auto&& Children = self.Children;
+
+			if (count > self.ChildSymbols.size())
+			{
+				throw std::invalid_argument("count is larger than ChildSymbols size");
+			}
+			vector<String> childSymbols;
+			childSymbols.reserve(count);
+			childSymbols.insert(childSymbols.end(), make_move_iterator(ChildSymbols.begin()), make_move_iterator(ChildSymbols.begin() + count));
+			ChildSymbols.erase(ChildSymbols.begin(), ChildSymbols.begin() + count);
+			vector<variant<Token, Node>> children;
+			children.reserve(count);
+			children.insert(children.end(), make_move_iterator(Children.begin()), make_move_iterator(Children.begin() + count));
+			Children.erase(Children.begin(), Children.begin() + count);
+			Node node{ move(name), move(childSymbols), move(children) };
+			return node;
         }
     };
     template <IToken Token, typename Result>
-    struct SyntaxTreeNode
+    struct SyntaxTreeNode;
+    template <IToken Token>
+	struct SyntaxTreeNode<Token, void> : SyntaxTreeNodeBase<Token, SyntaxTreeNode<Token, void>>
     {
-        String Name;
-        vector<String> ChildSymbols;
-        vector<variant<Token, SyntaxTreeNode>> Children;// put all SyntaxTreeNode in a vector, here use raw pointer or deconstruct manually from bottom
-        Result Result;
+        using Base = SyntaxTreeNodeBase<Token, SyntaxTreeNode<Token, void>>;
+        using Base::Base;
+        using Base::operator=;
+    };
+    template <IToken Token, typename ResultType>
+	struct SyntaxTreeNode : SyntaxTreeNodeBase<Token, SyntaxTreeNode<Token, ResultType>>
+    {
+        ResultType Result;
 
-        SyntaxTreeNode(String name, vector<String> childSymbols, vector<variant<Token, SyntaxTreeNode>> children = {})
-            : Name(move(name)), ChildSymbols(move(childSymbols)), Children(move(children)) // typo here, Kern invoke me
-        {
-        }
-
-        SyntaxTreeNode(SyntaxTreeNode&& that) = default;
-
-        /// <summary>
-        /// due to this is recursive data structure, copy directly will cause deep recursive call in actual usage.
-        /// so delete it explicitly
-        /// </summary>
-        SyntaxTreeNode(SyntaxTreeNode const& that) = delete;
-
-        SyntaxTreeNode& operator= (SyntaxTreeNode const& that) = delete;
-        SyntaxTreeNode& operator= (SyntaxTreeNode&& that) = default;
-
-        ~SyntaxTreeNode()
-        {
-            using std::println;
-            stack<SyntaxTreeNode> workingNodes;
-            for (; not Children.empty(); Children.pop_back())
-            {
-                auto& back = Children.back();
-                std::visit(overloads
-                    {
-                        [&workingNodes](SyntaxTreeNode& n) -> void { workingNodes.push(move(n)); },
-                        [](Token) -> void {},
-                    }, back);
-            }
-
-            for (; not workingNodes.empty();)
-            {
-                //println("working nodes size: {}", workingNodes.size());
-                auto working = move(workingNodes.top());
-                workingNodes.pop();
-                for (; not working.Children.empty(); working.Children.pop_back())
-                {
-                    auto& back = working.Children.back();
-                    std::visit(overloads
-                        {
-                            [&workingNodes](SyntaxTreeNode& n) -> void { workingNodes.push(move(n)); },
-                            [](Token) -> void {},
-                        }, back);
-                }
-            }
-        }
+        using Base = SyntaxTreeNodeBase<Token, SyntaxTreeNode<Token, ResultType>>;
+        using Base::Base;
+        using Base::operator=;
     };
 
     template <IToken Token, typename Result>
@@ -267,6 +260,20 @@ export
         }
     };
 
+    template <typename T>
+    concept IConflictResolvable = requires (T t, String nontermin, String termin)
+    {
+        { t.Resolvable(nontermin, termin) } -> std::same_as<bool>;
+    };
+
+    template <typename T, template <typename> class ActualStream, typename Tok, typename Result, typename Parse, typename Callback>
+    concept ICustomParser = requires (T t, String nontermin, String termin, ActualStream<Tok> stream, Parse const& parse, Callback const& callback)
+    {
+		requires Stream<ActualStream, Tok>;
+	    { parse(nontermin, stream) } -> std::same_as<ParserResult<SyntaxTreeNode<Tok, Result>>>;
+        //requires std::invocable<decltype(parse), String, decltype(stream)>; // maybe cannot deduce the Stream concept and Tok in concept type here, should use other way
+        { t.template Parse<Result>(nontermin, termin, stream, parse, callback) } -> std::same_as<ParserResult<SyntaxTreeNode<Tok, Result>>>; // error here, also cannot deduce the type arg for Parse
+    };
     template <size_t N1>
     auto operator| (string_view left, char const(&right)[N1]) -> vector<SimpleRightSide>
     {
