@@ -96,6 +96,11 @@ auto GetTokChild(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, int 
     return std::get<0>(node->Children[i]);
 }
 
+auto GetSyntaxNodeChild(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, int i) -> SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>&
+{
+    return std::get<1>(node->Children[i]);
+}
+
 struct Grammar;
 struct Grammars;
 struct AllGrammars;
@@ -503,8 +508,8 @@ struct Grammar : public AstNode
 
     static auto Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, IVisitor* visitor) -> shared_ptr<Grammar>
     {
-        auto& arrowSubtree = std::get<1>(node->Children[1]);
-        auto isStarArrow = std::get<0>(arrowSubtree.Children[0]).Type == TokType::StarArrow;
+        auto& arrowSubtree = GetSyntaxNodeChild(node, 1);
+        auto isStarArrow = GetTokChild(&arrowSubtree, 0).Type == TokType::StarArrow;
         return ApplyVisitor(make_shared<Grammar>(String(GetTokChild(node, 0).Value), GetAstOfChildAs<::Productions>(node, 2), isStarArrow), visitor);
     }
 
@@ -581,6 +586,7 @@ struct Grammars : public AstNode
 struct AllGrammars : public AstNode
 {
     shared_ptr<Grammars> LexRules;
+    String StartSymbolOfParseRules;
     shared_ptr<Grammars> ParseRules;
 
     static auto Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, IVisitor* visitor) -> shared_ptr<AllGrammars>
@@ -588,15 +594,21 @@ struct AllGrammars : public AstNode
         switch (node->ChildSymbols.size())
         {
         case 0:
-            return ApplyVisitor(make_shared<AllGrammars>(nullptr, nullptr), visitor);
-        case 4:
-            return ApplyVisitor(make_shared<AllGrammars>(GetAstOfChildAs<Grammars>(node, 1), GetAstOfChildAs<Grammars>(node, 3)), visitor);
+            return ApplyVisitor(make_shared<AllGrammars>(nullptr, String::EmptyString(), nullptr), visitor);
+        case 5:
+        {
+            auto& startInfoNode = GetSyntaxNodeChild(node, 3);
+            auto const& startSymbolName = GetTokChild(&startInfoNode, 2).Value;
+            return ApplyVisitor(make_shared<AllGrammars>(GetAstOfChildAs<Grammars>(node, 1), String{ startSymbolName },
+                GetAstOfChildAs<Grammars>(node, 4)), visitor);
+        }
         default:
             throw std::logic_error(format("Grammars not support {}", node->ChildSymbols.size()));
         }
     }
 
-    AllGrammars(shared_ptr<Grammars> lexRules, shared_ptr<Grammars> parseRules) : LexRules(move(lexRules)), ParseRules(move(parseRules))
+    AllGrammars(shared_ptr<Grammars> lexRules, String startSymbolOfParseRules, shared_ptr<Grammars> parseRules)
+        : LexRules(move(lexRules)), StartSymbolOfParseRules(move(startSymbolOfParseRules)), ParseRules(move(parseRules))
     {
     }
 

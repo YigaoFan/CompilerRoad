@@ -134,14 +134,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="ConflictDetector.ixx" />
     <ClCompile Include="Generator.ixx" />
-    <ClCompile Include="GrammarPreProcess.ixx" />
-    <ClCompile Include="GrammarSetTest.ixx" />
+    <ClCompile Include="GrammarProcess.ixx" />
+    <ClCompile Include="GrammarUnitLoader.ixx" />
     <ClCompile Include="InputStream.ixx" />
     <ClCompile Include="Parser.ixx" />
     <ClCompile Include="ParserBase.ixx" />
     <ClCompile Include="ParserGenerator.ixx" />
     <ClCompile Include="GrammarSet.ixx" />
+    <ClCompile Include="Terminal.ixx" />
+    <ClCompile Include="RuleDiff.ixx" />
     <ClCompile Include="TableDrivenParser.ixx" />
   </ItemGroup>
   <ItemGroup>

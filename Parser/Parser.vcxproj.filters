@@ -27,9 +27,6 @@
     <ClCompile Include="ParserGenerator.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GrammarSetTest.ixx">
-      <Filter>Test</Filter>
-    </ClCompile>
     <ClCompile Include="TableDrivenParser.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -39,10 +36,22 @@
     <ClCompile Include="Parser.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GrammarPreProcess.ixx">
+    <ClCompile Include="GrammarProcess.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Generator.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="GrammarUnitLoader.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RuleDiff.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Terminal.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ConflictDetector.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

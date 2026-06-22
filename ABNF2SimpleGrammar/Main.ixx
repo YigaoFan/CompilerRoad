@@ -24,7 +24,7 @@ int main(int argc, char* argv[])
 
     if (argc < 2)
     {
-        std::println("usage: ABNF2SimpleGrammar <abnf-filename> [spec-output-path] [--debug]");
+        std::println("usage: ABNF2SimpleGrammar <abnf-filename> [spec-output-path] [--debug] [--check-conflicts]");
         return 1;
     }
     auto abnfPath = std::filesystem::path(argv[1]);
@@ -33,20 +33,27 @@ int main(int argc, char* argv[])
         std::println("file not found: {}", argv[1]);
         return 1;
     }
-    auto debug = false;
+    auto enableDebug = false;
+    auto enableCheckConflicts = false;
     auto language = abnfPath.stem().generic_string();
     auto specPath = abnfPath.parent_path() / (language + "-spec.ixx");
     for (int i = 2; i < argc; ++i)
     {
-        if (std::string_view(argv[i]) == "--debug")
+		auto arg = std::string_view(argv[i]);
+        if (arg == "--debug")
         {
-            debug = true;
+            enableDebug = true;
+        }
+        else if (arg == "--check-conflicts")
+        {
+            enableCheckConflicts = true;
         }
         else
         {
             specPath = argv[i];
         }
     }
+    std::println("abnf file: {}, spec output file: {}, debug: {}", abnfPath.generic_string(), specPath.generic_string(), enableDebug);
     auto astPath = specPath.parent_path() / (language + "-ast.ixx");
 
     std::array rules =
@@ -75,14 +82,18 @@ int main(int argc, char* argv[])
         pair<TokType, string>{ TokType::RegularExpression, "r\"((\\\\[^\n])|[^\\\\\"\n])*\"" },
         pair<TokType, string>{ TokType::LexRuleHeader, "\\- Lex \\-\n" },
         pair<TokType, string>{ TokType::ParseRuleHeader, "\\- Parse \\-\n" },
+        pair<TokType, string>{ TokType::StartKeyword, "start" },
     };
     auto l = Lexer<TokType>::New(rules);
     auto p = LLParser::ConstructFrom("all-grammars",
     {// how to represent empty in current grammar
         { "all-grammars", {
-            { "lex-header", "grammars", "parse-header", "grammars" },
+            { "lex-header", "grammars", "parse-header", "start-info", "grammars" },
             { },
         }},
+		{ "start-info", {
+			{ "@", "start", "sym" },
+		}},
         { "grammars", { // cannot place newlines if lex or parse part is empty
             { "optional-newlines", "grammar", "more-grammars", },
             { },
@@ -167,6 +178,7 @@ int main(int argc, char* argv[])
         { "regExp" , static_cast<int>(TokType::RegularExpression) },
         { "lex-header" , static_cast<int>(TokType::LexRuleHeader) },
         { "parse-header" , static_cast<int>(TokType::ParseRuleHeader) },
+        { "start" , static_cast<int>(TokType::StartKeyword) },
     });
 
     std::ifstream file(abnfPath);
@@ -192,6 +204,7 @@ int main(int argc, char* argv[])
         }); // TODO std::bind(AstFactory::Create, &checker)
         if (st.has_value())
         {
+            std::println("parse done");
             using std::dynamic_pointer_cast;
 
             //std::println("ast: {}", st.value());
@@ -204,22 +217,34 @@ int main(int argc, char* argv[])
             starArrowChecker.CheckParseRules(ast->ParseRules.get());
             tokRefChecker.Check(ast.get());
             auto grammarsInfo = ParseRule2SimpleGrammarTransformer::Transform(ast->ParseRules.get());
-            std::ofstream codeFile{ specPath };
-            std::print(codeFile, "export module {}Spec;\n", language);
-            std::print(codeFile, "\n");
-            std::print(codeFile, "import std;\n");
-            std::print(codeFile, "import Parser;\n");
-            std::print(codeFile, "using namespace std;\n");
-            std::print(codeFile, "\n");
-            auto terminals = LexRule2RegExpTransformer::MergeTokInfo(LexRule2RegExpTransformer::Transform(ast->LexRules.get(), debug), move(grammarsInfo.ToksInfo));
-            std::print(codeFile, "{}\n", CppCodeForm{ .Value = terminals });
-            std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Grammars });
-            std::print(codeFile, "export ParseInfo parseInfo =\n");
-            std::print(codeFile, "{{\n");
-            std::print(codeFile, "   .Grammars = grammars,\n");
-            std::print(codeFile, "   .Terminal2IntTokenType = terminal2IntTokenType,\n");
-            std::print(codeFile, "}};");
-            std::println("code generate done");
+
+            if (enableCheckConflicts)
+            {
+                using std::make_move_iterator;
+                std::println("start with {}, conflicts detected:\n", ast->StartSymbolOfParseRules);
+                // calculate the start symbol of grammar, assume there exists the main symbol
+                auto conflicts = DetectConflicts(ast->StartSymbolOfParseRules, map{ make_move_iterator(grammarsInfo.Grammars.begin()), make_move_iterator(grammarsInfo.Grammars.end()) });
+                std::println("{}", conflicts);
+            }
+            else
+            {
+                std::ofstream codeFile{ specPath };
+                std::print(codeFile, "export module {}Spec;\n", language);
+                std::print(codeFile, "\n");
+                std::print(codeFile, "import std;\n");
+                std::print(codeFile, "import Parser;\n");
+                std::print(codeFile, "using namespace std;\n");
+                std::print(codeFile, "\n");
+                auto terminals = LexRule2RegExpTransformer::MergeTokInfo(LexRule2RegExpTransformer::Transform(ast->LexRules.get(), enableDebug), move(grammarsInfo.ToksInfo));
+                std::print(codeFile, "{}\n", CppCodeForm{ .Value = terminals });
+                std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Grammars });
+                std::print(codeFile, "export ParseInfo parseInfo =\n");
+                std::print(codeFile, "{{\n");
+                std::print(codeFile, "   .Grammars = grammars,\n");
+                std::print(codeFile, "   .Terminal2IntTokenType = terminal2IntTokenType,\n");
+                std::print(codeFile, "}};");
+                std::println("code generate done");
+            }
         }
         else
         {

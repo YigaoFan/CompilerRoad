@@ -9,6 +9,7 @@ enum class TokType : int
 {
     PipeMark,
     Newline,
+    StartKeyword,
     LexRuleHeader,
     ParseRuleHeader,
     Arrow,
@@ -114,6 +115,9 @@ struct std::formatter<TokType, char> : NoSpecialProcessParse
             break;
         case TokType::ParseRuleHeader:
             s = "ParseRuleHeader";
+            break;
+        case TokType::StartKeyword:
+            s = "StartKeyword";
             break;
         }
         return std::format_to(fc.out(), "{}", s);

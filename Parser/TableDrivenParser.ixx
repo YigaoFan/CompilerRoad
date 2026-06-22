@@ -5,8 +5,10 @@ import Base;
 import Generator;
 import :ParserBase;
 import :GrammarSet;
-import :GrammarPreProcess;
+import :GrammarProcess;
 import :InputStream;
+import :GrammarUnitLoader;
+import :Terminal;
 
 using std::vector;
 using std::map;
@@ -47,6 +49,37 @@ struct Symbol
     }
 };
 
+struct Void
+{
+};
+
+export template <typename T>
+struct OptionalArg : std::true_type
+{
+    T Arg;
+    constexpr OptionalArg(T arg) : Arg(move(arg))
+    {
+    }
+};
+
+export template <>
+struct OptionalArg<Void> : std::false_type
+{
+    constexpr OptionalArg(Void)
+    {
+    }
+};
+
+template <typename Result>
+struct ParseFunc
+{
+    template <template <typename> class Stream, IToken Tok>
+    auto operator() (String nontermin, Stream<Tok> stream) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
+    {
+        throw;
+    }
+};
+
 class LLParser
 {
 private:
@@ -54,13 +87,14 @@ private:
     SimpleGrammars const grammars;
     map<pair<String, int>, int> const parseTable;
     map<string_view, int> const terminal2IntTokenType;
+
 public:
     // how to distinguish nonterminal and terminal(which has enum type from Lexer) in grammar
     // do we need convert nonterminal and terminal to int to make program litter faster
     /// <summary>
     /// attention: make string_view in terminal2IntTokenType is alive when parse
     /// </summary>
-    static auto ConstructFrom(String startSymbol, SimpleGrammars grammars, map<string_view, int> terminal2IntTokenType, set<string_view> bypassConflictSymbols = {}) -> LLParser
+    static auto ConstructFrom(String startSymbol, SimpleGrammars grammars, map<string_view, int> terminal2IntTokenType, IConflictResolvable auto conflictResolvable) -> LLParser
     {
         vector<SimpleGrammar> newAddGrammars;
         for (auto& g : grammars)
@@ -76,32 +110,34 @@ public:
         //std::println("after left refactor: {}", grammars);
         map<pair<String, int>, int> parseTable;
         //grammars = RemoveIndirectLeftRecur(startSymbol, move(grammars));
-        auto starts = Starts(startSymbol, grammars); // string_view here is from grammars
-        //std::println("after remove left recur grammar: {}", grammars);
+		//auto first2Sets = First2Set(grammars);
+        auto grammarSet = Starts(startSymbol, grammars);
+        auto const& grammarsWithStartSet = grammarSet.GrammarsWithStartSet;
 
         // handle e-production, focus <- pop() TODO
-        for (auto i = 0; auto const& g : grammars)
+        for (auto const& g : grammarsWithStartSet)
         {
             auto const& nontermin = g.first;
-            auto const& start = starts.at(i);
-            for (auto j = 0; j < start.size(); ++j)
+            auto const& rulesWithstart = g.second;
+            
+            for (auto j = 0; auto const& r : rulesWithstart)
             {
-                for (auto const& termin : start.at(j))
+                for (String const& termin : r.second)
                 {
                     if (not terminal2IntTokenType.contains(termin))
                     {
-                        throw std::out_of_range(format("terminal2IntTokenType not include token type for {}", termin));
+                        throw logic_error(format("terminal2IntTokenType not contain termin item: {}", termin));
                     }
-                    auto tokenType = terminal2IntTokenType.at(termin);
-                    auto key = pair{ nontermin, tokenType };
-                    if (parseTable.contains(key))
+                    auto key = pair{ nontermin, static_cast<int>(terminal2IntTokenType.at(termin)) };
+                    if (parseTable.contains(key) and not conflictResolvable.Resolvable(nontermin, termin))
                     {
-                        if (bypassConflictSymbols.contains(nontermin))
-                        {
-                            continue;
-                        }
                         auto otherJ = parseTable.at(key);
-                        throw logic_error(format("grammar isn't LL(1), {{{}, {}}} point to multiple grammar: {}, {}", nontermin, termin, parseTable[{ nontermin, tokenType }], j));
+
+                        //auto point = DiffConflictTerminal(rulesWithstart.at(j).second.At(termin), rulesWithstart.at(otherJ).second.At(termin), grammars, grammarSet.FirstSets, grammarSet.FollowSets);
+                        //println("different at next symbol: {} and {}", point.Left.GetSymbol(grammars), point.Right.GetSymbol(grammars));
+                        //auto first2Set = First2SetsOf(nontermin, termin, grammarsWithStartSet);
+						// result not correct
+                        throw logic_error(format("grammar isn't LL(1), {{{}, {}}} point to multiple grammar: {}, {}", nontermin, termin, otherJ, j));
                     }
                     else
                     {
@@ -109,15 +145,33 @@ public:
                         parseTable.insert({ move(key), j });
                     }
                 }
+				++j;
             }
-            ++i;
         }
+
         //std::println("parse table: {}", parseTable);
         return LLParser(move(startSymbol), move(grammars), move(parseTable), move(terminal2IntTokenType));
     }
 
+    static auto ConstructFrom(String startSymbol, SimpleGrammars grammars, map<string_view, int> terminal2IntTokenType) -> LLParser
+    {
+        struct NotHandleConflict
+        {
+            auto Resolvable(String, String) -> bool
+            {
+                return false;
+            }
+        };
+        return ConstructFrom(move(startSymbol), move(grammars), move(terminal2IntTokenType), NotHandleConflict{});
+    }
+
+    static auto ConstructFrom(String startSymbol, ParseInfo parseInfo) -> LLParser
+    {
+        throw;
+    }
+
     LLParser(String startSymbol, SimpleGrammars grammars, map<pair<String, int>, int> parseTable, map<string_view, int> terminal2IntTokenType)
-        : startSymbol(move(startSymbol)), grammars(move(grammars)), parseTable(move(parseTable)), terminal2IntTokenType(move(terminal2IntTokenType))
+		: startSymbol(move(startSymbol)), grammars(move(grammars)), parseTable(move(parseTable)), terminal2IntTokenType(move(terminal2IntTokenType))
     { }
 
     LLParser(LLParser const&) = delete;
@@ -125,8 +179,12 @@ public:
     LLParser(LLParser&&) = default;
     auto operator= (LLParser&& that) -> LLParser& = default;
 
-    template <IToken Tok, typename Result>
-    auto Parse(Stream<Tok> auto stream, INodeCallback<Tok, Result> auto callback, set<int> ignorableTokenTypes = {}, map<int, set<int>> replaceableTokenTypes = {}, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> externalParsers = {}) const
+    template <typename Result, template <typename> class ActualStream, IToken Tok, typename Callback, typename Arg = Void>
+		requires Stream<ActualStream, Tok>
+            and INodeCallback<Callback, Tok, Result>
+	        and (std::is_same_v<Arg, Void> or ICustomParser<Arg, ActualStream, Tok, Result, ParseFunc<Result>, Callback>)
+    auto Parse(ActualStream<Tok> stream, Callback callback, set<int> ignorableTokenTypes = {},
+        OptionalArg<Arg> optionalArg = Void{}) const
         -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
         using std::ranges::to;
@@ -136,30 +194,13 @@ public:
         /// <summary>
         /// Only work for terminal symbol or eof
         /// </summary>
-        auto MatchTerminal = [this, &replaceableTokenTypes](Symbol const& symbol, Tok const& token) -> bool
+        auto MatchTerminal = [this](Symbol const& symbol, Tok const& token) -> bool
         {
-            if (symbol.IsEof())
-            {
-                if (token.IsEof())
-                {
-                    return true;
-                }
-                else
-                {
-                    return false;
-                }
-            }
-
-            // TODO compare the actual value, like the Keyword include multiple values
             if (auto dest = terminal2IntTokenType.at(symbol.Value); dest == static_cast<int>(token.Type))
             {
                 return true;
             }
-            else if (auto current = static_cast<int>(token.Type); replaceableTokenTypes.contains(current))
-            {
-                return replaceableTokenTypes.at(current).contains(dest);
-            }
-            return false;
+            return symbol.Value == token.Value;
         };
         auto IsTerminal = [this](Symbol const& t) { return not grammars.contains(t.Value); };
         stack<Symbol> symbolStack;
@@ -197,20 +238,6 @@ public:
             {
                 return root;
             }
-            else if (externalParsers.contains(focus.Value))
-            {
-                //stream.Rollback(); // return the current word, to let external parser read it
-                auto subResult = externalParsers.at(focus.Value)(stream);
-                if (not subResult.has_value())
-                {
-                    return subResult;
-                }
-                // almost same as handle terminal
-                symbolStack.pop();
-                workingNodes.top()->Children.push_back(move(subResult.value()));
-                PopAllFilledNodes();
-                word = stream.Current(); // TODO check
-            }
             else if (IsTerminal(focus) or focus.IsEof())
             {
                 if (MatchTerminal(focus, word))
@@ -237,7 +264,6 @@ public:
             {
                 if (auto dest = pair{ focus.Value, static_cast<int>(word.Type) }; parseTable.contains(dest))
                 {
-                ExpandRule:
                     // add log here
                     auto j = parseTable.at(dest);
                     symbolStack.pop();
@@ -255,24 +281,23 @@ public:
                         }
                     }
                 }
-                else if (auto current = static_cast<int>(word.Type); replaceableTokenTypes.contains(current))
-                {
-                    auto const& replaces = replaceableTokenTypes.at(current);
-                    for (auto x : replaces)
-                    {
-                        dest.second = x;
-                        if (parseTable.contains(dest))
-                        {
-                            goto ExpandRule;
-                        }
-                    }
-                    return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, replaceable word: {}) when parse", focus.Value, word) });
-                }
                 else if (ignorableTokenTypes.contains(static_cast<int>(word.Type)))
                 {
                     stream.MoveNext();
                     word = stream.Current();
                 }
+                else if constexpr (optionalArg)
+                {
+                    ParseFunc<Result> pf;
+                    auto r = optionalArg.Arg.Parse<Result>(focus.Value, String(word.Value), stream, pf, callback);
+                    if (not r.has_value())
+                    {
+                        return r;
+                    }
+                    symbolStack.pop();
+                    workingNodes.top()->Children.push_back(move(r.value())); // TODO the r must be fullfilled, add check here
+                    PopAllFilledNodes();
+				}
                 else
                 {
                     return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, word: {}) when parse", focus.Value, word) });
@@ -280,7 +305,6 @@ public:
             }
         }
     }
-
 private:
     template <typename Tok, typename Result>
     static auto TryRemoveChildrenCausedByLeftFactor(SyntaxTreeNode<Tok, Result>* node) -> void
@@ -314,69 +338,6 @@ private:
     }
 };
 
-/// <summary>
-/// invoke callback inner
-/// </summary>
-// TODO rename method
-template <typename Tok, typename Result>
-static auto ReconstructSyntaxTreeAffectedByRemoveLeftRecursive(SyntaxTreeNode<Tok, Result> node, auto&& callback, map<size_t, map<size_t, stack<pair<size_t, size_t>>>> replaceHistory) -> SyntaxTreeNode<Tok, Result>
-{
-    if (not node.ChildSymbols.empty())
-    {
-        // make sure it's the right side which is after remove direct left recursive
-        if (node.ChildSymbols.back().StartWith(node.Name) and node.ChildSymbols.back().EndWith(rightRecurSuffix))// might end with multiple times rightRecurSuffix
-        {
-            node.ChildSymbols.pop_back();
-            auto remain = move(node.Children.back());
-            node.Children.pop_back();
-            callback(&node);
-            
-            // save and pop the last item, and insert above item in symbol and children
-            // "a"(repeat item) may not one item TODO check
-            auto recurToBottom = [leftRecurName=node.Name, &callback](this auto&& self, SyntaxTreeNode<Tok, Result> node, SyntaxTreeNode<Tok, Result> toAddChild)
-            {
-                if (node.ChildSymbols.back().StartWith(node.Name) and node.ChildSymbols.back().EndWith(rightRecurSuffix))// might end with multiple times rightRecurSuffix
-                {
-                    // restrict the node->Name to right recursive symbol name
-                    node.Name = self.leftRecurName;
-                    node.ChildSymbols.pop_back();
-                    auto remain = move(node.Children.back());
-                    node.Children.pop_back();
-
-                    node.ChildSymbols.insert(node.ChildSymbols.begin(), self.leftRecurName);
-                    node.Children.insert(node.Children.begin(), move(toAddChild));
-                    callback(&node);
-                    self(move(remain), move(node));
-                }
-                else
-                {
-                    node.ChildSymbols.insert(node.ChildSymbols.begin(), self.leftRecurName);
-                    node.Children.insert(node.Children.begin(), move(toAddChild));
-                    callback(&node);
-                }
-            };
-            recurToBottom(move(remain), move(node));
-        }
-    }
-
-    // handle indirect left recursive
-    //for (size_t i = 0; i < node->ChildSymbols.size(); ++i)
-    //{
-    //    if (node->ChildSymbols[i].StartWith(node->Name) and node->ChildSymbols[i].EndWith(rightRecurSuffix))
-    //    {
-    //        expanded = true;
-    //        auto& n = std::get<1>(node->Children[i]);
-    //        symbols.append_range(move(n.ChildSymbols));
-    //        children.append_range(move(n.Children));
-    //    }
-    //    else
-    //    {
-    //        symbols.push_back(move(node->ChildSymbols[i]));
-    //        children.push_back(move(node->Children[i]));
-    //    }
-    //}
-}
-
 class GLLParser
 {
 private:
@@ -406,16 +367,17 @@ public:
         grammars.insert_range(move(newAddGrammars));
         //std::println("after left refactor: {}", grammars);
         map<pair<String, int>, vector<int>> parseTable;
-        auto starts = Starts(startSymbol, grammars); // string_view here is from grammars
+        auto grammarSet = Starts(startSymbol, grammars); // string_view here is from grammars
+        auto const& grammarsWithStartSet = grammarSet.GrammarsWithStartSet;
 
         // handle e-production, focus <- pop() TODO
-        for (auto i = 0; auto const& g : grammars)
+        for (auto const& g : grammarsWithStartSet)
         {
             auto const& nontermin = g.first;
-            auto const& start = starts.at(i);
-            for (auto j = 0; j < start.size(); ++j)
+            auto const& rulesWithstart = g.second;
+            for (auto j = 0; auto const& r : rulesWithstart)
             {
-                for (auto const& termin : start.at(j))
+                for (String const& termin : r.second)
                 {
                     if (not terminal2IntTokenType.contains(termin))
                     {
@@ -433,8 +395,8 @@ public:
                         parseTable.insert({ move(key), { j } });
                     }
                 }
+                ++j;
             }
-            ++i;
         }
         //std::println("parse table: {}", parseTable);
         return GLLParser(move(startSymbol), move(grammars), move(parseTable), move(terminal2IntTokenType), move(ignorableTokenTypes), move(replaceableTokenTypes));
@@ -451,8 +413,9 @@ public:
     GLLParser(GLLParser&&) = default;
     auto operator= (GLLParser&& that) -> GLLParser& = default;
 
-    template <IToken Tok, typename Result>
-    auto Parse(Stream<Tok> auto stream, INodeCallback<Tok, Result> auto callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> externalParsers = {}) const
+    template <typename Result, template <typename> class ActualStream, IToken Tok>
+        requires Stream<ActualStream, Tok>
+    auto Parse(ActualStream<Tok> stream, INodeCallback<Tok, Result> auto callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> externalParsers = {}) const
         -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
         stack<Symbol> symbolStack;
@@ -467,8 +430,9 @@ public:
     }
 
 private:
-    template <IToken Tok, typename Result>
-    auto ParseWith(SyntaxTreeNode<Tok, Result> root, stack<Symbol> initSymbolStack, Stream<Tok> auto& stream, INodeCallback<Tok, Result> auto const& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers) const
+    template <typename Result, template <typename> class ActualStream, IToken Tok>
+        requires Stream<ActualStream, Tok>
+    auto ParseWith(SyntaxTreeNode<Tok, Result> root, stack<Symbol> initSymbolStack, ActualStream<Tok>& stream, INodeCallback<Tok, Result> auto const& callback, map<String, function<ParserResult<SyntaxTreeNode<Tok, Result>>(decltype(stream)&)>> const& externalParsers) const
         -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
         struct SubPartResult
