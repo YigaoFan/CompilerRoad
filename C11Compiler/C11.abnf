@@ -67,6 +67,7 @@ Punctuator -*-> "[" @LeftBracket | "]" @RightBracket | "(" @LeftParen | ")" @Rig
     | "%:" @HashDigraph | "%:%:" @HashHashDigraph
 
 - Parse -
+@start declaration
 declaration -> declaration-specifiers [init-declarator-list] ";" | static_assert-declaration
 ;may come from current symbol, also come from init-declarator-list, the follow set or start set has issue
 declaration-specifiers -> (storage-class-specifier | type-specifier | type-qualifier | function-specifier | alignment-specifier) [declaration-specifiers]
