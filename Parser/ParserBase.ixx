@@ -261,19 +261,27 @@ export
     };
 
     template <typename T>
-    concept IConflictResolvable = requires (T t, String nontermin, String termin)
+    concept IConflictResolvable = requires (T t, String nontermin, int tokType)
     {
-        { t.Resolvable(nontermin, termin) } -> std::same_as<bool>;
+        { t.Resolvable(nontermin, tokType) } -> std::same_as<bool>;
     };
 
-    template <typename T, template <typename> class ActualStream, typename Tok, typename Result, typename Parse, typename Callback>
-    concept ICustomParser = requires (T t, String nontermin, String termin, ActualStream<Tok> stream, Parse const& parse, Callback const& callback)
+    template <typename T, template <typename> class ActualStream, typename Tok, typename Result>
+    concept IConflictResolve = requires (T t, stack<SyntaxTreeNode<Tok, Result>*> workingNodes, String nontermin, Tok tok, ActualStream<Tok>&stream)
+    {
+        { t.template Resolve<Result, ActualStream, Tok>(workingNodes, nontermin, tok.Type, stream) } -> std::same_as<expected<int, ParseFailResult>>;
+    };
+
+    template <typename T, template <typename> class ActualStream, typename Tok, typename Result>
+    concept ICustomParser = requires (T t, String nontermin, String termin, ActualStream<Tok> stream)
     {
 		requires Stream<ActualStream, Tok>;
-	    { parse(nontermin, stream) } -> std::same_as<ParserResult<SyntaxTreeNode<Tok, Result>>>;
+
         //requires std::invocable<decltype(parse), String, decltype(stream)>; // maybe cannot deduce the Stream concept and Tok in concept type here, should use other way
-        { t.template Parse<Result>(nontermin, termin, stream, parse, callback) } -> std::same_as<ParserResult<SyntaxTreeNode<Tok, Result>>>; // error here, also cannot deduce the type arg for Parse
+	    { t.Parsable(nontermin) } -> std::same_as<bool>;
+        { t.template Parse<Result>(nontermin, stream) } -> std::same_as<ParserResult<SyntaxTreeNode<Tok, Result>>>; // error here, also cannot deduce the type arg for Parse
     };
+
     template <size_t N1>
     auto operator| (string_view left, char const(&right)[N1]) -> vector<SimpleRightSide>
     {
