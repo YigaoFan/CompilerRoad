@@ -120,7 +120,6 @@ public:
         return conflicts.contains({ nontermin, static_cast<TokType>(tokType) });
     }
 
-    // TODO remove the Result pass in LLParser side
     template <template <typename> class ActualStream, typename Token>
         requires Stream<ActualStream, Token>
     auto Resolve(stack<SyntaxTreeNode<Token, Context>*> workingNodes, String nontermin, TokType tokType, vector<SimpleRightSide> const& options, ActualStream<Token>& stream) const -> expected<int, ParseFailResult>
@@ -148,9 +147,6 @@ public:
             { { "enum-specifier-enum-suffix",                           TokType::Identifier },            &C11ConflictResolver::ResolveEnumSpecifierEnumSuffix<ActualStream, Token> },
             { { "enumerator-list_op_12",                                TokType::Punctuator_Comma },      &C11ConflictResolver::ResolveEnumeratorListComma<ActualStream, Token> },
             { { "enumerator-list_rr_op_13",                             TokType::Punctuator_Comma },      &C11ConflictResolver::ResolveEnumeratorListRrComma<ActualStream, Token> },
-            //{ { "init-declarator-list",                                 TokType::Punctuator_LeftParen },  &C11ConflictResolver::ResolveInitDeclaratorList<ActualStream, Token> },
-            //{ { "init-declarator-list",                                 TokType::Punctuator_Star },       &C11ConflictResolver::ResolveInitDeclaratorList<ActualStream, Token> },
-            //{ { "init-declarator-list",                                 TokType::Identifier },            &C11ConflictResolver::ResolveInitDeclaratorList<ActualStream, Token> },
             { { "initializer-list_op_40",                               TokType::Punctuator_Comma },      &C11ConflictResolver::ResolveInitializerListComma<ActualStream, Token> },
             { { "initializer-list_rr_op_42",                            TokType::Punctuator_Comma },      &C11ConflictResolver::ResolveInitializerListRrComma<ActualStream, Token> },
             { { "parameter-declaration-declaration-specifiers-suffix",  TokType::Punctuator_LeftParen },  &C11ConflictResolver::ResolveParameterDeclarationSuffix<ActualStream, Token> },
