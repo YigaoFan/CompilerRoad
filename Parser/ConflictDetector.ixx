@@ -44,12 +44,19 @@ struct std::formatter<ConflictDetail, char> : NoSpecialProcessParse
     template<class FormatContext>
     constexpr auto format(ConflictDetail const& t, FormatContext& fc) const
     {
-        for (auto const& x : t.Items)
+        for (auto i = 0; auto const& x : t.Items)
         {
-            std::format_to(fc.out(), "Conflict:\n  Nonterminal: {}\n  Terminal:    {}\n  Rules:\n", x.Nontermin, x.Terminal);
+            std::format_to(fc.out(), "Conflict {}:\n  Nonterminal: {}\n  Terminal:    {}\n  Rules:\n", i++, x.Nontermin, x.Terminal);
             for (auto const& rule : x.ConflictRules)
             {
+                if ((not rule.empty()) and rule.front() == x.Nontermin)
+                {
+					std::format_to(fc.out(), "    - (left recursive) ");
+                }
+                else
+                {
                 std::format_to(fc.out(), "    -");
+                }
                 for (auto const& symbol : rule)
                 {
                     std::format_to(fc.out(), " {}", symbol);
