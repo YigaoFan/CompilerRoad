@@ -54,7 +54,6 @@ struct OperatorInfo
 class ExpressionParser
 {
 private:
-	// TODO Assoc not use
 	// no left binding power for postfix operators
 	inline static map<TokType, OperatorInfo> PrefixOperators =
 	{
