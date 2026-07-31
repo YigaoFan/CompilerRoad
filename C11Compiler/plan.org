@@ -1,0 +1,14 @@
+* Task overview
+* C11 Compiler [0/3]
+
+** TODO parse simplified C11 grammar [0%]
+*** TODO parse declaration
+** TODO generate AST
+** TODO generate asm code
+
+* 2026
+** 2026-07
+*** <2026-07-30 Thu>
+**** 效率优化
+需要个工具记录项目进度，然后也需要记录下工作日志。考量下来，Emacs 的 org mode 比较合适。一是格式简单，二是各种折叠、总览效果不错。
+所以主要是 Emacs 环境的搭建，但 Emacs 在 Windows 下显示效果不怎么样，AI 也说 Linux 下效果比较好，推荐安装个 WSL。
