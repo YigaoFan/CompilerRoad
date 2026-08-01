@@ -152,6 +152,16 @@ export
 			Node node{ move(name), move(childSymbols), move(children) };
 			return node;
         }
+
+        auto GetChildAsToken(size_t index) -> Token&
+        {
+            return get<Token>(Children[index]);
+        }
+
+        auto GetChildAsNode(size_t index) -> ChildSyntaxNode&
+        {
+            return get<ChildSyntaxNode>(Children[index]);
+        }
     };
     template <IToken Token, typename Result>
     struct SyntaxTreeNode;
