@@ -309,6 +309,29 @@ auto ExpandFrontWithPreviousNontermins(SimpleRightSide rule, History initBaseHis
 /// </summary>
 auto RemoveIndirectLeftRecur(SimpleGrammars grammars) -> ConvertResult
 {
+    map<String, set<String>> startsWith;
+    for (auto const& [left, rules] : grammars)
+    {
+        for (auto const& rule : rules)
+        {
+            if ((not rule.empty()) and grammars.contains(rule.front()))
+            {
+                startsWith[left].insert(rule.front());
+            }
+        }
+    }
+
+    for (auto const& [k, _] : grammars)
+    {
+        for (auto& [i, iStartSet] : startsWith)
+        {
+            if (iStartSet.contains(k) and startsWith.contains(k))
+            {
+                iStartSet.insert_range(startsWith.at(k));
+            }
+        }
+    }
+
     SimpleGrammars generatedGrammars;
     map<String, map<int, History>> convertHistory;
     vector<String> previousNontermins; // order is important, so use vector
@@ -320,7 +343,7 @@ auto RemoveIndirectLeftRecur(SimpleGrammars grammars) -> ConvertResult
 
         for (auto& rule : focusRule.second)
         {
-            if (not rule.empty())
+            if ((not rule.empty()) and startsWith.contains(rule.front()) and startsWith.at(rule.front()).contains(focusRule.first))
             {
                 auto expandedRules = ExpandFrontWithPreviousNontermins(rule, {/* empty replace history */}, grammars, previousNontermins, convertHistory);
                 if (not expandedRules.empty())
