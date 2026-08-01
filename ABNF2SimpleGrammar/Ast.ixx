@@ -315,15 +315,6 @@ struct Productions : public AstNode
             }
             return ApplyVisitor(make_shared<Productions>(move(ps)), visitor);
         }
-        case 3:
-        {
-            vector ps{ GetAstOfChildAs<Production>(node, 0) };
-            if (auto mps = GetAstOfChildAs<MoreProductions>(node, 2)->Productions; mps != nullptr)
-            {
-                ps.append_range(mps->Items);
-            }
-            return ApplyVisitor(make_shared<Productions>(move(ps)), visitor);
-        }
         default:
             throw logic_error(format("not handled Productions Item symbols {}", node->ChildSymbols));
         }
