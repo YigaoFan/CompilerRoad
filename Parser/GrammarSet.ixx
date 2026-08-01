@@ -2,6 +2,7 @@ export module Parser:GrammarSet;
 
 import std;
 import :ParserBase;
+import :Terminal;
 import Base;
 
 using std::vector;
@@ -11,6 +12,8 @@ using std::size_t;
 using std::map;
 using std::set;
 using std::queue;
+using std::array;
+using std::tuple;
 using std::move;
 using std::ranges::views::transform;
 using std::ranges::views::filter;
@@ -18,103 +21,141 @@ using std::ranges::to;
 using std::format;
 using std::ranges::views::keys;
 
-export auto Nontermins(vector<SimpleGrammar> const& grammars)
+//template <template <typename...> class Container, typename Value>
+//auto SetUnion(Container<Value>&& set1, Container<Value>&& set2) -> Container<Value>
+//{
+//    using std::ranges::set_union;
+//    using std::forward;
+//
+//    Container<Value> un;
+//    set_union(forward<Container<Value>>(set1), forward<Container<Value>>(set2), std::inserter(un, un.begin()));
+//    return un;
+//}
+
+/// <param name="changed">care about item in result is changed</param>
+auto SetUnion(MergeSet<Terminal> set1, MergeSet<Terminal> const& set2, bool& changed) -> MergeSet<Terminal>
 {
-    auto nontermins = grammars | transform([](auto& e) { return e.first; });
-    return nontermins;
+    for (auto& x : set2)
+    {
+        if (set1.Add(move(x)))
+        {
+            changed = true;
+}
+    }
+    return set1;
 }
 
-// TODO refine below two function's type to make it support move value from rvalue arg
-template <template <typename...> class Container, typename Value>
-auto SetDifference(Container<Value> const& set1, Container<Value> const& set2) -> Container<Value>
+auto SetUnion(MergeSet<Terminal> set1, MergeSet<Terminal> const& set2) -> MergeSet<Terminal>
 {
-    using std::ranges::set_difference;
-    Container<Value> diff;
-    set_difference(set1, set2, std::inserter(diff, diff.begin()));
-    return diff;
+    for (auto& x : set2)
+    {
+        set1.Add(move(x));
+}
+    return set1;
 }
 
-template <template <typename...> class Container, typename Value>
-auto SetUnion(Container<Value> const& set1, Container<Value> const& set2) -> Container<Value>
+auto RemoveEpsilon(MergeSet<Terminal> s) -> MergeSet<Terminal>
 {
-    using std::ranges::set_union;
-    Container<Value> un;
-    set_union(set1, set2, std::inserter(un, un.begin()));
-    return un;
-}
-
-auto RemoveEpsilon(set<String> s) -> set<String>
-{
-    s.erase(epsilon);
+    s.Remove(epsilon); // TODO it seems epsilon is same with EOF
     return s;
 }
 
-auto GenAllSymbolFirstSetGetter(map<String, set<String>> const& nonterminFirstSets)
+auto MarkWith(MergeSet<Terminal> s, Coordinate const& coordinate) -> MergeSet<Terminal>
 {
-    return [&nonterminFirstSets](String const& symbol) -> set<String>
+    for (auto& x : s)
+    {
+        x.MarkWith(coordinate);
+    }
+    return s;
+}
+
+template <bool MarkWithLocationWhenNontermin = true>
+auto GenAllSymbolFirstSetGetter(map<String, MergeSet<Terminal>> const& nonterminFirstSets)
+{
+    return [&nonterminFirstSets](String const& symbol, Coordinate currentLocation) -> MergeSet<Terminal>
     {
         if (nonterminFirstSets.contains(symbol))
         {
-            return nonterminFirstSets.at(symbol);
+            auto s = nonterminFirstSets.at(symbol);
+            if constexpr (MarkWithLocationWhenNontermin)
+            {
+                for (auto& x : s)
+                {
+                    x.MarkWith(currentLocation);
         }
-        return { symbol };
+            }
+            return s;
+        }
+        return { Terminal(symbol, move(currentLocation)) };
         // not sure here temp memory allocation is big or small
     };
 }
 
-/// <returns>because of using string_view which is constructed from the string in grammars, 
-/// so the return value should only be used while grammars is alive</returns>
-auto FirstSets(SimpleGrammars const& grammars) -> map<String, set<String>>
+auto FirstSets(SimpleGrammars const& grammars, map<String, MergeSet<Terminal>> initFirstSets) -> map<String, MergeSet<Terminal>>
 {
-    map<String, set<String>> firstSets;
+    using std::println;
 
-    for (auto const& nt : keys(grammars))
-    {
-        firstSets.insert({ nt, {} });
-    }
+    map<String, MergeSet<Terminal>> firstSets{ move(initFirstSets) };
 
     /// if it's possible terminal symbol, use this to read
     auto FirstsOf = GenAllSymbolFirstSetGetter(firstSets);
 
     for (auto changing = true; changing; )
     {
+        //println("\nstart iteration");
         changing = false;
         for (auto const& g : grammars)
         {
+            //println("process first set of {}", g.first);
+
             for (auto const& rule : g.second)
             {
+                auto ruleIndex = static_cast<int>(&rule - &g.second.front());
+
                 if (rule.empty())
                 {
-                    if (not firstSets.at(g.first).contains(epsilon))
+                    if (not firstSets.at(g.first).Contains(epsilon))
                     {
-                        firstSets.at(g.first).insert(String(epsilon));
+                        //println("add epsilon");
+                        firstSets.at(g.first).Add(Terminal{ String(epsilon), Coordinate(g.first, ruleIndex, -1) });
                         changing = true;
                     }
                     continue;
                 }
-                auto rhs = RemoveEpsilon(FirstsOf(rule[0]));
-                auto trailing = true;
-                for (size_t i = 0; i < rule.size() - 1; ++i)
+                auto rhs = FirstsOf(rule[0], Coordinate(g.first, ruleIndex, 0));
+                //println("first set of first symbol: {}", rhs);
+
+                for (size_t i = 1; i < rule.size(); ++i)
                 {
-                    if (FirstsOf(rule[i]).contains(epsilon))
+                    if (rhs.Contains(epsilon))
                     {
-                        rhs = SetUnion(rhs, RemoveEpsilon(FirstsOf(rule[i + 1])));
+                        if (auto nextFirst = FirstsOf(rule[i], Coordinate(g.first, ruleIndex, static_cast<int>(i))); nextFirst.Contains(epsilon))
+                        {
+                            //println("union next first set: {}", nextFirst);
+							rhs = SetUnion(move(rhs), move(nextFirst));
+                            //println("after union: {}", rhs);
                     }
                     else
                     {
-                        trailing = false;
+                            //println("union next first set: {}", nextFirst);
+                            rhs = SetUnion(move(rhs), move(nextFirst));
+                            rhs = RemoveEpsilon(move(rhs));
+                            //println("after union then remove epsilon: {}", rhs);
                         break;
                     }
                 }
-                if (trailing and FirstsOf(rule.back()).contains(epsilon))
+                    else
                 {
-                    rhs.insert(String(epsilon));
+                        break;
+                }
                 }
 
-                // how to remove below copy caused by union operation
-                if (auto newFirsts = SetUnion(firstSets[g.first], rhs); newFirsts.size() > firstSets[g.first].size())
+                auto itemChanged = false;
+                auto newFirsts = SetUnion(firstSets[g.first], move(rhs), itemChanged);
+                //println("try to cal new {} firsts: {}", g.first, newFirsts);
+                if (newFirsts.Count() > firstSets[g.first].Count())
                 {
-                    //std::println("{} firsts changed: {}", g.first, newFirsts);
+                    //std::println("{} firsts updated", g.first);
                     firstSets[g.first] = move(newFirsts);
                     changing = true;
                 }
@@ -125,16 +166,15 @@ auto FirstSets(SimpleGrammars const& grammars) -> map<String, set<String>>
     return firstSets;
 }
 
-auto FollowSets(String startSymbol, SimpleGrammars const& grammars, map<String, set<String>> const& firstSets) -> map<String, set<String>>
+/// <returns>follow set not contains epsilon</returns>
+auto FollowSets(String startSymbol, SimpleGrammars const& grammars, map<String, MergeSet<Terminal>> const& firstSets) -> map<String, MergeSet<Terminal>>
 {
-    map<String, set<String>> followSets;
-    for (auto const& nt : keys(grammars))
+    map<String, MergeSet<Terminal>> followSets;
+    for (auto const& nt : keys(firstSets))
     {
         followSets.insert({ nt, {} });
     }
-    followSets[startSymbol] = { String(eof) };
-    /// if it's possible terminal symbol, use this to read
-    auto FirstsOf = GenAllSymbolFirstSetGetter(firstSets);
+    followSets.at(startSymbol) = { Terminal{ String(eof), Coordinate("", -1, -1) } };
 
     for (auto changing = true; changing; )
     {
@@ -148,20 +188,21 @@ auto FollowSets(String startSymbol, SimpleGrammars const& grammars, map<String, 
                     continue;
                 }
                 auto trailer = followSets[g.first];
+                auto ruleIndex = static_cast<int>(&rule - &g.second.front());
                 for (int i = static_cast<int>(rule.size() - 1); i >= 0; --i)
                 {
                     auto& b = rule[i];
-                    if (grammars.contains(b))
+                    if (firstSets.contains(b))
                     {
-                        // how to remove below copy caused by union operation
-                        if (auto newFollows = SetUnion(followSets[b], trailer); newFollows.size() > followSets[b].size())
+                        bool itemChanged = false;
+                        if (auto newFollows = SetUnion(followSets[b], trailer, itemChanged); newFollows.Count() > followSets[b].Count())
                         {
                             followSets[b] = move(newFollows);
                             changing = true;
                         }
-                        if (auto fs = FirstsOf(b); fs.contains(epsilon))
+                        if (auto const& fs = firstSets.at(b); fs.Contains(epsilon))
                         {
-                            fs = RemoveEpsilon(move(fs));
+                            trailer = SetUnion(move(trailer), MarkWith(RemoveEpsilon(fs), Coordinate(g.first, ruleIndex, i)));
                             trailer = SetUnion(trailer, fs);
                         }
                         else
@@ -171,7 +212,7 @@ auto FollowSets(String startSymbol, SimpleGrammars const& grammars, map<String, 
                     }
                     else
                     {
-                        trailer = { b };
+                        trailer = { Terminal(b, Coordinate(g.first, ruleIndex, i))};
                     }
                 }
             }
@@ -184,113 +225,87 @@ auto FollowSets(String startSymbol, SimpleGrammars const& grammars, map<String, 
 /// <summary>
 /// start is for rule, first and follow are for terminal/nonterminal symbol
 /// </summary>
-auto StartSet(SimpleGrammar const& grammar, map<String, set<String>> const& firstSets, map<String, set<String>> const& followSets) -> vector<set<String>>
+auto StartSet(SimpleGrammar const& grammar, map<String, MergeSet<Terminal>> const& firstSets, map<String, MergeSet<Terminal>> const& followSets) -> vector<MergeSet<Terminal>>
 {
-    vector<set<String>> starts;
-    auto FirstsOf = GenAllSymbolFirstSetGetter(firstSets);
+    vector<MergeSet<Terminal>> start;
+    auto FirstsOf = GenAllSymbolFirstSetGetter<true>(firstSets);
+    auto FollowsOf = [&followSets](String const& symbol, Coordinate currentLocation) -> MergeSet<Terminal>
+    {
+        if (followSets.contains(symbol))
+        {
+            auto s = followSets.at(symbol);
+            for (auto& x : s)
+            {
+                x.MarkWith(currentLocation);
+			}
+            return s;
+        }
+        throw std::out_of_range(format("{} is not non-terminal", symbol));
+    };
+
     for (auto const& rule : grammar.second)
     {
-        starts.push_back({});
+        auto ruleIndex = static_cast<int>(&rule - &grammar.second.front());
+        start.push_back({});
         for (auto const& sym : rule)
         {
-            if (auto f = FirstsOf(sym); f.contains(epsilon))
+            if (auto f = FirstsOf(sym, Coordinate(grammar.first, ruleIndex, static_cast<int>(&sym - &rule.front())));
+                f.Contains(epsilon))
             {
                 f = RemoveEpsilon(move(f));
-                starts.back() = SetUnion(f, starts.back());
+                start.back() = SetUnion(move(f), move(start.back()));
             }
             else
             {
-                starts.back() = SetUnion(f, starts.back());
+                start.back() = SetUnion(move(f), move(start.back()));
                 goto NextRule;
             }
         }
-        starts.back() = SetUnion(starts.back(), followSets.at(grammar.first));
+        start.back() = SetUnion(move(start.back()), FollowsOf(grammar.first, Coordinate(grammar.first, ruleIndex, -1)));
     NextRule:
         continue;
     }
-    return starts;
+    return start;
 }
 
-/// <returns>match the hierarchy of grammars, can use same index to access it</returns>
-auto Starts(String startSymbol, SimpleGrammars const& grammars) -> vector<vector<set<String>>>
+struct GrammarSet
 {
-    auto firsts = FirstSets(grammars);
+    map<String, MergeSet<Terminal>> FirstSets;
+    map<String, MergeSet<Terminal>> FollowSets;
+    SimpleGrammarsWithStartSet GrammarsWithStartSet;
+    };
+/// <returns>match the hierarchy of grammars, can use same index to access it</returns>
+auto Starts(String startSymbol, SimpleGrammars const& grammars, map<String, set<String>> externalSymbolFirsts) -> GrammarSet
+    {
+	map<String, MergeSet<Terminal>> initFirstSets;
+    for (auto const& externalSymbolFirst : externalSymbolFirsts)
+        {
+		MergeSet<Terminal> s;
+		for (auto const& t : externalSymbolFirst.second)
+            {
+			s.Add(Terminal{ t, Coordinate("external-symbol", -1, -1) });
+                    }
+		initFirstSets.insert({ externalSymbolFirst.first, move(s) });
+                }
+    for (auto const& nt : keys(grammars))
+{
+        if (not initFirstSets.contains(nt))
+    {
+            initFirstSets.insert({ nt, {} });
+        }
+    }
+    auto firsts = FirstSets(grammars, move(initFirstSets));
     auto follows = FollowSets(startSymbol, grammars, firsts);
-    vector<vector<set<String>>> starts;
-    starts.reserve(grammars.size());
+    SimpleGrammarsWithStartSet starts;
 
     for (auto const& g : grammars)
-    {
-        starts.push_back(StartSet(g, firsts, follows));
-    }
-    return starts;
-}
-
-using Lr1Item = std::tuple<pair<LeftSide, SimpleRightSide>, int, string_view>;
-auto Closure(set<Lr1Item> s, SimpleGrammars const& grammars, map<String, set<String>> const& firstSets) -> set<Lr1Item>
 {
-    auto First = [&firstSets](this auto&& self, vector<String> const& rs) -> set<String>
+        auto it = starts.insert({ g.first, {} });
+        auto start = StartSet(g, firsts, follows);
+        for (auto i = 0; auto& s : start)
     {
-        if (rs.empty())
-        {
-            return { String(epsilon) };
-        }
-        if (not self.firstSets.contains(rs.front())) // it's terminal
-        {
-            return { rs.front() };
-        }
-        else
-        {
-            auto f = self.firstSets.at(rs.front());
-            if (f.contains(epsilon))
-            {
-                f.insert_range(self(vector<String>{ rs.begin() + 1, rs.end() }));
-            }
-            return f;
-        }
-    };
-
-    for (auto changing = true; changing;)
-    {
-        changing = false;
-        for (auto const& [rule, i, _] : s)
-        {
-            if (auto const& expect = rule.second[i]; grammars.contains(expect))
-            {
-                vector<String> lookahead{ rule.second.begin() + i + 1, rule.second.end() };
-                for (auto const& p : grammars.at(expect))
-                {
-                    for (auto b : First(lookahead))
-                    {
-                        auto [_, inserted] = s.insert({ pair{ expect, p }, 0, move(b) });
-                        changing = inserted;
-                    }
-                }
-            }
-        }
-    }
-    return s;
-}
-
-auto Goto(set<Lr1Item> s, string_view x, SimpleGrammars const& grammars, map<String, set<String>> const& firstSets) -> set<Lr1Item>
-{
-    set<Lr1Item> t;
-    for (auto const& [rule, i, lookahead] : s)
-    {
-        if (rule.second[i] == x)
-        {
-            t.insert({ rule, i + 1, lookahead });
-        }
-    }
-    return Closure(move(t), grammars, firstSets);
-}
-
-auto BuildCanonicalCollectionOfSetsOfLr1Items(String startSymbol, SimpleGrammars const& grammars) -> pair<map<set<Lr1Item>, size_t>, map<pair<set<Lr1Item>, string_view>, set<Lr1Item>>>
-{
-    set<Lr1Item> cc0;
-    for (auto const& i : grammars.at(startSymbol))
-    {
-        cc0.insert({ pair{ startSymbol, i }, 0, eof });
+			it.first->second.push_back({ grammars.at(g.first).at(i), move(s)});
+            ++i;
     }
     auto firsts = FirstSets(grammars);
     cc0 = Closure(move(cc0), grammars, firsts);
@@ -316,7 +331,7 @@ auto BuildCanonicalCollectionOfSetsOfLr1Items(String startSymbol, SimpleGrammars
             {
                 workingList.push(temp);
             }
-            transitions.insert({ pair{ move(cci), x }, move(temp) });
+    return { .FirstSets = move(firsts), .FollowSets = move(follows), .GrammarsWithStartSet = move(starts) };
         }
     }
     return { move(cc), move(transitions) };
@@ -382,5 +397,7 @@ auto FillActionGotoTable(string_view startSymbol, vector<SimpleGrammar> const& g
 
 export
 {
-    auto Starts(String startSymbol, SimpleGrammars const& grammars) -> vector<vector<set<String>>>;
+    struct First2Set;
+    SimpleGrammarsWithStartSet;
+    auto Starts(String startSymbol, SimpleGrammars const& grammars, map<String, set<String>> externalSymbolFirsts = {}) -> GrammarSet;
 }
