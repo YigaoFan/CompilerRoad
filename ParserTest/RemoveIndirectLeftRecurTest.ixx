@@ -6,12 +6,78 @@ import Base;
 import Parser;
 
 using std::vector;
+using std::variant;
 using std::map;
 using std::pair;
 using std::set;
 using std::move;
 using std::string;
 using std::string_view;
+using std::size_t;
+
+// ============================================================================
+// Mock token & helpers for syntax tree undo tests
+// ============================================================================
+
+enum class TokType { Ident, Comma, Eof };
+
+struct MockToken
+{
+    TokType Type;
+    string Value;
+    auto IsEof() const -> bool { return Type == TokType::Eof; }
+};
+
+template<>
+struct std::formatter<MockToken, char> : std::formatter<std::string, char>
+{
+    auto format(MockToken const& t, std::format_context& fc) const
+    {
+        return std::format_to(fc.out(), "{}", t.Value);
+    }
+};
+
+using Node = SyntaxTreeNode<MockToken, void>;
+
+static auto MakeToken(TokType type, string value) -> MockToken
+{
+    return { type, move(value) };
+}
+
+static auto Leaf(MockToken tok) -> variant<MockToken, Node>
+{
+    return tok;
+}
+
+static auto Branch(Node node) -> variant<MockToken, Node>
+{
+    return move(node);
+}
+
+template<typename... Rest>
+static auto MakeChildren(variant<MockToken, Node> first, Rest&&... rest) -> vector<variant<MockToken, Node>>
+{
+    vector<variant<MockToken, Node>> v;
+    v.reserve(1 + sizeof...(rest));
+    v.push_back(move(first));
+    (v.push_back(move(rest)), ...);
+    return v;
+}
+
+static auto MakeNode(String name, vector<String> childSymbols, vector<variant<MockToken, Node>> children = {}) -> Node
+{
+    return Node{ move(name), move(childSymbols), move(children) };
+}
+
+static auto AsNode(variant<MockToken, Node>& v) -> Node*
+{
+    return std::get_if<Node>(&v);
+}
+
+static auto AsToken(variant<MockToken, Node>& v) -> MockToken*
+{
+    return std::get_if<MockToken>(&v);
+}
 
 // helpers to build grammar data concisely
 static auto S(const char* s) -> String { return String(s); }
@@ -81,7 +147,7 @@ TEST_CASE("RemoveIndirectLeftRecur - no recursion", "[parser][indirect-left-recu
     grammars.merge(G("B", { Rs({"e", "f"}) }));
 
     auto result = RemoveIndirectLeftRecur(move(grammars));
-    auto& g = result.ConvertedGrammars;
+    auto& g = result.Grammars;
 
     INFO("grammars should be unchanged");
     REQUIRE(HasKey(g, "A"));
@@ -132,7 +198,7 @@ TEST_CASE("RemoveIndirectLeftRecur - direct left recursion only", "[parser][indi
     auto grammars = G("A", { Rs({"A", "a"}), Rs({"b"}) });
 
     auto result = RemoveIndirectLeftRecur(move(grammars));
-    auto& g = result.ConvertedGrammars;
+    auto& g = result.Grammars;
 
     REQUIRE(HasKey(g, "A"));
     REQUIRE(HasKey(g, "A'"));
@@ -161,7 +227,7 @@ TEST_CASE("RemoveIndirectLeftRecur - simple indirect left recursion (A,B)", "[pa
     grammars.merge(G("B", { Rs({"A", "b"}), Rs({"a"}) }));
 
     auto result = RemoveIndirectLeftRecur(move(grammars));
-    auto& g = result.ConvertedGrammars;
+    auto& g = result.Grammars;
 
     INFO("B expands A, discovers direct left recursion");
     REQUIRE(HasKey(g, "A"));
@@ -205,7 +271,7 @@ TEST_CASE("RemoveIndirectLeftRecur - forward chain of 3 no left recursion", "[pa
     grammars.merge(G("C", { Rs({"c"}) }));
 
     auto result = RemoveIndirectLeftRecur(move(grammars));
-    auto& g = result.ConvertedGrammars;
+    auto& g = result.Grammars;
 
     INFO("no left recursion at all - grammar unchanged");
     REQUIRE(RuleCount(g, "A") == 2);
@@ -239,7 +305,7 @@ TEST_CASE("RemoveIndirectLeftRecur - expansion reveals direct left recursion", "
     grammars.merge(G("A", { Rs({"S", "a"}), Rs({"c"}) }));
 
     auto result = RemoveIndirectLeftRecur(move(grammars));
-    auto& g = result.ConvertedGrammars;
+    auto& g = result.Grammars;
 
     REQUIRE(HasKey(g, "A"));
     REQUIRE(HasKey(g, "S"));
@@ -278,7 +344,7 @@ TEST_CASE("RemoveIndirectLeftRecur - no expansion when dependency not yet proces
     grammars.merge(G("B", { Rs({"b"}) }));
 
     auto result = RemoveIndirectLeftRecur(move(grammars));
-    auto& g = result.ConvertedGrammars;
+    auto& g = result.Grammars;
 
     INFO("A references B but B is processed later, so no expansion");
     REQUIRE(HasKey(g, "A"));
@@ -301,18 +367,14 @@ TEST_CASE("RemoveIndirectLeftRecur - grammar with auxiliary nonterminal present"
     // A' -> a A' | ε
     // B -> A b | a
     // Map order: A, A', B.
-    // A: no expansion -> unchanged.
-    // A': no expansion -> unchanged.
-    // B: A IS in previousNontermins. ExpandFront "A b" using grammars.at("A") = {b A', b}:
-    //   b A' + b = b A' b
-    //   b    + b = b b
-    // Rule "a" kept.
+    // No left recursion cycle between B and A (A does not reference B).
+    // B: A IS in previousNontermins, but startsWith[A] does not contain B -> no expansion.
     auto grammars = G("A", { Rs({"b", "A'"}), Rs({"b"}) });
     grammars["A'"] = { Rs({"a", "A'"}), Rs({}) };
     grammars.merge(G("B", { Rs({"A", "b"}), Rs({"a"}) }));
 
     auto result = RemoveIndirectLeftRecur(move(grammars));
-    auto& g = result.ConvertedGrammars;
+    auto& g = result.Grammars;
 
     REQUIRE(HasKey(g, "A"));
     REQUIRE(HasKey(g, "A'"));
@@ -327,27 +389,15 @@ TEST_CASE("RemoveIndirectLeftRecur - grammar with auxiliary nonterminal present"
     REQUIRE(HasRule(g, "A'", Rs({"a", "A'"})));
     REQUIRE(HasRule(g, "A'", Rs({})));
 
-    REQUIRE(RuleCount(g, "B") == 3);
-    REQUIRE(HasRule(g, "B", Rs({"b", "A'", "b"})));
-    REQUIRE(HasRule(g, "B", Rs({"b", "b"})));
+    // B unchanged (no cycle, no expansion)
+    REQUIRE(RuleCount(g, "B") == 2);
+    REQUIRE(HasRule(g, "B", Rs({"A", "b"})));
     REQUIRE(HasRule(g, "B", Rs({"a"})));
 
-    // B[0] history: expanded from "A b" (first rule of A: "b A'")
-    auto& bHist0 = result.ConvertHistory.at(S("B")).at(0);
-    REQUIRE(bHist0.Count() == 1);
+    // No expansion history
+    for (auto& [k, hist] : result.ConvertHistory)
     {
-        auto const& ef = dynamic_cast<History::ExpandFront const&>(bHist0.At(0));
-        REQUIRE(ef.Nonterminal == S("A"));
-        REQUIRE(ef.RightSide == Rs({"b", "A'"}));
-    }
-
-    // B[1] history: expanded from "A b" (second rule of A: "b")
-    auto& bHist1 = result.ConvertHistory.at(S("B")).at(1);
-    REQUIRE(bHist1.Count() == 1);
-    {
-        auto const& ef = dynamic_cast<History::ExpandFront const&>(bHist1.At(0));
-        REQUIRE(ef.Nonterminal == S("A"));
-        REQUIRE(ef.RightSide == Rs({"b"}));
+        REQUIRE(hist.empty());
     }
 }
 
@@ -369,7 +419,7 @@ TEST_CASE("RemoveIndirectLeftRecur - self-referential via another nonterminal", 
     grammars.merge(G("B", { Rs({"A", "b"}), Rs({}) }));
 
     auto result = RemoveIndirectLeftRecur(move(grammars));
-    auto& g = result.ConvertedGrammars;
+    auto& g = result.Grammars;
 
     REQUIRE(HasKey(g, "A"));
     REQUIRE(HasKey(g, "B"));
@@ -409,7 +459,7 @@ TEST_CASE("RemoveIndirectLeftRecur - mixed direct and indirect recursion", "[par
     grammars.merge(G("B", { Rs({"B", "d"}), Rs({"e"}) }));
 
     auto result = RemoveIndirectLeftRecur(move(grammars));
-    auto& g = result.ConvertedGrammars;
+    auto& g = result.Grammars;
 
     REQUIRE(HasKey(g, "A"));
     REQUIRE(HasKey(g, "A'"));
@@ -460,7 +510,7 @@ TEST_CASE("RemoveIndirectLeftRecur - three nonterminals indirect expansion", "[p
     grammars.merge(G("C", { Rs({"A", "c"}), Rs({"c"}) }));
 
     auto result = RemoveIndirectLeftRecur(move(grammars));
-    auto& g = result.ConvertedGrammars;
+    auto& g = result.Grammars;
 
     REQUIRE(HasKey(g, "A"));
     REQUIRE(HasKey(g, "B"));
@@ -506,49 +556,30 @@ TEST_CASE("RemoveIndirectLeftRecur - ConvertHistory chain across multiple levels
     // B -> A b
     // A -> a
     // Map order: A, B, C.
-    // A: no expansion. A = {a}.
-    // B: A in set. ExpandFront "A b" using {a}: a + b = a b. newRss = {a b}.
-    // C: B in set. ExpandFront "B a" using {a b}: a b + a = a b a. newRss = {a b a}.
-    //
-    // B[0] history: copy [{A,0}] (empty) + push {a,b} = [{a,b}]
-    // C[0] history: copy [{B,0}] = [{a,b}] + push {a,b,a} = [{a,b}, {a,b,a}]
+    // No left recursion cycle (linear chain). No expansion.
     auto grammars = G("C", { Rs({"B", "a"}) });
     grammars.merge(G("B", { Rs({"A", "b"}) }));
     grammars.merge(G("A", { Rs({"a"}) }));
 
     auto result = RemoveIndirectLeftRecur(move(grammars));
-    auto& g = result.ConvertedGrammars;
+    auto& g = result.Grammars;
 
     REQUIRE(HasKey(g, "A"));
     REQUIRE(HasKey(g, "B"));
     REQUIRE(HasKey(g, "C"));
 
+    // All unchanged
     REQUIRE(RuleCount(g, "A") == 1);
     REQUIRE(HasRule(g, "A", Rs({"a"})));
     REQUIRE(RuleCount(g, "B") == 1);
-    REQUIRE(HasRule(g, "B", Rs({"a", "b"})));
+    REQUIRE(HasRule(g, "B", Rs({"A", "b"})));
     REQUIRE(RuleCount(g, "C") == 1);
-    REQUIRE(HasRule(g, "C", Rs({"a", "b", "a"})));
+    REQUIRE(HasRule(g, "C", Rs({"B", "a"})));
 
-    // B[0] history: expanded from "A b"
-    auto& bHist = result.ConvertHistory.at(S("B")).at(0);
-    REQUIRE(bHist.Count() == 1);
+    // No expansion history
+    for (auto& [k, hist] : result.ConvertHistory)
     {
-        auto const& ef = dynamic_cast<History::ExpandFront const&>(bHist.At(0));
-        REQUIRE(ef.Nonterminal == S("A"));
-        REQUIRE(ef.RightSide == Rs({"a"}));
-    }
-
-    // C[0] history: chain of expansions (B[0]'s history merged + new B expansion)
-    auto& cHist = result.ConvertHistory.at(S("C")).at(0);
-    REQUIRE(cHist.Count() == 2);
-    {
-        auto const& ef0 = dynamic_cast<History::ExpandFront const&>(cHist.At(0));
-        REQUIRE(ef0.Nonterminal == S("A"));
-        REQUIRE(ef0.RightSide == Rs({"a"}));
-        auto const& ef1 = dynamic_cast<History::ExpandFront const&>(cHist.At(1));
-        REQUIRE(ef1.Nonterminal == S("B"));
-        REQUIRE(ef1.RightSide == Rs({"a", "b"}));
+        REQUIRE(hist.empty());
     }
 }
 
@@ -559,80 +590,40 @@ TEST_CASE("RemoveIndirectLeftRecur - chain with 4 nonterminals", "[parser][indir
     // B -> A b | b
     // A -> a
     // Map order: A, B, C, D.
-    // A: no expansion. A = {a}.
-    // B: A in set. ExpandFront "A b" using {a}: a b. newRss = {a b, b}.
-    // C: B in set. ExpandFront "B c" using {a b, b}: a b c, b c. newRss = {a b c, b c, c}.
-    // D: C in set. ExpandFront "C d" using {a b c, b c, c}: a b c d, b c d, c d. newRss = {a b c d, b c d, c d, d}.
-    //
-    // B[0] history: copy [{A,0}](empty) + push {a,b} = [{a,b}]
-    // C[0] history: copy [{B,0}] = [{a,b}] + push {a,b,c} = [{a,b}, {a,b,c}]
-    // C[1] history: copy [{B,1}](empty, "b" not expanded) + push {b,c} = [{b,c}]
-    // D[0] history: copy [{C,0}] = [{a,b}, {a,b,c}] + push {a,b,c,d} = [{a,b}, {a,b,c}, {a,b,c,d}]
+    // No left recursion cycle (linear chain). No expansion.
     auto grammars = G("D", { Rs({"C", "d"}), Rs({"d"}) });
     grammars.merge(G("C", { Rs({"B", "c"}), Rs({"c"}) }));
     grammars.merge(G("B", { Rs({"A", "b"}), Rs({"b"}) }));
     grammars.merge(G("A", { Rs({"a"}) }));
 
     auto result = RemoveIndirectLeftRecur(move(grammars));
-    auto& g = result.ConvertedGrammars;
+    auto& g = result.Grammars;
 
     REQUIRE(HasKey(g, "A"));
     REQUIRE(HasKey(g, "B"));
     REQUIRE(HasKey(g, "C"));
     REQUIRE(HasKey(g, "D"));
 
+    // All unchanged
     REQUIRE(RuleCount(g, "A") == 1);
     REQUIRE(HasRule(g, "A", Rs({"a"})));
 
     REQUIRE(RuleCount(g, "B") == 2);
-    REQUIRE(HasRule(g, "B", Rs({"a", "b"})));
+    REQUIRE(HasRule(g, "B", Rs({"A", "b"})));
     REQUIRE(HasRule(g, "B", Rs({"b"})));
 
-    REQUIRE(RuleCount(g, "C") == 3);
-    REQUIRE(HasRule(g, "C", Rs({"a", "b", "c"})));
-    REQUIRE(HasRule(g, "C", Rs({"b", "c"})));
+    REQUIRE(RuleCount(g, "C") == 2);
+    REQUIRE(HasRule(g, "C", Rs({"B", "c"})));
     REQUIRE(HasRule(g, "C", Rs({"c"})));
 
-    REQUIRE(RuleCount(g, "D") == 4);
-    REQUIRE(HasRule(g, "D", Rs({"a", "b", "c", "d"})));
-    REQUIRE(HasRule(g, "D", Rs({"b", "c", "d"})));
-    REQUIRE(HasRule(g, "D", Rs({"c", "d"})));
+    REQUIRE(RuleCount(g, "D") == 2);
+    REQUIRE(HasRule(g, "D", Rs({"C", "d"})));
     REQUIRE(HasRule(g, "D", Rs({"d"})));
 
-    // D[0] history: chain through B[0] and C[0]
-    auto& dHist = result.ConvertHistory.at(S("D")).at(0);
-    REQUIRE(dHist.Count() == 3);
+    // No expansion history
+    for (auto& [k, hist] : result.ConvertHistory)
     {
-        auto const& ef0 = dynamic_cast<History::ExpandFront const&>(dHist.At(0));
-        REQUIRE(ef0.Nonterminal == S("A"));
-        REQUIRE(ef0.RightSide == Rs({"a"}));
-        auto const& ef1 = dynamic_cast<History::ExpandFront const&>(dHist.At(1));
-        REQUIRE(ef1.Nonterminal == S("B"));
-        REQUIRE(ef1.RightSide == Rs({"a", "b"}));
-        auto const& ef2 = dynamic_cast<History::ExpandFront const&>(dHist.At(2));
-        REQUIRE(ef2.Nonterminal == S("C"));
-        REQUIRE(ef2.RightSide == Rs({"a", "b", "c"}));
-    }
-
-    // D[1] history: from C[1] which came from B's rule "b" (not expanded in B)
-    auto& dHist1 = result.ConvertHistory.at(S("D")).at(1);
-    REQUIRE(dHist1.Count() == 2);
-    {
-        auto const& ef0 = dynamic_cast<History::ExpandFront const&>(dHist1.At(0));
-        REQUIRE(ef0.Nonterminal == S("B"));
-        REQUIRE(ef0.RightSide == Rs({"b"}));
-        auto const& ef1 = dynamic_cast<History::ExpandFront const&>(dHist1.At(1));
-        REQUIRE(ef1.Nonterminal == S("C"));
-        REQUIRE(ef1.RightSide == Rs({"b", "c"}));
-    }
-
-    // D[2] history: from C's rule "c" (not expanded in C)
-    auto& dHist2 = result.ConvertHistory.at(S("D")).at(2);
-    REQUIRE(dHist2.Count() == 1);
-    {
-        auto const& ef0 = dynamic_cast<History::ExpandFront const&>(dHist2.At(0));
-        REQUIRE(ef0.Nonterminal == S("C"));
-        REQUIRE(ef0.RightSide == Rs({"c"}));
+        REQUIRE(hist.empty());
     }
 }
 
@@ -642,22 +633,21 @@ TEST_CASE("RemoveIndirectLeftRecur - only nonterminal references, all expanded",
     // B -> A
     // A -> a
     // Map order: A, B, C.
-    // A: no expansion. A = {a}.
-    // B: A in set. ExpandFront "A" using {a}: a. newRss = {a}.
-    // C: B in set. ExpandFront "B" using {a}: a. newRss = {a}.
+    // No left recursion cycle (linear chain). No expansion.
     auto grammars = G("C", { Rs({"B"}) });
     grammars.merge(G("B", { Rs({"A"}) }));
     grammars.merge(G("A", { Rs({"a"}) }));
 
     auto result = RemoveIndirectLeftRecur(move(grammars));
-    auto& g = result.ConvertedGrammars;
+    auto& g = result.Grammars;
 
+    // All unchanged
     REQUIRE(RuleCount(g, "A") == 1);
     REQUIRE(HasRule(g, "A", Rs({"a"})));
     REQUIRE(RuleCount(g, "B") == 1);
-    REQUIRE(HasRule(g, "B", Rs({"a"})));
+    REQUIRE(HasRule(g, "B", Rs({"A"})));
     REQUIRE(RuleCount(g, "C") == 1);
-    REQUIRE(HasRule(g, "C", Rs({"a"})));
+    REQUIRE(HasRule(g, "C", Rs({"B"})));
 }
 
 TEST_CASE("RemoveIndirectLeftRecur - expansion of multiple rules of same nonterminal", "[parser][indirect-left-recur]")
@@ -665,44 +655,27 @@ TEST_CASE("RemoveIndirectLeftRecur - expansion of multiple rules of same nonterm
     // B -> A a | A b | c
     // A -> d
     // Map order: A, B.
-    // A: no expansion. A = {d}.
-    // B: A in set. ExpandFront "A a" using {d}: d a. ExpandFront "A b" using {d}: d b.
-    // Rule "c" kept.
-    // newRss = {d a, d b, c}.
+    // No left recursion cycle. No expansion.
     auto grammars = G("B", { Rs({"A", "a"}), Rs({"A", "b"}), Rs({"c"}) });
     grammars.merge(G("A", { Rs({"d"}) }));
 
     auto result = RemoveIndirectLeftRecur(move(grammars));
-    auto& g = result.ConvertedGrammars;
+    auto& g = result.Grammars;
 
     REQUIRE(RuleCount(g, "A") == 1);
     REQUIRE(HasRule(g, "A", Rs({"d"})));
 
+    // B unchanged
     REQUIRE(RuleCount(g, "B") == 3);
-    REQUIRE(HasRule(g, "B", Rs({"d", "a"})));
-    REQUIRE(HasRule(g, "B", Rs({"d", "b"})));
+    REQUIRE(HasRule(g, "B", Rs({"A", "a"})));
+    REQUIRE(HasRule(g, "B", Rs({"A", "b"})));
     REQUIRE(HasRule(g, "B", Rs({"c"})));
 
-    // B[0] history: expanded from "A a"
-    auto& bHist0 = result.ConvertHistory.at(S("B")).at(0);
-    REQUIRE(bHist0.Count() == 1);
+    // No expansion history
+    for (auto& [k, hist] : result.ConvertHistory)
     {
-        auto const& ef = dynamic_cast<History::ExpandFront const&>(bHist0.At(0));
-        REQUIRE(ef.Nonterminal == S("A"));
-        REQUIRE(ef.RightSide == Rs({"d"}));
+        REQUIRE(hist.empty());
     }
-
-    // B[1] history: expanded from "A b"
-    auto& bHist1 = result.ConvertHistory.at(S("B")).at(1);
-    REQUIRE(bHist1.Count() == 1);
-    {
-        auto const& ef = dynamic_cast<History::ExpandFront const&>(bHist1.At(0));
-        REQUIRE(ef.Nonterminal == S("A"));
-        REQUIRE(ef.RightSide == Rs({"d"}));
-    }
-
-    // B[2] ("c") was not expanded
-    REQUIRE_FALSE(result.ConvertHistory.at(S("B")).contains(2));
 }
 
 TEST_CASE("RemoveIndirectLeftRecur - epsilon rule preserved through expansion", "[parser][indirect-left-recur]")
@@ -710,31 +683,23 @@ TEST_CASE("RemoveIndirectLeftRecur - epsilon rule preserved through expansion", 
     // B -> A a | ε
     // A -> b
     // Map order: A, B.
-    // A: no expansion. A = {b}.
-    // B: A in set. ExpandFront "A a" using {b}: b a.
-    // Rule ε (empty): x.empty() is true, NOT expanded.
-    // newRss = {b a, ε}.
+    // No left recursion cycle. No expansion.
     auto grammars = G("B", { Rs({"A", "a"}), Rs({}) });
     grammars.merge(G("A", { Rs({"b"}) }));
 
     auto result = RemoveIndirectLeftRecur(move(grammars));
-    auto& g = result.ConvertedGrammars;
+    auto& g = result.Grammars;
 
+    // B unchanged
     REQUIRE(RuleCount(g, "B") == 2);
-    REQUIRE(HasRule(g, "B", Rs({"b", "a"})));
+    REQUIRE(HasRule(g, "B", Rs({"A", "a"})));
     REQUIRE(HasRule(g, "B", Rs({})));
 
-    // B[0] history: expanded from "A a"
-    auto& bHist = result.ConvertHistory.at(S("B")).at(0);
-    REQUIRE(bHist.Count() == 1);
+    // No expansion history
+    for (auto& [k, hist] : result.ConvertHistory)
     {
-        auto const& ef = dynamic_cast<History::ExpandFront const&>(bHist.At(0));
-        REQUIRE(ef.Nonterminal == S("A"));
-        REQUIRE(ef.RightSide == Rs({"b"}));
+        REQUIRE(hist.empty());
     }
-
-    // B[1] (epsilon) was not expanded
-    REQUIRE_FALSE(result.ConvertHistory.at(S("B")).contains(1));
 }
 
 TEST_CASE("RemoveIndirectLeftRecur - indirect recursion B via A, with A direct left-rec", "[parser][indirect-left-recur]")
@@ -760,7 +725,7 @@ TEST_CASE("RemoveIndirectLeftRecur - indirect recursion B via A, with A direct l
     grammars.merge(G("B", { Rs({"A", "d"}), Rs({"e"}) }));
 
     auto result = RemoveIndirectLeftRecur(move(grammars));
-    auto& g = result.ConvertedGrammars;
+    auto& g = result.Grammars;
 
     REQUIRE(HasKey(g, "A"));
     REQUIRE(HasKey(g, "A'"));
@@ -786,4 +751,285 @@ TEST_CASE("RemoveIndirectLeftRecur - indirect recursion B via A, with A direct l
     REQUIRE(RuleCount(g, "B'") == 2);
     REQUIRE(HasRule(g, "B'", Rs({"b", "A'", "d", "B'"})));
     REQUIRE(HasRule(g, "B'", Rs({})));
+}
+
+// ============================================================================
+// Syntax tree undo tests: verify left-recursive tree recovery
+//
+// Grammar: L -> a | L "," a
+// After RemoveIndirectLeftRecur:
+//   L -> a L'
+//   L' -> "," a L' | ε
+//
+// Parsing "a , a , a" with converted grammar produces right-recursive tree:
+//   L
+//   ├── a
+//   └── L'
+//       ├── ","
+//       ├── a
+//       └── L'
+//           ├── ","
+//           ├── a
+//           └── L' (ε)
+//
+// After undo, should recover left-recursive tree:
+//   L
+//   ├── L
+//   │   ├── L
+//   │   │   └── a
+//   │   └── ","
+//   │   └── a
+//   └── ","
+//   └── a
+// ============================================================================
+
+TEST_CASE("Left2RightRecur::Undo - initializer-list style left-recursive recovery", "[parser][undo][indirect-left-recur]")
+{
+    // L -> a | L "," a
+    SimpleGrammars grammars;
+    grammars[S("L")] = { Rs({"a"}), Rs({"L", ",", "a"}) };
+
+    auto [converted, history] = RemoveIndirectLeftRecur(move(grammars));
+
+    // After conversion: L -> a L', L' -> "," a L' | ε
+    REQUIRE(HasKey(converted, "L"));
+    REQUIRE(HasKey(converted, "L'"));
+    REQUIRE(RuleCount(converted, "L") == 1);
+    REQUIRE(HasRule(converted, "L", Rs({"a", "L'"})));
+    REQUIRE(RuleCount(converted, "L'") == 2);
+    REQUIRE(HasRule(converted, "L'", Rs({",", "a", "L'"})));
+    REQUIRE(HasRule(converted, "L'", Rs({})));
+
+    // ConvertHistory for L[0] should have Left2RightRecur
+    REQUIRE(history.at(S("L")).contains(0));
+    REQUIRE(history.at(S("L")).at(0).Count() == 1);
+
+    // Build parse tree for "a , a , a" as the parser would produce
+    // using the converted grammar L -> a L', L' -> "," a L' | ε
+    auto eps = MakeNode(S("L'"), {}, {});
+    auto innerL = MakeNode(S("L'"), {S(","), S("a"), S("L'")},
+        MakeChildren(
+            Leaf(MakeToken(TokType::Comma, ",")),
+            Leaf(MakeToken(TokType::Ident, "a")),
+            Branch(move(eps))));
+    auto outerL = MakeNode(S("L'"), {S(","), S("a"), S("L'")},
+        MakeChildren(
+            Leaf(MakeToken(TokType::Comma, ",")),
+            Leaf(MakeToken(TokType::Ident, "a")),
+            Branch(move(innerL))));
+    auto root = MakeNode(S("L"), {S("a"), S("L'")},
+        MakeChildren(
+            Leaf(MakeToken(TokType::Ident, "a")),
+            Branch(move(outerL))));
+
+    // Apply undo
+    auto bHist = history.at(S("L")).at(0);
+    auto result = bHist.Undo(move(root));
+
+    // Should recover left-recursive tree:
+    // L[L[L[a], ",", a], ",", a]
+    INFO(DumpGrammars(converted));
+
+    REQUIRE(result.Name == "L");
+    REQUIRE(result.ChildSymbols.size() == 3);
+    REQUIRE(result.ChildSymbols[0] == "L");
+    REQUIRE(result.ChildSymbols[1] == ",");
+    REQUIRE(result.ChildSymbols[2] == "a");
+
+    // Middle level: L[L[a], ",", a]
+    auto* mid = AsNode(result.Children[0]);
+    REQUIRE(mid != nullptr);
+    REQUIRE(mid->Name == "L");
+    REQUIRE(mid->ChildSymbols.size() == 3);
+    REQUIRE(mid->ChildSymbols[0] == "L");
+    REQUIRE(mid->ChildSymbols[1] == ",");
+    REQUIRE(mid->ChildSymbols[2] == "a");
+
+    // Innermost level: L[a]
+    auto* inner = AsNode(mid->Children[0]);
+    REQUIRE(inner != nullptr);
+    REQUIRE(inner->Name == "L");
+    REQUIRE(inner->ChildSymbols.size() == 1);
+    REQUIRE(inner->ChildSymbols[0] == "a");
+    REQUIRE(AsToken(inner->Children[0])->Value == "a");
+
+    // Verify comma and ident tokens at each level
+    REQUIRE(AsToken(mid->Children[1])->Value == ",");
+    REQUIRE(AsToken(mid->Children[2])->Value == "a");
+    REQUIRE(AsToken(result.Children[1])->Value == ",");
+    REQUIRE(AsToken(result.Children[2])->Value == "a");
+}
+
+TEST_CASE("Left2RightRecur::Undo - single element no recursion", "[parser][undo][indirect-left-recur]")
+{
+    // L -> a | L "," a
+    SimpleGrammars grammars;
+    grammars[S("L")] = { Rs({"a"}), Rs({"L", ",", "a"}) };
+
+    auto [converted, history] = RemoveIndirectLeftRecur(move(grammars));
+
+    // Build parse tree for "a" (single element, L' -> ε)
+    auto eps = MakeNode(S("L'"), {}, {});
+    auto root = MakeNode(S("L"), {S("a"), S("L'")},
+        MakeChildren(
+            Leaf(MakeToken(TokType::Ident, "a")),
+            Branch(move(eps))));
+
+    auto bHist = history.at(S("L")).at(0);
+    auto result = bHist.Undo(move(root));
+
+    // Single element: L[a]
+    REQUIRE(result.Name == "L");
+    REQUIRE(result.ChildSymbols.size() == 1);
+    REQUIRE(result.ChildSymbols[0] == "a");
+    REQUIRE(AsToken(result.Children[0])->Value == "a");
+}
+
+// ============================================================================
+// End-to-end parser integration tests
+//
+// These tests construct a full LLParser, feed token streams through it,
+// and verify that the parsed syntax tree (after undo) has the correct
+// left-recursive structure.
+// ============================================================================
+
+static auto MakeEof() -> MockToken
+{
+    return { TokType::Eof, "eof" };
+}
+
+/// <summary>
+/// Build an LLParser for the grammar L -> a | L "," a
+/// </summary>
+static auto BuildListParser() -> LLParser
+{
+    SimpleGrammars grammars;
+    grammars[S("L")] = { Rs({"a"}), Rs({"L", ",", "a"}) };
+
+    map<string_view, int> terminal2IntTokenType;
+    terminal2IntTokenType["a"] = static_cast<int>(TokType::Ident);
+    terminal2IntTokenType[","] = static_cast<int>(TokType::Comma);
+    terminal2IntTokenType[eof] = static_cast<int>(TokType::Eof);
+
+    return LLParser::ConstructFrom(S("L"), move(grammars), terminal2IntTokenType);
+}
+
+TEST_CASE("LLParser integration - three elements left-recursive tree", "[parser][integration]")
+{
+    auto parser = BuildListParser();
+
+    // Token stream: a , a , a , eof
+    vector<MockToken> tokens;
+    tokens.push_back(MakeToken(TokType::Ident, "a"));
+    tokens.push_back(MakeToken(TokType::Comma, ","));
+    tokens.push_back(MakeToken(TokType::Ident, "a"));
+    tokens.push_back(MakeToken(TokType::Comma, ","));
+    tokens.push_back(MakeToken(TokType::Ident, "a"));
+    tokens.push_back(MakeEof());
+
+    auto result = parser.Parse<void>(VectorStream{ .Tokens = move(tokens) },
+        [](Node*) {});
+
+    REQUIRE(result.has_value());
+
+    // Root wraps the start symbol; actual result is root's child
+    auto& root = result.value();
+    REQUIRE(root.Children.size() == 1);
+    auto* L = AsNode(root.Children[0]);
+    REQUIRE(L != nullptr);
+    REQUIRE(L->Name == "L");
+
+    // After undo: L[L[L[a], ",", a], ",", a]
+    REQUIRE(L->ChildSymbols.size() == 3);
+    REQUIRE(L->ChildSymbols[0] == "L");
+    REQUIRE(L->ChildSymbols[1] == ",");
+    REQUIRE(L->ChildSymbols[2] == "a");
+
+    // Middle level
+    auto* mid = AsNode(L->Children[0]);
+    REQUIRE(mid != nullptr);
+    REQUIRE(mid->Name == "L");
+    REQUIRE(mid->ChildSymbols.size() == 3);
+    REQUIRE(mid->ChildSymbols[0] == "L");
+    REQUIRE(mid->ChildSymbols[1] == ",");
+    REQUIRE(mid->ChildSymbols[2] == "a");
+
+    // Innermost level: L[a]
+    auto* inner = AsNode(mid->Children[0]);
+    REQUIRE(inner != nullptr);
+    REQUIRE(inner->Name == "L");
+    REQUIRE(inner->ChildSymbols.size() == 1);
+    REQUIRE(inner->ChildSymbols[0] == "a");
+    REQUIRE(AsToken(inner->Children[0])->Value == "a");
+
+    // Tokens at each level
+    REQUIRE(AsToken(mid->Children[1])->Value == ",");
+    REQUIRE(AsToken(mid->Children[2])->Value == "a");
+    REQUIRE(AsToken(L->Children[1])->Value == ",");
+    REQUIRE(AsToken(L->Children[2])->Value == "a");
+}
+
+TEST_CASE("LLParser integration - single element", "[parser][integration]")
+{
+    auto parser = BuildListParser();
+
+    // Token stream: a , eof
+    vector<MockToken> tokens;
+    tokens.push_back(MakeToken(TokType::Ident, "a"));
+    tokens.push_back(MakeEof());
+
+    auto result = parser.Parse<void>(VectorStream{ .Tokens = move(tokens) },
+        [](Node*) {});
+
+    REQUIRE(result.has_value());
+
+    auto& root = result.value();
+    REQUIRE(root.Children.size() == 1);
+    auto* L = AsNode(root.Children[0]);
+    REQUIRE(L != nullptr);
+    REQUIRE(L->Name == "L");
+
+    // After undo: L[a]
+    REQUIRE(L->ChildSymbols.size() == 1);
+    REQUIRE(L->ChildSymbols[0] == "a");
+    REQUIRE(AsToken(L->Children[0])->Value == "a");
+}
+
+TEST_CASE("LLParser integration - two elements", "[parser][integration]")
+{
+    auto parser = BuildListParser();
+
+    // Token stream: a , a , eof
+    vector<MockToken> tokens;
+    tokens.push_back(MakeToken(TokType::Ident, "a"));
+    tokens.push_back(MakeToken(TokType::Comma, ","));
+    tokens.push_back(MakeToken(TokType::Ident, "a"));
+    tokens.push_back(MakeEof());
+
+    auto result = parser.Parse<void>(VectorStream{ .Tokens = move(tokens) },
+        [](Node*) {});
+
+    REQUIRE(result.has_value());
+
+    auto& root = result.value();
+    REQUIRE(root.Children.size() == 1);
+    auto* L = AsNode(root.Children[0]);
+    REQUIRE(L != nullptr);
+    REQUIRE(L->Name == "L");
+
+    // After undo: L[L[a], ",", a]
+    REQUIRE(L->ChildSymbols.size() == 3);
+    REQUIRE(L->ChildSymbols[0] == "L");
+    REQUIRE(L->ChildSymbols[1] == ",");
+    REQUIRE(L->ChildSymbols[2] == "a");
+
+    auto* inner = AsNode(L->Children[0]);
+    REQUIRE(inner != nullptr);
+    REQUIRE(inner->Name == "L");
+    REQUIRE(inner->ChildSymbols.size() == 1);
+    REQUIRE(inner->ChildSymbols[0] == "a");
+    REQUIRE(AsToken(inner->Children[0])->Value == "a");
+
+    REQUIRE(AsToken(L->Children[1])->Value == ",");
+    REQUIRE(AsToken(L->Children[2])->Value == "a");
 }

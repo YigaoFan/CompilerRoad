@@ -529,8 +529,7 @@ TEST_CASE("Left2RightRecur::Undo - realistic grammar via RemoveIndirectLeftRecur
 //
 // After undo:
 //   B
-//   ├── A
-//   │   └── a
+//   ├── A  (nonterminal reference, not expanded)
 //   └── b
 TEST_CASE("Left2RightRecur::Undo - OriginalFrontReplaceHistory lookup", "[parser][undo]")
 {
@@ -542,21 +541,24 @@ TEST_CASE("Left2RightRecur::Undo - OriginalFrontReplaceHistory lookup", "[parser
     REQUIRE(HasKey(convertedGrammars, "B"));
     REQUIRE(HasKey(convertedGrammars, "B'"));
 
-    // Build parse tree from B's first converted rule: [a, b, B']
+    // Converted grammar: B -> A b B' | c B', B' -> c B' | ε
+    // Build parse tree from B's first converted rule: [A, b, B']
     auto& bRules = convertedGrammars.at(S("B"));
-    auto& rule = bRules[0];
+    auto& rule = bRules[0]; // [A, b, B']
     auto epsilonB = MakeNode(String(rule[2]), {}, {});
+    auto aNode = MakeNode(S("A"), {S("a")},
+        MakeChildren(Leaf(MakeToken(TokType::Ident, "a"))));
     auto root = MakeNode(S("B"), {String(rule[0]), String(rule[1]), String(rule[2])},
         MakeChildren(
-            Leaf(MakeToken(TokType::Ident, string(string_view(rule[0])))),
+            Branch(move(aNode)),
             Leaf(MakeToken(TokType::Ident, string(string_view(rule[1])))),
             Branch(move(epsilonB))));
 
     auto bHist = replaceHistory.at(S("B")).at(0);
     auto result = bHist.Undo(move(root));
 
-    // sentinel returns toAddChild, then RecoverExpand on root
-    // RightSide.size()=1 → packs 1 child as A → B[A[a], b]
+    // Left2RightRecur strips B' suffix. No ExpandFront history (no cycle A→B).
+    // RecoverExpand: Find([A, b]) matches OriginalGrammar index 0, but no ExpandFront entry → no change.
     REQUIRE(result.Name == "B");
     REQUIRE(result.ChildSymbols.size() == 2);
     REQUIRE(result.ChildSymbols[0] == "A");
@@ -571,11 +573,12 @@ TEST_CASE("Left2RightRecur::Undo - OriginalFrontReplaceHistory lookup", "[parser
 
 // Multi-level right-recursive chain:
 // Grammar: A -> a, B -> A b | B c
-// Converted: B -> a b B', B' -> c B' | ε
+// Converted: B -> A b B', B' -> c B' | ε
+// (No expansion of A into B — no cycle A→B)
 //
 // Before undo:
 //   B
-//   ├── a
+//   ├── A
 //   ├── b
 //   └── B'
 //       ├── c
@@ -588,14 +591,9 @@ TEST_CASE("Left2RightRecur::Undo - OriginalFrontReplaceHistory lookup", "[parser
 //   ├── B
 //   │   ├── B
 //   │   │   ├── A
-//   │   │   │   └── a
 //   │   │   └── b
 //   │   └── c
 //   └── c
-//
-// line 165 Find: [B, c] matches OriginalGrammar index 1 — no ExpandFront entry
-//                [B', c] → B' not in OriginalGrammar → no match
-//     → InsertAtHead → B'ε[B'[B'[B[a, b], c], c]]
 TEST_CASE("Left2RightRecur::Undo - multi-level chain with OriginalFrontReplaceHistory lookup", "[parser][undo]")
 {
     SimpleGrammars grammars;
@@ -603,22 +601,26 @@ TEST_CASE("Left2RightRecur::Undo - multi-level chain with OriginalFrontReplaceHi
     grammars[S("B")] = { Rs({"A", "b"}), Rs({"B", "c"}) };
     auto [convertedGrammars, replaceHistory] = RemoveIndirectLeftRecur(move(grammars));
 
-    // Build parse tree: B -> [a, b, B'[c, B'[c, B'ε]]]
+    // Converted: B -> A b B' | c B', B' -> c B' | ε
+    // Build parse tree: B -> [A, b, B'[c, B'[c, B'ε]]]
     auto innerBEpsilon = MakeNode(S("B'"), {}, {});
     auto innerB = MakeNode(S("B'"), {S("c"), S("B'")},
         MakeChildren(Leaf(MakeToken(TokType::Ident, "c")), Branch(move(innerBEpsilon))));
     auto outerB = MakeNode(S("B'"), {S("c"), S("B'")},
         MakeChildren(Leaf(MakeToken(TokType::Ident, "c")), Branch(move(innerB))));
-    auto root = MakeNode(S("B"), {S("a"), S("b"), S("B'")},
+    auto aNode = MakeNode(S("A"), {}, {});
+    auto root = MakeNode(S("B"), {S("A"), S("b"), S("B'")},
         MakeChildren(
-            Leaf(MakeToken(TokType::Ident, "a")),
+            Branch(move(aNode)),
             Leaf(MakeToken(TokType::Ident, "b")),
             Branch(move(outerB))));
 
     auto bHist = replaceHistory.at(S("B")).at(0);
     auto result = bHist.Undo(move(root));
 
-    // sentinel returns toAddChild; if branch renames intermediate B' to B
+    // Left2RightRecur strips B' levels, InsertAtHead rebuilds chain.
+    // RecoverExpand: Find([B, c]) matches OriginalGrammar index 1 (B → B c), no ExpandFront.
+    //               Find([A, b]) matches OriginalGrammar index 0 (B → A b), no ExpandFront.
     REQUIRE(result.Name == "B");
     REQUIRE(result.ChildSymbols.size() == 2);
     REQUIRE(result.ChildSymbols[1] == "c");
@@ -631,8 +633,7 @@ TEST_CASE("Left2RightRecur::Undo - multi-level chain with OriginalFrontReplaceHi
     REQUIRE(l1->ChildSymbols[0] == "B");
     REQUIRE(l1->ChildSymbols[1] == "c");
 
-    // RecoverExpand on root: Find([a, b]) matches OriginalGrammar index 0
-    // ExpandFront(A, RightSide=[a]) packs 1 child as A → B[A[a], b]
+    // B (from third level) with [A, b]
     auto* l2 = AsNode(l1->Children[0]);
     REQUIRE(l2 != nullptr);
     REQUIRE(l2->Name == "B");
@@ -640,9 +641,9 @@ TEST_CASE("Left2RightRecur::Undo - multi-level chain with OriginalFrontReplaceHi
     REQUIRE(l2->ChildSymbols[0] == "A");
     REQUIRE(l2->ChildSymbols[1] == "b");
 
+    // A is a nonterminal node, not expanded (no ExpandFront history)
     auto* aPtr = AsNode(l2->Children[0]);
     REQUIRE(aPtr != nullptr);
     REQUIRE(aPtr->Name == "A");
-    REQUIRE(aPtr->ChildSymbols.size() == 1);
-    REQUIRE(aPtr->ChildSymbols[0] == "a");
+    REQUIRE(aPtr->ChildSymbols.size() == 0);
 }
