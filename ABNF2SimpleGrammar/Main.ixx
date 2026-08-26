@@ -17,8 +17,18 @@ using std::map;
 using std::format;
 using std::move;
 
+void TerminateHandler()
+{
+    std::cerr << "Terminate called after throwing an instance of an exception.\n";
+    std::cerr << "Stacktrace at crash:\n";
+    std::cerr << std::stacktrace::current() << '\n';
+    std::abort();
+}
+
 int main(int argc, char* argv[])
 {
+	std::set_terminate(TerminateHandler);
+
     using std::ranges::views::filter;
     using std::ranges::to;
 
@@ -217,6 +227,23 @@ int main(int argc, char* argv[])
             starArrowChecker.CheckParseRules(ast->ParseRules.get());
             tokRefChecker.Check(ast.get());
             auto grammarsInfo = ParseRule2SimpleGrammarTransformer::Transform(ast->ParseRules.get());
+            auto terminals = LexRule2RegExpTransformer::MergeTokInfo(LexRule2RegExpTransformer::Transform(ast->LexRules.get(), enableDebug), move(grammarsInfo.ToksInfo));
+
+			std::ofstream codeFile{ specPath };
+			std::print(codeFile, "export module {}Spec;\n", language);
+			std::print(codeFile, "\n");
+			std::print(codeFile, "import std;\n");
+			std::print(codeFile, "import Parser;\n");
+			std::print(codeFile, "using namespace std;\n");
+			std::print(codeFile, "\n");
+			std::print(codeFile, "{}\n", CppCodeForm{ .Value = terminals });
+			std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Grammars });
+			std::print(codeFile, "export ParseInfo parseInfo =\n");
+			std::print(codeFile, "{{\n");
+			std::print(codeFile, "   .Grammars = grammars,\n");
+			std::print(codeFile, "   .Terminal2IntTokenType = terminal2IntTokenType,\n");
+			std::print(codeFile, "}};");
+			std::println("code generate done");
 
             if (enableCheckConflicts)
             {
@@ -225,25 +252,6 @@ int main(int argc, char* argv[])
                 // calculate the start symbol of grammar, assume there exists the main symbol
                 auto conflicts = DetectConflicts(ast->StartSymbolOfParseRules, map{ make_move_iterator(grammarsInfo.Grammars.begin()), make_move_iterator(grammarsInfo.Grammars.end()) });
                 std::println("{}", conflicts);
-            }
-            else
-            {
-                std::ofstream codeFile{ specPath };
-                std::print(codeFile, "export module {}Spec;\n", language);
-                std::print(codeFile, "\n");
-                std::print(codeFile, "import std;\n");
-                std::print(codeFile, "import Parser;\n");
-                std::print(codeFile, "using namespace std;\n");
-                std::print(codeFile, "\n");
-                auto terminals = LexRule2RegExpTransformer::MergeTokInfo(LexRule2RegExpTransformer::Transform(ast->LexRules.get(), enableDebug), move(grammarsInfo.ToksInfo));
-                std::print(codeFile, "{}\n", CppCodeForm{ .Value = terminals });
-                std::print(codeFile, "{}\n", CppCodeForm{ .Value = grammarsInfo.Grammars });
-                std::print(codeFile, "export ParseInfo parseInfo =\n");
-                std::print(codeFile, "{{\n");
-                std::print(codeFile, "   .Grammars = grammars,\n");
-                std::print(codeFile, "   .Terminal2IntTokenType = terminal2IntTokenType,\n");
-                std::print(codeFile, "}};");
-                std::println("code generate done");
             }
         }
         else
