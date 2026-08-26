@@ -51,14 +51,18 @@ static auto BuildLexerAndParser() -> pair<Lexer<TokType>, LLParser>
         pair<TokType, string>{ TokType::RegularExpression, "r\"((\\\\[^\n])|[^\\\\\"\n])*\"" },
         pair<TokType, string>{ TokType::LexRuleHeader, "\\- Lex \\-\n" },
         pair<TokType, string>{ TokType::ParseRuleHeader, "\\- Parse \\-\n" },
+        pair<TokType, string>{ TokType::StartKeyword, "start" },
     };
     auto l = Lexer<TokType>::New(rules);
     auto p = LLParser::ConstructFrom("all-grammars",
     {
         { "all-grammars", {
-            { "lex-header", "grammars", "parse-header", "grammars" },
+            { "lex-header", "grammars", "parse-header", "start-info", "grammars" },
             { },
         }},
+		{ "start-info", {
+			{ "@", "start", "sym" },
+		}},
         { "grammars", {
             { "optional-newlines", "grammar", "more-grammars", },
             { },
@@ -143,6 +147,7 @@ static auto BuildLexerAndParser() -> pair<Lexer<TokType>, LLParser>
         { "regExp" , static_cast<int>(TokType::RegularExpression) },
         { "lex-header" , static_cast<int>(TokType::LexRuleHeader) },
         { "parse-header" , static_cast<int>(TokType::ParseRuleHeader) },
+        { "start" , static_cast<int>(TokType::StartKeyword) },
     });
     return { move(l), move(p) };
 }
@@ -172,6 +177,7 @@ TEST_CASE("Integration - Simple lex rules", "[integration]")
 Keyword -*-> "if" | "else" | "while"
 
 - Parse -
+@start stmt
 stmt -> sym
 )";
     auto ast = ParseABNF(l, p, abnf);
@@ -197,6 +203,7 @@ TEST_CASE("Integration - Alias syntax @", "[integration]")
 Punctuator -*-> "==" @Equal | "!=" @NotEqual | "<" @Less | ">" @Greater
 
 - Parse -
+@start expr
 expr -> sym
 )";
     auto ast = ParseABNF(l, p, abnf);
@@ -220,6 +227,7 @@ TEST_CASE("Integration - Full pipeline with lex and parse", "[integration]")
 Type -> "int"
 
 - Parse -
+@start decl
 decl -> Type sym
 )";
     auto ast = ParseABNF(l, p, abnf);

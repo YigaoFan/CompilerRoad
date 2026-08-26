@@ -144,7 +144,7 @@ TEST_CASE("PrivateTokenRefChecker - parse rule referencing private token reports
         }), false),
     });
 
-    auto allGrammars = make_shared<AllGrammars>(lexGrammars, parseGrammars);
+    auto allGrammars = make_shared<AllGrammars>(lexGrammars, "stmt", parseGrammars);
     auto checker = PrivateTokenRefChecker();
     // Should not throw, just prints warning
     REQUIRE_NOTHROW(checker.Check(allGrammars.get()));
