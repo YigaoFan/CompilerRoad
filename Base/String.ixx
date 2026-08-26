@@ -36,7 +36,7 @@ public:
     { }
 
     template <size_t N>
-    String(char const(&literal)[N])
+    constexpr String(char const(&literal)[N])
         : share(new Share{ .Str = literal, .RefCount = 1, .Releasable = false }),
         start(0), stop(N - 1)
     {
