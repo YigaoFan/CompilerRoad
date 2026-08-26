@@ -25,3 +25,55 @@ Tabby 的 UI 比较好看。但是 emacs -nw 有个界面刷新的问题：类�
 - [X] Linux 无法渲染中文，导致候选词乱码，需要安装中文字体库
 - [X] 修改候选词翻页键
 - [X] 中英文切换时自动切换半全角标点符号，并修复全角符号情况下\不转换为、
+** 2026-08
+*** <2026-08-01 Sat>
+***** 今天主要写工作记录。
+*** <2026-08-03 Mon>
+**** 更新了基于新 Undo （只展开最终左递归的语法）逻辑的测试
+**** 将 init-list 恢复成左递归形式，并添加相应单元测试和端到端测试
+**** 将 Undo 应用到 LLParser 中
+*** <2026-08-04 Tue>
+**** 为目前所有 parse 语法添加测试
+**** 去除 abnf 文件中所有的 _rr 语法（待 review）
+*** <2026-08-05 Wed>
+**** 修改 LLParser::parseTable 以支持一个 (nontermin, tokType) 可以导向多个 rule，以此形成 options 传给 ConflictResolver。暂时去掉了语法冲突解决中低层级语法冲突不重复在高级语法中，没想清楚低->高的关系。
+*** <2026-08-06 Thu>
+**** 修复右递归语法恢复左递归后出现的问题：
+***** 修复 LeftFactor 不能处理左递归 rule 的缺陷
+***** 拟将 LeftFactor 关掉，因为这个功能会产生很多辅助符号，且相应的语法冲突在 ConflictResolver 也挺好解决
+*** <2026-08-09 Sun>
+**** 修复 ExpressionParser 一部分操作符解析问题
+***** .和->要消耗右半部分，并要求为 identifier
+*** <2026-08-10 Mon>
+**** 修复 parse 测试：
+***** 为分词后的结果附加上 EOF，中间发现 catch 的头文件定义宏 EOF
+**** 更新 ABNF2SimpleGrammarTest：
+***** 之前加入 start symbol 的时候，改变了 AST.ixx，这个测试共用此文件，所以需要更新
+*** <2026-08-11 Tue>
+<2026-08-14 Fri>
+**** 借鉴之前 FanScript 中生成记录解析行为的日志的代码，并加入快捷键设置
+**** 给 Catch2 的测试项目加命令行参数
+***** --abort 可以让测试遇到失败时停止
+***** --order decl 可以让测试按声明顺序执行，默认是随机。当需要重复复现某个错误时有用。
+***** [expression-parser] 命令行第一个参数可以指定某个 tag 的测试
+*** <2026-08-15 Sat>
+<2026-08-26 Wed>
+**** 理解借鉴自 FanScirpt 的 HtmlLogger 并完善，加入
+***** 打开自动展开到最后一行记录
+***** 按 Ctrl 键展开当前鼠标所在位置的记录到底
+**** 理清了 ExpressionParser 的负责范围，方便书写的情况下，支持如下符号：
+***** expression
+***** constant-expression
+***** assignment-expression
+**** 梳理了 C11.abnf 的语法规则：
+***** 恢复了一些之前临时修改为右递归的左递归语法
+***** 删去了 expression 及其子语法
+**** 基本完成了 C11 declaration 语法的解析，确认了 LLParser+ConflictResolver+External parser 的基础结构
+***** 基于以上需求和测试，修改、修复 ExpressionParser，并增加相应的测试
+***** 基于测试的运行，修复 ConflictResolver，熟悉了程序结构和 C11 语法
+***** 过程中运行、修复底层库的测试来保证修改无误
+**** 接下来的计划：
+***** 完善 declaration 语法解析，尚有函数调用、类型转换表达式等未完成
+***** 更高层级的语法单元解析：statement、function、translation unit——我觉得难度应该不大
+***** 由 abnf 和其中的注解生成 AST 节点类定义和 Visitor 接口
+***** 符号表和类型推导
