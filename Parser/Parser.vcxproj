@@ -138,6 +138,7 @@
     <ClCompile Include="Generator.ixx" />
     <ClCompile Include="GrammarProcess.ixx" />
     <ClCompile Include="GrammarUnitLoader.ixx" />
+    <ClCompile Include="HtmlLogger.ixx" />
     <ClCompile Include="InputStream.ixx" />
     <ClCompile Include="Parser.ixx" />
     <ClCompile Include="ParserBase.ixx" />

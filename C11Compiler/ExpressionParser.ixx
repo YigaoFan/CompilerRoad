@@ -71,18 +71,24 @@ private:
 	};
 	inline static map<TokType, OperatorInfo> InfixOperators =
 	{
-		{ TokType::Punctuator_Assign,           {.LeftBindingPower = Power::Level2, .RightBindingPower = Power::Level3 - 1, }},
-		{ TokType::Punctuator_MulAssign,        {.LeftBindingPower = Power::Level2, .RightBindingPower = Power::Level3 - 1, }},
-		{ TokType::Punctuator_DivAssign,        {.LeftBindingPower = Power::Level2, .RightBindingPower = Power::Level3 - 1, }},
-		{ TokType::Punctuator_ModAssign,        {.LeftBindingPower = Power::Level2, .RightBindingPower = Power::Level3 - 1, }},
-		{ TokType::Punctuator_AddAssign,        {.LeftBindingPower = Power::Level2, .RightBindingPower = Power::Level3 - 1, }},
-		{ TokType::Punctuator_SubAssign,        {.LeftBindingPower = Power::Level2, .RightBindingPower = Power::Level3 - 1, }},
-		{ TokType::Punctuator_LeftShiftAssign,  {.LeftBindingPower = Power::Level2, .RightBindingPower = Power::Level3 - 1, }},
-		{ TokType::Punctuator_RightShiftAssign, {.LeftBindingPower = Power::Level2, .RightBindingPower = Power::Level3 - 1, }},
-		{ TokType::Punctuator_AndAssign,        {.LeftBindingPower = Power::Level2, .RightBindingPower = Power::Level3 - 1, }},
-		{ TokType::Punctuator_OrAssign,         {.LeftBindingPower = Power::Level2, .RightBindingPower = Power::Level3 - 1, }},
-		{ TokType::Punctuator_XorAssign,        {.LeftBindingPower = Power::Level2, .RightBindingPower = Power::Level3 - 1, }},
+		{ TokType::Punctuator_Comma,            {.LeftBindingPower = Power::Level0, .RightBindingPower = Power::Level0 + 1, }},
+
+		// assign is right binding
+		{ TokType::Punctuator_Assign,           {.LeftBindingPower = Power::Level1, .RightBindingPower = Power::Level1 - 1, }},
+		{ TokType::Punctuator_MulAssign,        {.LeftBindingPower = Power::Level1, .RightBindingPower = Power::Level1 - 1, }},
+		{ TokType::Punctuator_DivAssign,        {.LeftBindingPower = Power::Level1, .RightBindingPower = Power::Level1 - 1, }},
+		{ TokType::Punctuator_ModAssign,        {.LeftBindingPower = Power::Level1, .RightBindingPower = Power::Level1 - 1, }},
+		{ TokType::Punctuator_AddAssign,        {.LeftBindingPower = Power::Level1, .RightBindingPower = Power::Level1 - 1, }},
+		{ TokType::Punctuator_SubAssign,        {.LeftBindingPower = Power::Level1, .RightBindingPower = Power::Level1 - 1, }},
+		{ TokType::Punctuator_LeftShiftAssign,  {.LeftBindingPower = Power::Level1, .RightBindingPower = Power::Level1 - 1, }},
+		{ TokType::Punctuator_RightShiftAssign, {.LeftBindingPower = Power::Level1, .RightBindingPower = Power::Level1 - 1, }},
+		{ TokType::Punctuator_AndAssign,        {.LeftBindingPower = Power::Level1, .RightBindingPower = Power::Level1 - 1, }},
+		{ TokType::Punctuator_OrAssign,         {.LeftBindingPower = Power::Level1, .RightBindingPower = Power::Level1 - 1, }},
+		{ TokType::Punctuator_XorAssign,        {.LeftBindingPower = Power::Level1, .RightBindingPower = Power::Level1 - 1, }},
 		
+		// ternary operator is right binding
+		{ TokType::Punctuator_Question,         {.LeftBindingPower = Power::Level2, .RightBindingPower = Power::Level2 - 1, }},
+
 		{ TokType::Punctuator_LogicalOr,    {.LeftBindingPower = Power::Level3, .RightBindingPower = Power::Level3 + 1, }},
 		{ TokType::Punctuator_LogicalAnd,   {.LeftBindingPower = Power::Level4, .RightBindingPower = Power::Level4 + 1, }},
 		{ TokType::Punctuator_Pipe,         {.LeftBindingPower = Power::Level5, .RightBindingPower = Power::Level5 + 1, }},
@@ -113,14 +119,25 @@ private:
 		{ TokType::Punctuator_Dot,         {.LeftBindingPower = Power::Level15, }},
 		{ TokType::Punctuator_Arrow,       {.LeftBindingPower = Power::Level15, }},
 	};
+	struct ExpressionParseConfig
+	{
+		int MinInfixBindingPower;
+	};
+	inline static map<String, ExpressionParseConfig> ExpressionParseConfigs =
+	{
+		{ "expression",            {.MinInfixBindingPower = Power::MinLevel, } },
+		{ "constant-expression",   {.MinInfixBindingPower = Power::Level1,/* same as assign op */ } }, 
+		{ "assignment-expression", {.MinInfixBindingPower = Power::Level0,/* same as comma op  */ } },
+	};
 public:
 	auto FirstSet() const -> map<String, set<String>>
 	{
 		map<String, set<String>> firsts
 		{
-			{ "logical-or-expression", {} }, 
-			{ "unary-expression", {} }, 
+			{ "expression", {} },
+			{ "constant-expression", {} },
 			{ "assignment-expression", {} },
+
 		};
 		// union of prefix operators and atoms that can start an expression
 		// prefix operators: -, +, ++, --, !, ~, *, &, sizeof, alignof, (
@@ -130,25 +147,25 @@ public:
 			{
 				if (type == static_cast<int>(tokType))
 				{
-					firsts.at("logical-or-expression").insert(String(term));
-					firsts.at("unary-expression").insert(String(term));
+					firsts.at("expression").insert(String(term));
+					firsts.at("constant-expression").insert(String(term));
 					firsts.at("assignment-expression").insert(String(term));
 					break;
 				}
 			}
 		}
 		// atoms: primary-expression first
-		firsts.at("logical-or-expression").insert("Identifier");
-		firsts.at("logical-or-expression").insert("Integer-constant");
-		firsts.at("logical-or-expression").insert("Floating-constant");
-		firsts.at("logical-or-expression").insert("Character-constant");
-		firsts.at("logical-or-expression").insert("StringLiteral");
+		firsts.at("expression").insert("Identifier");
+		firsts.at("expression").insert("Integer-constant");
+		firsts.at("expression").insert("Floating-constant");
+		firsts.at("expression").insert("Character-constant");
+		firsts.at("expression").insert("StringLiteral");
 
-		firsts.at("unary-expression").insert("Identifier");
-		firsts.at("unary-expression").insert("Integer-constant");
-		firsts.at("unary-expression").insert("Floating-constant");
-		firsts.at("unary-expression").insert("Character-constant");
-		firsts.at("unary-expression").insert("StringLiteral");
+		firsts.at("constant-expression").insert("Identifier");
+		firsts.at("constant-expression").insert("Integer-constant");
+		firsts.at("constant-expression").insert("Floating-constant");
+		firsts.at("constant-expression").insert("Character-constant");
+		firsts.at("constant-expression").insert("StringLiteral");
 
 		firsts.at("assignment-expression").insert("Identifier");
 		firsts.at("assignment-expression").insert("Integer-constant");
@@ -161,24 +178,7 @@ public:
 
 	auto Parsable(String nontermin) const -> bool
 	{
-		return nontermin == "logical-or-expression"
-			or nontermin == "unary-expression"
-			or nontermin == "assignment-expression";
-		// all expression nonterminals handled by the Pratt parser
-			/*nontermin == "primary-expression"
-			or nontermin == "postfix-expression"
-			
-			or nontermin == "cast-expression"
-			or nontermin == "multiplicative-expression"
-			or nontermin == "additive-expression"
-			or nontermin == "shift-expression"
-			or nontermin == "relational-expression"
-			or nontermin == "equality-expression"
-			or nontermin == "AND-expression"
-			or nontermin == "exclusive-OR-expression"
-			or nontermin == "inclusive-OR-expression"
-			or nontermin == "logical-AND-expression"
-			or nontermin == "logical-OR-expression";*/
+		return nontermin == "expression" or nontermin == "constant-expression" or nontermin == "assignment-expression";
 	}
 
 	template <typename Result, template <typename> class ActualStream, IToken Tok>
@@ -189,18 +189,32 @@ public:
 		{
 			return unexpected(ParseFailResult{ .Message = format("nonterminal({}) isn't parsable by ExpressionParser", nontermin) });
 		}
-		return ParseExpression<Result>(stream, Power::MinLevel);
+
+		// pass the min binding power corresponding the nonterminal to ParseExpression
+		// so that the parser can stop at the right position when parsing infix operators
+		return ParseExpression<Result>(stream, ExpressionParseConfigs.at(nontermin).MinInfixBindingPower);
+	}
+
+	template <typename Result, template <typename> class ActualStream, IToken Tok>
+		requires Stream<ActualStream, Tok>
+	auto Parse(String nontermin, ActualStream<Tok>& stream, HtmlLogger& logger) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
+	{
+		if (not Parsable(nontermin))
+		{
+			return unexpected(ParseFailResult{ .Message = format("nonterminal({}) isn't parsable by ExpressionParser", nontermin) });
+		}
+		return ParseExpression<Result>(stream, ExpressionParseConfigs.at(nontermin).MinInfixBindingPower);
 	}
 private:
 	template <typename Result, template <typename> class ActualStream, typename Tok>
 	auto ParseExpression(ActualStream<Tok>& stream, int minBindingPower) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
 	{
 		auto lhs = ParsePrefix<Result>(stream);
-
 		if (not lhs.has_value())
 		{
 			return lhs;
 		}
+
 		for (;;)
 		{
 			if (not stream.MoveNext())
@@ -218,29 +232,83 @@ private:
 					stream.Rollback();
 					break;
 				}
-				lhs = Cons(op, array{ move(lhs.value()) });
+				switch (op.Type)
+				{
+				case TokType::Punctuator_Dot:
+				case TokType::Punctuator_Arrow:
+					if (not stream.MoveNext())
+					{
+						return unexpected(ParseFailResult{ .Message = format("input stream is empty after postfix operator({})", op) });
+					}
+					if (stream.Current().Type != TokType::Identifier)
+					{
+						return unexpected(ParseFailResult{ .Message = format("expect identifier after postfix operator({}), but got {}", op, stream.Current()) });
+					}
+					lhs = Cons(op, array{ move(lhs.value()), ConsAtom<Result>(stream.Current())});
+					break;
+				default:
+					lhs = Cons(op, array{ move(lhs.value()) });
+					break;
+				}
 				continue;
 			}
 			if (InfixOperators.contains(op.Type))
 			{
 				auto [lbp, rbp] = InfixBindingPower(op.Type);
-				if (lbp < minBindingPower)
+				if (lbp <= minBindingPower)
 				{
 					// same as above
 					stream.Rollback();
 					break;
 				}
-				if (not stream.MoveNext())
+				switch (op.Type)
 				{
-					return unexpected(ParseFailResult{ .Message = format("input stream is empty after infix operator({})", op) });
-				}
-				auto rhs = ParseExpression<Result>(stream, rbp);
-				if (not rhs.has_value())
+				case TokType::Punctuator_Question:
 				{
-					return rhs;
+					if (not stream.MoveNext())
+					{
+						return unexpected(ParseFailResult{ .Message = format("input stream is empty after question operator({})", op) });
+					}
+					auto leftExp = ParseExpression<Result>(stream, Power::MinLevel);
+					if (not leftExp.has_value())
+					{
+						return leftExp;
+					}
+					if (not stream.MoveNext())
+					{
+						return unexpected(ParseFailResult{ .Message = format("input stream is empty after parsing question mark of 'expression?'") });
+					}
+					auto const& colon = stream.Current();
+					if (colon.Type != TokType::Punctuator_Colon)
+					{
+						return unexpected(ParseFailResult{ .Message = format("expect colon after parsing 'a?b', but got {}", colon) });
+					}
+					if (not stream.MoveNext())
+					{
+						return unexpected(ParseFailResult{ .Message = format("input stream is empty after parsing 'a?b:'") });
+					}
+					auto rightExp = ParseExpression<Result>(stream, rbp);
+					if (not rightExp.has_value())
+					{
+						return rightExp;
+					}
+					return Cons(op, array{ move(lhs.value()), move(leftExp.value()), move(rightExp.value()) });
 				}
-				lhs = Cons(op, array{ move(lhs.value()), move(rhs.value()) });
-				continue;
+				default:
+				{
+					if (not stream.MoveNext())
+					{
+						return unexpected(ParseFailResult{ .Message = format("input stream is empty after infix operator({})", op) });
+					}
+					auto rhs = ParseExpression<Result>(stream, rbp);
+					if (not rhs.has_value())
+					{
+						return rhs;
+					}
+					lhs = Cons(op, array{ move(lhs.value()), move(rhs.value()) });
+					continue;
+				}
+				}
 			}
 			stream.Rollback();
 			break;
@@ -296,11 +364,15 @@ private:
 		case TokType::CharacterConstant:
 		case TokType::StringLiteral:
 		{
-			auto atom = SyntaxTreeNode<Tok, Result>("atom", { "value" });
-			atom.Children.push_back(op);
+			auto atom = ConsAtom<Result>(op);
 			return atom;
 		}
 		default:
+			if (IsBuiltinTypeName(op.Type))
+			{
+				auto atom = ConsAtom<Result>(op, "type-name");
+				return atom;
+			}
 			return unexpected(ParseFailResult{ .Message = format("unexpected token({}) when parse prefix expression", op) });
 		}
 	}
@@ -335,6 +407,25 @@ private:
 		throw std::out_of_range(format("unknown postfix operator({}) when get the binding power", op));
 	}
 
+	static auto IsBuiltinTypeName(TokType type) -> bool
+	{
+		switch (type)
+		{
+		case TokType::Keyword_Void:
+		case TokType::Keyword_Char:
+		case TokType::Keyword_Short:
+		case TokType::Keyword_Int:
+		case TokType::Keyword_Long:
+		case TokType::Keyword_Float:
+		case TokType::Keyword_Double:
+		case TokType::Keyword_Signed:
+		case TokType::Keyword_Unsigned:
+			return true;
+		default:
+			return false;
+		}
+	}
+
 	template <typename Tok, typename Result, size_t Size>
 	static auto Cons(Tok op, array<SyntaxTreeNode<Tok, Result>, Size> items) -> SyntaxTreeNode<Tok, Result>
 	{
@@ -344,13 +435,21 @@ private:
 		for (auto i = 0; auto& x : items)
 		{
 			n.ChildSymbols.push_back(String(format("{}-operand", i++)));
-			if (x.Name == "atom")
+			if (x.Name == "atom" || x.Name == "type-name")
 			{
 				n.Children.push_back(move(x.GetChildAsToken(0)));
 				continue;
 			}
 			n.Children.push_back(move(x));			
 		}
+		return n;
+	}
+
+	template <typename Result, typename Tok>
+	static auto ConsAtom(Tok atom, String name = "atom") -> SyntaxTreeNode<Tok, Result>
+	{
+		auto n = SyntaxTreeNode<Tok, Result>(name, { "value" });
+		n.Children.push_back(move(atom));
 		return n;
 	}
 };

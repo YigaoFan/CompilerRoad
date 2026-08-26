@@ -77,7 +77,7 @@ auto DirectLeftRecur2RightRecur(SimpleGrammar const& grammar) -> optional<Conver
     return {};
 }
 
-export struct History
+struct History
 {
 public:
     struct IConvertUnit
@@ -247,9 +247,9 @@ public:
 	}
 };
 
-struct ConvertResult
+struct ConvertedGrammars
 {
-    SimpleGrammars ConvertedGrammars;
+    SimpleGrammars Grammars;
     /// <summary>
 	/// Item for each nonterminal in ConvertHistory is ensured. If no replacement happens for a rule, its value does not exist.
     /// </summary>
@@ -307,7 +307,7 @@ auto ExpandFrontWithPreviousNontermins(SimpleRightSide rule, History initBaseHis
 /// <summary>
 /// also handle the direct left recursive
 /// </summary>
-auto RemoveIndirectLeftRecur(SimpleGrammars grammars) -> ConvertResult
+auto RemoveIndirectLeftRecur(SimpleGrammars grammars) -> ConvertedGrammars
 {
     map<String, set<String>> startsWith;
     for (auto const& [left, rules] : grammars)
@@ -390,7 +390,7 @@ auto RemoveIndirectLeftRecur(SimpleGrammars grammars) -> ConvertResult
 		previousNontermins.push_back(focusRule.first);
     }
 	grammars.insert_range(move(generatedGrammars));
-    return { .ConvertedGrammars = move(grammars), .ConvertHistory = move(convertHistory) };
+    return { .Grammars = move(grammars), .ConvertHistory = move(convertHistory) };
 }
 
 export constexpr auto leftFactorSuffix = "suffix";
@@ -398,16 +398,13 @@ export constexpr auto leftFactorSuffix = "suffix";
 /// <returns>.first is original noterminal, .second is new nonterminal</returns>
 auto LeftFactor(SimpleGrammar grammar) -> pair<SimpleGrammar, optional<vector<SimpleGrammar>>>
 {
-    // should only left factor which is not left recursive
     using std::make_move_iterator;
 
     map<String, vector<size_t>> prefix2Indexes;
     for (size_t i = 0; i < grammar.second.size(); ++i)
     {
-        // should get max common prefix TODO
-        // abc, abd, aed how to process max common prefix
         auto& rs = grammar.second[i];
-        if (not rs.empty())
+		if (not rs.empty() and rs.front() != grammar.first) // not statistics the left recursive item
         {
             prefix2Indexes[rs.front()].push_back(i);
         }
@@ -548,5 +545,6 @@ export
 {
     auto LeftFactor(SimpleGrammar grammar) -> pair<SimpleGrammar, optional<vector<SimpleGrammar>>>;
     //auto DeepLeftFactor(map<pair<String, String>, vector<int>> conflicts, map<LeftSide, vector<SimpleRightSide>> grammars) -> map<LeftSide, vector<SimpleRightSide>>;
-    auto RemoveIndirectLeftRecur(SimpleGrammars grammars) -> ConvertResult;
+    auto RemoveIndirectLeftRecur(SimpleGrammars grammars) -> ConvertedGrammars;
+    struct History;
 }

@@ -81,6 +81,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp" />
+    <ClCompile Include="ConflictResolverAndExternalParserTest.ixx" />
     <ClCompile Include="GrammarHistoryUndoTest.ixx" />
     <ClCompile Include="RemoveIndirectLeftRecurTest.ixx" />
   </ItemGroup>

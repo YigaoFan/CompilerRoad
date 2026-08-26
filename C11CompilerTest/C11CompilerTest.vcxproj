@@ -90,11 +90,14 @@
   <ItemGroup>
     <ClCompile Include="C11-spec.ixx" />
     <ClCompile Include="..\C11Compiler\ConflictResolver.ixx" />
-    <ClCompile Include="..\C11Compiler\CustomParser.ixx" />
+    <ClCompile Include="..\C11Compiler\Context.ixx" />
+    <ClCompile Include="..\C11Compiler\SymbolTable.ixx" />
     <ClCompile Include="..\C11Compiler\Ast.ixx" />
+    <ClCompile Include="ParserTest.ixx" />
     <ClCompile Include="Main.cpp" />
-    <ClCompile Include="C11LexerTest.ixx" />
-    <ClCompile Include="C11ParserTest.ixx" />
+    <ClCompile Include="LexerTest.ixx" />
+    <ClCompile Include="ExpressionParserTest.ixx" />
+    <ClCompile Include="..\C11Compiler\ExpressionParser.ixx" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Base\Base.vcxproj">

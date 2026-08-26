@@ -54,5 +54,8 @@
     <ClCompile Include="ConflictDetector.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="HtmlLogger.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

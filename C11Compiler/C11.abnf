@@ -75,19 +75,23 @@ init-declarator-list -> init-declarator | init-declarator-list "," init-declarat
 init-declarator -> declarator | declarator "=" initializer
 
 storage-class-specifier -> "typedef" | "extern" | "static" | "_Thread_local" | "auto" | "register"
-type-specifier -> "void" | "char" | "short" | "int" | "long" | "float" | "double" | "signed" | "unsigned" | "_Bool" | "_Complex" | atomic-type-specifier | struct-or-union-specifier | enum-specifier | typedef-name
-struct-or-union-specifier -> struct-or-union Identifier "{" struct-declaration-list "}" | struct-or-union "{" struct-declaration-list "}" | struct-or-union Identifier
+type-specifier -> "void" | "char" | "short"
+  | "int" | "long" | "float" | "double"
+  | "signed" | "unsigned" | "_Bool"
+  | "_Complex" | atomic-type-specifier
+  | struct-or-union-specifier | enum-specifier | typedef-name
+struct-or-union-specifier -> struct-or-union Identifier "{" struct-declaration-list "}" 
+  | struct-or-union "{" struct-declaration-list "}"
+  | struct-or-union Identifier
 struct-or-union -> "struct" | "union"
 struct-declaration-list -> struct-declaration [struct-declaration-list]
 struct-declaration -> specifier-qualifier-list [struct-declarator-list] ";" | static_assert-declaration
 specifier-qualifier-list -> type-specifier [specifier-qualifier-list] | type-qualifier [specifier-qualifier-list]
-struct-declarator-list -> struct-declarator [struct-declarator-list_rr]
-struct-declarator-list_rr -> "," struct-declarator [struct-declarator-list_rr]
+struct-declarator-list -> struct-declarator | struct-declarator-list "," struct-declarator
 struct-declarator -> declarator | [declarator] ":" constant-expression
 
 enum-specifier -> "enum" [Identifier] "{" enumerator-list  [","] "}" | "enum" Identifier
-enumerator-list -> enumerator [enumerator-list_rr]
-enumerator-list_rr -> "," enumerator [enumerator-list_rr]
+enumerator-list -> enumerator | enumerator-list "," enumerator
 enumerator -> enumeration-constant ["=" constant-expression]
 enumeration-constant -> Identifier
 
@@ -99,58 +103,44 @@ function-specifier -> "inline" | "_Noreturn"
 alignment-specifier -> "_Alignas" "(" type-name ")" | "_Alignas" "(" constant-expression ")"
 
 declarator -> [pointer] direct-declarator
-;left-recursive here
-direct-declarator -> Identifier direct-declarator_rr
-	| "(" declarator ")" direct-declarator_rr
-direct-declarator_rr -> "[" [type-qualifier-list] [assignment-expression] "]" direct-declarator_rr
-	| "[" "static" [type-qualifier-list] assignment-expression "]" direct-declarator_rr
-	| "[" type-qualifier-list "static" assignment-expression "]" direct-declarator_rr
-	| "[" [type-qualifier-list] "*" "]" direct-declarator_rr
-	| "(" parameter-type-list ")" direct-declarator_rr
-	| "(" [identifier-list] ")" direct-declarator_rr
-	| ()
+direct-declarator -> Identifier
+  | "(" declarator ")"
+  | direct-declarator "[" [type-qualifier-list] [assignment-expression] "]"
+  | direct-declarator "[" "static" [type-qualifier-list] assignment-expression "]"
+  | direct-declarator "[" type-qualifier-list "static" assignment-expression "]"
+  | direct-declarator "[" [type-qualifier-list] "*" "]"
+  | direct-declarator "(" parameter-type-list ")"
+  | direct-declarator "(" [identifier-list] ")"
 pointer -> "*" [type-qualifier-list] [pointer]
 type-qualifier-list -> type-qualifier [type-qualifier-list]
 parameter-type-list -> parameter-list | parameter-list "," "..."
-parameter-list -> parameter-declaration [parameter-list_rr]
-parameter-list_rr -> "," parameter-declaration [parameter-list_rr]
+parameter-list -> parameter-declaration | parameter-list "," parameter-declaration
 parameter-declaration -> declaration-specifiers declarator | declaration-specifiers [abstract-declarator]
-identifier-list -> Identifier [identifier-list_rr]
-identifier-list_rr -> "," Identifier [identifier-list_rr]
+identifier-list -> Identifier | identifier-list "," Identifier
 
 type-name -> specifier-qualifier-list [abstract-declarator]
 ; support multiple lines for alternativess
 abstract-declarator -> pointer | pointer direct-abstract-declarator | direct-abstract-declarator
-;0 and 2 conflict
-direct-abstract-declarator -> "(" abstract-declarator ")" direct-abstract-declarator_rr 
-  | "[" [type-qualifier-list] [assignment-expression] "]" direct-abstract-declarator_rr ; same
-  | "[" "static" [type-qualifier-list] assignment-expression "]" direct-abstract-declarator_rr 
-  | "[" type-qualifier-list "static" assignment-expression "]" direct-abstract-declarator_rr ; same
-  | "[" "*" "]" direct-abstract-declarator_rr 
-  | "(" [parameter-type-list] ")" direct-abstract-declarator_rr
-
-;direct-abstract-declarator -> "(" abstract-declarator ")" | [direct-abstract-declarator] "[" [type-qualifier-list] [assignment-expression] "]" | [direct-abstract-declarator] "[" "static" [type-qualifier-list] assignment-expression "]" | [direct-abstract-declarator] "[" type-qualifier-list "static" assignment-expression "]" | [direct-abstract-declarator] "[" "*" "]" | [direct-abstract-declarator] "(" [parameter-type-list] ")"
-
-direct-abstract-declarator_rr -> "[" [type-qualifier-list] [assignment-expression] "]" direct-abstract-declarator_rr 
-  | "[" "static" [type-qualifier-list] assignment-expression "]" direct-abstract-declarator_rr 
-  | "[" type-qualifier-list "static" assignment-expression "]" direct-abstract-declarator_rr 
-  | "[" "*" "]" direct-abstract-declarator_rr 
-  | "(" [parameter-type-list] ")" direct-abstract-declarator_rr 
-  | ()
+direct-abstract-declarator -> "(" abstract-declarator ")"
+  | "[" [type-qualifier-list] [assignment-expression] "]"
+  | "[" "static" [type-qualifier-list] assignment-expression "]"
+  | "[" type-qualifier-list "static" assignment-expression "]"
+  | "[" "*" "]" 
+  | "(" [parameter-type-list] ")"
+  | direct-abstract-declarator "[" [type-qualifier-list] [assignment-expression] "]"
+  | direct-abstract-declarator "[" "static" [type-qualifier-list] assignment-expression "]"
+  | direct-abstract-declarator "[" type-qualifier-list "static" assignment-expression "]"
+  | direct-abstract-declarator "[" "*" "]"
+  | direct-abstract-declarator "(" [parameter-type-list] ")"
 
 typedef-name -> Identifier
 
 initializer -> assignment-expression | "{" initializer-list [","] "}"
-initializer-list -> [designation] initializer [initializer-list_rr]
-initializer-list_rr -> "," [designation] initializer [initializer-list_rr]
+initializer-list -> [designation] initializer | initializer-list "," [designation] initializer
 designation -> designator-list "="
 designator-list -> designator [designator-list]
 designator -> "[" constant-expression "]" | "." Identifier
 
 static_assert-declaration -> "_Static_assert" "(" constant-expression "," StringLiteral ")" ";"
 
-expression -> assignment-expression ["," expression]
-constant-expression -> conditional-expression
-conditional-expression -> logical-or-expression ["?" expression ":" conditional-expression]
-;assignment-expression -> conditional-expression | unary-expression assignment-operator assignment-expression
-;assignment-operator -> "=" | "*=" | "/=" | "%=" | "+=" | "-=" | "<<=" | ">>=" | "&=" | "^=" | "|="
+;expression constant-expression  assignment-expression

@@ -18,13 +18,31 @@
     <ClCompile Include="Main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="C11LexerTest.ixx">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="C11ParserTest.ixx">
+    <ClCompile Include="LexerTest.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="C11-spec.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ExpressionParserTest.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\C11Compiler\ExpressionParser.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\C11Compiler\Context.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\C11Compiler\SymbolTable.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\C11Compiler\ConflictResolver.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\C11Compiler\Ast.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ParserTest.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -9,6 +9,7 @@ import :GrammarProcess;
 import :InputStream;
 import :GrammarUnitLoader;
 import :Terminal;
+import :HtmlLogger;
 
 using std::vector;
 using std::map;
@@ -22,6 +23,7 @@ using std::variant;
 using std::function;
 using std::optional;
 using std::unexpected;
+using std::expected;
 using std::bool_constant;
 using std::tuple;
 using std::move;
@@ -29,6 +31,8 @@ using std::format;
 using std::println;
 using std::ranges::views::reverse;
 using std::ranges::views::drop;
+using std::ranges::views::transform;
+using std::ranges::to;
 
 template <typename T, typename Tok, typename Result>
 concept INodeCallback = requires (T callback, SyntaxTreeNode<Tok, Result>* node)
@@ -56,8 +60,8 @@ struct Void
 export template <typename T>
 struct OptionalArg : std::true_type
 {
-    T Arg;
-    constexpr OptionalArg(T arg) : Arg(move(arg))
+    T Value;
+    constexpr OptionalArg(T value) : Value(move(value))
     {
     }
 };
@@ -70,34 +74,63 @@ struct OptionalArg<Void> : std::false_type
     }
 };
 
-template <typename Result>
-struct ParseFunc
+template <typename Tok, typename Result>
+auto TryRemoveChildrenCausedByLeftFactor(SyntaxTreeNode<Tok, Result>* node) -> void
 {
-    template <template <typename> class Stream, IToken Tok>
-    auto operator() (String nontermin, Stream<Tok> stream) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
+    vector<String> symbols;
+    vector<variant<Tok, SyntaxTreeNode<Tok, Result>>> children;
+    auto expanded = false;
+    for (size_t i = 0; i < node->ChildSymbols.size(); ++i)
     {
-        throw;
+        if (node->ChildSymbols[i].StartWith(node->Name) and node->ChildSymbols[i].EndWith(leftFactorSuffix))
+        {
+            expanded = true;
+            SyntaxTreeNode<Tok, Result>& n = std::get<1>(node->Children[i]);
+            symbols.append_range(move(n.ChildSymbols));
+            move(n.Children.begin(), n.Children.end(), std::back_inserter(children));
+            //children.append_range(move(n.Children)); why this trigger copy constructor which affect performance
+        }
+        else
+        {
+            symbols.push_back(move(node->ChildSymbols[i]));
+            children.push_back(move(node->Children[i]));
+        }
     }
-};
+    node->ChildSymbols = move(symbols);
+    node->Children = move(children);
+
+    if (expanded)
+    {
+        return TryRemoveChildrenCausedByLeftFactor(node);
+    }
+}
 
 class LLParser
 {
 private:
     String const startSymbol;
-    SimpleGrammars const grammars;
-    map<pair<String, int>, int> const parseTable;
+    ConvertedGrammars const convertedGrammars;
+    map<pair<String, int>, vector<int>> const parseTable;
     map<string_view, int> const terminal2IntTokenType;
 
+	mutable HtmlLogger logger;
 public:
     // how to distinguish nonterminal and terminal(which has enum type from Lexer) in grammar
     // do we need convert nonterminal and terminal to int to make program litter faster
     /// <summary>
     /// attention: make string_view in terminal2IntTokenType is alive when parse
     /// </summary>
-    static auto ConstructFrom(String startSymbol, SimpleGrammars grammars, map<string_view, int> terminal2IntTokenType, IConflictResolvable auto conflictResolvable) -> LLParser
+	template <typename Arg0 = Void, typename Arg1 = Void>
+    static auto ConstructFrom(String startSymbol, SimpleGrammars grammars, map<string_view, int> terminal2IntTokenType, Arg0&& conflictResolver = Void{}, Arg1&& externalParser = Void{}) -> LLParser
     {
+        auto optionalConflictResolver = OptionalArg(std::forward<Arg0>(conflictResolver));
+        auto optionalExternalParser = OptionalArg(std::forward<Arg1>(externalParser));
+
+        // First remove left recursion, then left-factor (so newly created ' rules are also factored)
+        auto convertedGrammars = RemoveIndirectLeftRecur(move(grammars));
+
         vector<SimpleGrammar> newAddGrammars;
-        for (auto& g : grammars)
+        for (auto& g : convertedGrammars.Grammars)
         {
             auto [newG, addGrammars] = LeftFactor(move(g));
             g.second = move(newG.second);
@@ -106,72 +139,92 @@ public:
                 newAddGrammars.append_range(move(addGrammars.value()));
             }
         }
-        grammars.insert_range(move(newAddGrammars));
-        //std::println("after left refactor: {}", grammars);
-        map<pair<String, int>, int> parseTable;
-        //grammars = RemoveIndirectLeftRecur(startSymbol, move(grammars));
-		//auto first2Sets = First2Set(grammars);
-        auto grammarSet = Starts(startSymbol, grammars);
+        convertedGrammars.Grammars.insert_range(move(newAddGrammars));
+
+        map<pair<String, int>, vector<int>> parseTable;
+        
+        map<String, set<String>> externalFirstSet;
+        if constexpr (optionalExternalParser)
+        {
+            externalFirstSet = optionalExternalParser.Value.FirstSet();
+        }
+        auto grammarSet = Starts(startSymbol, convertedGrammars.Grammars, move(externalFirstSet));
         auto const& grammarsWithStartSet = grammarSet.GrammarsWithStartSet;
 
         // handle e-production, focus <- pop() TODO
         for (auto const& g : grammarsWithStartSet)
         {
             auto const& nontermin = g.first;
-            auto const& rulesWithstart = g.second;
-            
-            for (auto j = 0; auto const& r : rulesWithstart)
+            auto const& rulesWithStart = g.second;
+
+            for (auto j = 0; auto const& r : rulesWithStart)
             {
-                for (String const& termin : r.second)
+                for (Terminal const& termin : r.second)
                 {
-                    if (not terminal2IntTokenType.contains(termin))
+                    if (not terminal2IntTokenType.contains(static_cast<String>(termin)))
                     {
                         throw logic_error(format("terminal2IntTokenType not contain termin item: {}", termin));
                     }
-                    auto key = pair{ nontermin, static_cast<int>(terminal2IntTokenType.at(termin)) };
-                    if (parseTable.contains(key) and not conflictResolvable.Resolvable(nontermin, termin))
+                    auto tokType = terminal2IntTokenType.at(static_cast<String>(termin));
+                    auto key = pair{ nontermin, tokType };
+                    if (parseTable.contains(key) and not parseTable.at(key).empty())
                     {
-                        auto otherJ = parseTable.at(key);
+						auto& otherJs = parseTable.at(key);
+                        otherJs.push_back(j);
 
-                        //auto point = DiffConflictTerminal(rulesWithstart.at(j).second.At(termin), rulesWithstart.at(otherJ).second.At(termin), grammars, grammarSet.FirstSets, grammarSet.FollowSets);
-                        //println("different at next symbol: {} and {}", point.Left.GetSymbol(grammars), point.Right.GetSymbol(grammars));
-                        //auto first2Set = First2SetsOf(nontermin, termin, grammarsWithStartSet);
-						// result not correct
-                        throw logic_error(format("grammar isn't LL(1), {{{}, {}}} point to multiple grammar: {}, {}", nontermin, termin, otherJ, j));
+                        // 0: termin.Sources(), count x, 1: termin.Sources(), count y, check x*y possiblities as below
+                       /* if (resolvedConflicts.contains({ nontermin, otherJ, j }))
+                        {
+                            continue;
+						}*/
+                        if constexpr (optionalConflictResolver)
+                        {
+                            if (optionalConflictResolver.Value.Resolvable(nontermin, tokType))
+                            {
+                                /*resolvedConflicts.insert({ nontermin, otherJ, j });
+                                resolvedConflicts.insert({ nontermin, j, otherJ });*/
+                                continue;
+                            }
+							/*auto const& otherTermin = rulesWithStart.at(otherJ).second.At(termin);
+                            // TODO below check condition is not complete, rethink the conflict rules
+                            if (termin.Sources() == otherTermin.Sources())
+                            {
+                                auto const& resolvedConflicts = optionalConflictResolver.Value.ResolvedConflicts();
+                                for (auto const& s : termin.Sources())
+                                {
+                                    if (not resolvedConflicts.contains({ s.Nontermin, static_cast<std::remove_reference_t<decltype(resolvedConflicts)>::key_type::second_type>(tokType)}))
+                                    {
+                                        std::println("high level {} rule conflict not resolved: {} and {}", nontermin, termin, otherTermin);
+                                        goto WarnConflict;
+                                    }
+                                }
+                                std::println("high level {} rule conflict resolved: {} and {}", nontermin, termin, otherTermin);
+                                continue;
+                            }*/
+                        }
+                    //WarnConflict:
+                        auto rulesPrint = otherJs
+                            | transform([&rulesWithStart](int j) -> String { return String(format("\n  {}", rulesWithStart[j].first)); })
+							| to<vector>();
+						throw logic_error(format("grammar isn't LL(1), {{{}, {}}} point to multiple grammar: {}", nontermin, static_cast<String>(termin), rulesPrint));
                     }
                     else
                     {
                         //println("when come {}, move to {} -> {}", key, grammars[i].first, grammars[i].second[j]);
-                        parseTable.insert({ move(key), j });
+                        parseTable[move(key)].push_back(j);
                     }
                 }
-				++j;
+                ++j;
             }
         }
 
         //std::println("parse table: {}", parseTable);
-        return LLParser(move(startSymbol), move(grammars), move(parseTable), move(terminal2IntTokenType));
+        auto logger = HtmlLogger::NewFromCurrentTime();
+        return LLParser(move(startSymbol), move(convertedGrammars), move(parseTable), move(terminal2IntTokenType), move(logger));
     }
 
-    static auto ConstructFrom(String startSymbol, SimpleGrammars grammars, map<string_view, int> terminal2IntTokenType) -> LLParser
-    {
-        struct NotHandleConflict
-        {
-            auto Resolvable(String, String) -> bool
-            {
-                return false;
-            }
-        };
-        return ConstructFrom(move(startSymbol), move(grammars), move(terminal2IntTokenType), NotHandleConflict{});
-    }
-
-    static auto ConstructFrom(String startSymbol, ParseInfo parseInfo) -> LLParser
-    {
-        throw;
-    }
-
-    LLParser(String startSymbol, SimpleGrammars grammars, map<pair<String, int>, int> parseTable, map<string_view, int> terminal2IntTokenType)
-		: startSymbol(move(startSymbol)), grammars(move(grammars)), parseTable(move(parseTable)), terminal2IntTokenType(move(terminal2IntTokenType))
+    LLParser(String startSymbol, ConvertedGrammars grammars, map<pair<String, int>, vector<int>> parseTable, map<string_view, int> terminal2IntTokenType, HtmlLogger logger)
+		: startSymbol(move(startSymbol)), convertedGrammars(move(grammars)), parseTable(move(parseTable)), terminal2IntTokenType(move(terminal2IntTokenType)), logger(move(logger))
     { }
 
     LLParser(LLParser const&) = delete;
@@ -179,17 +232,19 @@ public:
     LLParser(LLParser&&) = default;
     auto operator= (LLParser&& that) -> LLParser& = default;
 
-    template <typename Result, template <typename> class ActualStream, IToken Tok, typename Callback, typename Arg = Void>
+    template <typename Result, template <typename> class ActualStream, IToken Tok, typename Callback, typename Arg0 = Void, typename Arg1 = Void>
 		requires Stream<ActualStream, Tok>
             and INodeCallback<Callback, Tok, Result>
-	        and (std::is_same_v<Arg, Void> or ICustomParser<Arg, ActualStream, Tok, Result, ParseFunc<Result>, Callback>)
-    auto Parse(ActualStream<Tok> stream, Callback callback, set<int> ignorableTokenTypes = {},
-        OptionalArg<Arg> optionalArg = Void{}) const
+	        and (std::is_same_v<Arg0, Void> or ICustomParser<Arg0, ActualStream, Tok, Result>)
+	        and (std::is_same_v<Arg1, Void> or IConflictResolve<Arg1, ActualStream, Tok, Result>)
+    auto Parse(ActualStream<Tok> stream, Callback callback, set<int> const& ignorableTokenTypes = {}, Arg1&& conflictResolver = Void{},
+        Arg0&& externalParser = Void{}) const
         -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
-        using std::ranges::to;
         using std::ranges::views::reverse;
         using std::unexpected;
+
+        logger.LogCode(stream);
 
         /// <summary>
         /// Only work for terminal symbol or eof
@@ -202,7 +257,7 @@ public:
             }
             return symbol.Value == token.Value;
         };
-        auto IsTerminal = [this](Symbol const& t) { return not grammars.contains(t.Value); };
+        auto IsTerminal = [this](Symbol const& t) { return terminal2IntTokenType.contains(t.Value); };
         stack<Symbol> symbolStack;
         symbolStack.push(String(eof));
         symbolStack.push(startSymbol);
@@ -210,18 +265,37 @@ public:
         SyntaxTreeNode<Tok, Result> root{ "root", { startSymbol } }; // TODO why "root" is shown as "???" in VS debugger
         stack<SyntaxTreeNode<Tok, Result>*> workingNodes;
         workingNodes.push(&root);
-        auto PopAllFilledNodes = [&workingNodes, &callback]()
+        auto PopAllFilledNodes = [&workingNodes, &callback, &stream, this]()
         {
             while (not workingNodes.empty())
             {   
                 if (auto working = workingNodes.top(); working->Children.size() == working->ChildSymbols.size())
                 {
+                    if (convertedGrammars.ConvertHistory.contains(working->Name))
+                    {
+                        auto const& history = convertedGrammars.ConvertHistory.at(working->Name);
+                        if (not history.empty())
+                        {
+                            for (auto i = 0; auto const& rule : convertedGrammars.Grammars.at(working->Name))
+                            {
+                                if (rule == working->ChildSymbols)
+                                {
+                                    if (history.contains(i))
+                                    {
+								        *working = history.at(i).Undo(move(*working));
+                                    }
+								    break;
+                                }
+                                ++i;
+                            }
+                        }
+					}
                     TryRemoveChildrenCausedByLeftFactor(working);
                     if (not (working->Name.EndWith(leftFactorSuffix) or working->Name.EndWith(rightRecurSuffix)))
                     {
                         callback(working);
                     }
-
+                    logger.Log(Level::Out, "parse done for node: {}, current stream position: {}", working->Name, stream.CurrentPosition());
                     workingNodes.pop();
                 }
                 else
@@ -230,6 +304,36 @@ public:
                 }
             }
         };
+        auto DoWhenGotChild = [&]<bool IsFulfilledChild, bool ConsumedWord>(variant<Tok, SyntaxTreeNode<Tok, Result>> child, bool_constant<IsFulfilledChild>, bool_constant<ConsumedWord>)
+        {
+			symbolStack.pop();
+            workingNodes.top()->Children.push_back(move(child));
+            if constexpr (not IsFulfilledChild)
+            {
+                // if not fulfilled, we should push it workingNodes to continue working on this node
+                workingNodes.push(&std::get<SyntaxTreeNode<Tok, Result>>(workingNodes.top()->Children.back()));
+            }
+            PopAllFilledNodes();
+            if constexpr (ConsumedWord) // if consumed word in parse this child's progress, we should update it
+            {
+                stream.MoveNext();
+                word = stream.Current();
+                logger.Log(Level::Here, "stream move forward, got: {}", word);
+            }
+        };
+        auto ExpandRule = [&symbolStack, &DoWhenGotChild, this](Symbol const& focus, Tok const& tok, int expandRuleIndex, string_view reason)
+        {
+            auto const& rule = convertedGrammars.Grammars.at(focus.Value).at(expandRuleIndex);
+            logger.Log(Level::In, "{} expand ({}, {}) with rule{}: {}", reason, focus.Value, tok.Value, expandRuleIndex, rule);
+            DoWhenGotChild(SyntaxTreeNode<Tok, Result>{ focus.Value, rule }, bool_constant<false>{}, bool_constant<false>{});
+            if (not rule.empty())
+            {
+                for (auto const& b : reverse(rule))
+                {
+                    symbolStack.push(b);
+                }
+            }
+		};
         while (true)
         {
             auto const& focus = symbolStack.top();
@@ -242,98 +346,82 @@ public:
             {
                 if (MatchTerminal(focus, word))
                 {
-                    symbolStack.pop();
-                    // combine focus info and word info into SyntaxTreeNode
-                    // validate the token here with the info in SyntaxTreeNode
-                    workingNodes.top()->Children.push_back(word);
-                    PopAllFilledNodes();
-                    stream.MoveNext();
-                    word = stream.Current();
+					DoWhenGotChild(move(word), bool_constant<true>{}, bool_constant<true>{});
                 }
                 else if (ignorableTokenTypes.contains(static_cast<int>(word.Type)))
                 {
                     stream.MoveNext();
                     word = stream.Current();
+                    logger.Log(Level::Here, "ignore a token, stream move forward, got: {}", word);
                 }
                 else
                 {
+					logger.Log(Level::Out, "cannot found token for terminal symbol({}) when parse, stream position at {}", focus.Value, stream.CurrentPosition());
                     return unexpected(ParseFailResult{ .Message = format("cannot found token for terminal symbol({}) when parse", focus.Value) });
                 }
             }
             else
             {
-                if (auto dest = pair{ focus.Value, static_cast<int>(word.Type) }; parseTable.contains(dest))
-                {
-                    // add log here
-                    auto j = parseTable.at(dest);
-                    symbolStack.pop();
-                    auto const& rule = grammars.at(focus.Value).at(j);
-                    //std::println("focus: {}, add rule: {}->{}", focus.Value, grammars[i].first, rule);
-                    workingNodes.top()->Children.push_back(SyntaxTreeNode<Tok, Result>{ focus.Value, rule, });
-                    workingNodes.push(&std::get<SyntaxTreeNode<Tok, Result>>(workingNodes.top()->Children.back()));
-                    PopAllFilledNodes();
-
-                    if (not rule.empty())
-                    {
-                        for (auto const& b : reverse(rule))
-                        {
-                            symbolStack.push(b);
-                        }
-                    }
-                }
-                else if (ignorableTokenTypes.contains(static_cast<int>(word.Type)))
-                {
-                    stream.MoveNext();
-                    word = stream.Current();
-                }
-                else if constexpr (optionalArg)
-                {
-                    ParseFunc<Result> pf;
-                    auto r = optionalArg.Arg.Parse<Result>(focus.Value, String(word.Value), stream, pf, callback);
-                    if (not r.has_value())
-                    {
-                        return r;
-                    }
-                    symbolStack.pop();
-                    workingNodes.top()->Children.push_back(move(r.value())); // TODO the r must be fullfilled, add check here
-                    PopAllFilledNodes();
+				if (auto dest = pair{ focus.Value, static_cast<int>(word.Type) }; parseTable.contains(dest))
+				{
+					if (parseTable.at(dest).size() == 1)
+					{
+						auto expandRuleIndex = parseTable.at(dest).front();
+						ExpandRule(focus, word, expandRuleIndex, "parse table");
+                        continue;
+					}
+					else if constexpr (auto optionalArg = OptionalArg(std::forward<Arg1>(conflictResolver)); optionalArg)
+						if (optionalArg.Value.Resolvable(focus.Value, static_cast<int>(word.Type)))
+						{
+							auto streamPos = stream.CurrentPosition();
+							auto options = parseTable.at(dest)
+								| transform([&](int j) -> SimpleRightSide { return convertedGrammars.Grammars.at(focus.Value).at(j); })
+								| to<vector>();
+							auto selectResult = optionalArg.Value.template Resolve<ActualStream, Tok>(workingNodes, focus.Value, word.Type, options, stream);
+							if (selectResult.has_value())
+							{
+								stream.RollbackTo(streamPos);
+								ExpandRule(focus, word, parseTable.at(dest)[selectResult.value()], format("conflict resolver resolve {}", options));
+                                continue;
+							}
+							else
+							{
+                                logger.Log(Level::Out, "resolve conflict failed when parse (nonterminal symbol: {}, word: {}) in options {}: {}", focus.Value, word, options, selectResult.error().Message);
+								return unexpected(ParseFailResult{ .Message = format("resolve conflict failed when parse (nonterminal symbol: {}, word: {})", focus.Value, word) });
+							}
+						}
 				}
-                else
-                {
-                    return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, word: {}) when parse", focus.Value, word) });
-                }
-            }
-        }
-    }
-private:
-    template <typename Tok, typename Result>
-    static auto TryRemoveChildrenCausedByLeftFactor(SyntaxTreeNode<Tok, Result>* node) -> void
-    {
-        vector<String> symbols;
-        vector<variant<Tok, SyntaxTreeNode<Tok, Result>>> children;
-        auto expanded = false;
-        for (size_t i = 0; i < node->ChildSymbols.size(); ++i)
-        {
-            if (node->ChildSymbols[i].StartWith(node->Name) and node->ChildSymbols[i].EndWith(leftFactorSuffix))
-            {
-                expanded = true;
-                SyntaxTreeNode<Tok, Result>& n = std::get<1>(node->Children[i]);
-                symbols.append_range(move(n.ChildSymbols));
-                move(n.Children.begin(), n.Children.end(), std::back_inserter(children));
-                //children.append_range(move(n.Children)); why this trigger copy constructor which affect performance
-            }
-            else
-            {
-                symbols.push_back(move(node->ChildSymbols[i]));
-                children.push_back(move(node->Children[i]));
-            }
-        }
-        node->ChildSymbols = move(symbols);
-        node->Children = move(children);
+				else if constexpr (auto optionalArg = OptionalArg(std::forward<Arg0>(externalParser)); optionalArg)
+				{
+					if (optionalArg.Value.Parsable(focus.Value))
+					{
+                        // let the stream position on the last consumed token
+						auto r = optionalArg.Value.Parse<Result>(focus.Value, stream, logger);
+						if (not r.has_value())
+						{
+							logger.Log(Level::Out, "use external parser parse ({}, {}) failed: {}", focus.Value, word, r.error().Message);
+							return unexpected(ParseFailResult{ .Message = format("use external parser parse ({}, {}) failed: {}", focus.Value, word, r.error().Message) });
+						}
+                        if (r.value().ChildSymbols.size() != r.value().Children.size())
+                        {
+                            // warning
+                        }
+                        logger.Log(Level::Here, "use external parser parse ({}, {}) done", focus.Value, word);
+						DoWhenGotChild(move(r.value()), bool_constant<true>{}, bool_constant<true>{});
+						continue;
+					}
+				}
+				if (ignorableTokenTypes.contains(static_cast<int>(word.Type)))
+				{
+					stream.MoveNext();
+					word = stream.Current();
+                    logger.Log(Level::Here, "ignore a token, stream move forward, got: {}", word);
+					continue;
+				}
 
-        if (expanded)
-        {
-            return TryRemoveChildrenCausedByLeftFactor(node);
+				logger.Log(Level::Out, "cannot expand (nonterminal symbol: {}, word: {}) when parse", focus.Value, word);
+				return unexpected(ParseFailResult{ .Message = format("cannot expand (nonterminal symbol: {}, word: {}) when parse", focus.Value, word) });
+            }
         }
     }
 };
@@ -374,8 +462,8 @@ public:
         for (auto const& g : grammarsWithStartSet)
         {
             auto const& nontermin = g.first;
-            auto const& rulesWithstart = g.second;
-            for (auto j = 0; auto const& r : rulesWithstart)
+            auto const& rulesWithStart = g.second;
+            for (auto j = 0; auto const& r : rulesWithStart)
             {
                 for (String const& termin : r.second)
                 {
@@ -742,37 +830,6 @@ private:
             Assert(x.Nodes.size() == 1, "nodes size should be only 1");
             return move(x.Nodes.back());
         });
-    }
-
-    template <typename Tok, typename Result>
-    static auto TryRemoveChildrenCausedByLeftFactor(SyntaxTreeNode<Tok, Result>* node) -> void
-    {
-        vector<String> symbols;
-        vector<variant<Tok, SyntaxTreeNode<Tok, Result>>> children;
-        auto expanded = false;
-        for (size_t i = 0; i < node->ChildSymbols.size(); ++i)
-        {
-            if (node->ChildSymbols[i].StartWith(node->Name) and node->ChildSymbols[i].EndWith(leftFactorSuffix))
-            {
-                expanded = true;
-                SyntaxTreeNode<Tok, Result>& n = std::get<1>(node->Children[i]);
-                symbols.append_range(move(n.ChildSymbols));
-                move(n.Children.begin(), n.Children.end(), std::back_inserter(children));
-                //children.append_range(move(n.Children)); why this trigger copy constructor which affect performance
-            }
-            else
-            {
-                symbols.push_back(move(node->ChildSymbols[i]));
-                children.push_back(move(node->Children[i]));
-            }
-        }
-        node->ChildSymbols = move(symbols);
-        node->Children = move(children);
-
-        if (expanded)
-        {
-            return TryRemoveChildrenCausedByLeftFactor(node);
-        }
     }
 };
 

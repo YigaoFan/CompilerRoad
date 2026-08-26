@@ -66,9 +66,19 @@ struct VectorStream
     vector<T> Tokens;
     size_t Index = 0;
 
-    auto MoveNext() -> void
+    auto MoveNext() -> bool
     {
+        if (Tokens.empty())
+        {
+            return false;
+		}
+
+        if (Index == Tokens.size() - 1)
+        {
+            return false;
+        }
         ++Index;
+        return true;
     }
 
     auto Current() -> T
@@ -97,15 +107,16 @@ struct VectorStream
 
 export
 {
-    template <typename T, typename Item>
-    concept Stream = requires (T t, size_t i)
+    template <template <typename> class Container, typename Item>
+    concept Stream = requires (Container<Item> t, size_t i)
     {
-        { t.MoveNext() };
+        { t.MoveNext() } ->std::same_as<bool>;
         { t.Current() } -> std::same_as<Item>;
         { t.Rollback() } -> std::same_as<void>;
         { t.RollbackTo(i) } -> std::same_as<void>;
         { t.CurrentPosition() } -> std::same_as<size_t>;
     };
+    
     template <typename T>
     struct VectorStream;
 }

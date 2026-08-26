@@ -19,8 +19,8 @@ int main()
 
 	String focus = "declaration";
 	auto resolver = C11ConflictResolver();
-	auto p = LLParser::ConstructFrom(focus, grammars, terminal2IntTokenType, resolver);
 	ExpressionParser expParser;
+	auto p = LLParser::ConstructFrom(focus, grammars, terminal2IntTokenType, resolver, expParser);
 	p.Parse<Context>(VectorStream{ .Tokens = move(toks) }, [](auto n) { /*std::println("encounter {}", n->Name);*/ }, {}, resolver, expParser);
 	return 0;
 }

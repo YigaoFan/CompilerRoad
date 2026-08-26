@@ -3,6 +3,7 @@ export module Parser:ParserBase;
 import std;
 import Base;
 import :InputStream;
+import :HtmlLogger;
 
 using std::string;
 using std::string_view;
@@ -277,19 +278,19 @@ export
     };
 
     template <typename T, template <typename> class ActualStream, typename Tok, typename Result>
-    concept IConflictResolve = requires (T t, stack<SyntaxTreeNode<Tok, Result>*> workingNodes, String nontermin, Tok tok, ActualStream<Tok>&stream)
+    concept IConflictResolve = requires (T t, stack<SyntaxTreeNode<Tok, Result>*> workingNodes, String nontermin, Tok tok, vector<SimpleRightSide> const& options, ActualStream<Tok>&stream)
     {
-        { t.template Resolve<Result, ActualStream, Tok>(workingNodes, nontermin, tok.Type, stream) } -> std::same_as<expected<int, ParseFailResult>>;
+        { t.template Resolve<ActualStream, Tok>(workingNodes, nontermin, tok.Type, options, stream) } -> std::same_as<expected<int, ParseFailResult>>;
     };
 
     template <typename T, template <typename> class ActualStream, typename Tok, typename Result>
-    concept ICustomParser = requires (T t, String nontermin, String termin, ActualStream<Tok> stream)
+    concept ICustomParser = requires (T t, String nontermin, String termin, ActualStream<Tok> stream, HtmlLogger& logger)
     {
 		requires Stream<ActualStream, Tok>;
 
         //requires std::invocable<decltype(parse), String, decltype(stream)>; // maybe cannot deduce the Stream concept and Tok in concept type here, should use other way
 	    { t.Parsable(nontermin) } -> std::same_as<bool>;
-        { t.template Parse<Result>(nontermin, stream) } -> std::same_as<ParserResult<SyntaxTreeNode<Tok, Result>>>; // error here, also cannot deduce the type arg for Parse
+        { t.template Parse<Result>(nontermin, stream, logger) } -> std::same_as<ParserResult<SyntaxTreeNode<Tok, Result>>>; // error here, also cannot deduce the type arg for Parse
     };
 
     template <size_t N1>

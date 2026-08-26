@@ -143,14 +143,17 @@
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Context.ixx" />
+    <ClCompile Include="ExpressionParser.ixx" />
+    <ClCompile Include="SyntaxNodeVisitor.ixx" />
     <ClCompile Include="C11-spec.ixx" />
+    <ClCompile Include="SymbolTable.ixx" />
     <CopyFileToFolders Include="C11GrammarUnit.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <FileType>CppCode</FileType>
     </CopyFileToFolders>
     <ClCompile Include="Ast.ixx" />
     <ClCompile Include="ConflictResolver.ixx" />
-    <ClCompile Include="CustomParser.ixx" />
     <ClCompile Include="Main.ixx" />
   </ItemGroup>
   <ItemGroup>
