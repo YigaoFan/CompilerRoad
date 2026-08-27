@@ -2075,3 +2075,452 @@ TEST_CASE("ExpressionParser - constant-expression: alignof int without parens", 
     CHECK(ChildTokenValue(*result, 1) == "int");
     CHECK(stream.Index == 1);
 }
+
+// ========== Function call expressions (postfix) ==========
+
+TEST_CASE("ExpressionParser - Postfix: function call with no arguments", "[expression-parser][function-call]")
+{
+    // f() => Punctuator_LeftParen-expression [atom(f), args()]
+    ExpressionParser ep;
+    auto toks = MakeTokens({
+        { .Type = TokType::Identifier, .Value = "f" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+    });
+    auto stream = MakeStream(toks);
+    auto result = ep.Parse<void>("expression", stream);
+    if (!result.has_value())
+    {
+        UNSCOPED_INFO("Parse failed: " << result.error().Message);
+    }
+    REQUIRE(result.has_value());
+    CHECK(result->Name == "Punctuator_LeftParen-expression");
+    CHECK(result->Children.size() == 3); // op token + atom(f) + args
+    CHECK(ChildIsToken(*result, 0));
+    CHECK(ChildTokenType(*result, 0) == TokType::Punctuator_LeftParen);
+    CHECK(ChildIsToken(*result, 1));
+    CHECK(ChildTokenType(*result, 1) == TokType::Identifier);
+    CHECK(ChildTokenValue(*result, 1) == "f");
+    CHECK(ChildIsNode(*result, 2));
+    CHECK(ChildName(*result, 2) == "args");
+    auto const& args = ChildNode(*result, 2);
+    CHECK(args.Children.size() == 0);
+    CHECK(stream.Index == 2);
+}
+
+TEST_CASE("ExpressionParser - Postfix: function call with one argument", "[expression-parser][function-call]")
+{
+    // f(x) => Punctuator_LeftParen-expression [atom(f), args(arg-0: atom(x))]
+    ExpressionParser ep;
+    auto toks = MakeTokens({
+        { .Type = TokType::Identifier, .Value = "f" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::Identifier, .Value = "x" },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+    });
+    auto stream = MakeStream(toks);
+    auto result = ep.Parse<void>("expression", stream);
+    REQUIRE(result.has_value());
+    CHECK(result->Name == "Punctuator_LeftParen-expression");
+    CHECK(ChildIsNode(*result, 2));
+    auto const& args = ChildNode(*result, 2);
+    CHECK(args.Name == "args");
+    CHECK(args.Children.size() == 1); // one arg
+    CHECK(args.ChildSymbols[0] == "arg-0");
+    CHECK(stream.Index == 3);
+}
+
+TEST_CASE("ExpressionParser - Postfix: function call with multiple arguments", "[expression-parser][function-call]")
+{
+    // f(x, y, z) => Punctuator_LeftParen-expression [atom(f), args(arg-0: x, arg-1: y, arg-2: z)]
+    ExpressionParser ep;
+    auto toks = MakeTokens({
+        { .Type = TokType::Identifier, .Value = "f" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::Identifier, .Value = "x" },
+        { .Type = TokType::Punctuator_Comma, .Value = "," },
+        { .Type = TokType::Identifier, .Value = "y" },
+        { .Type = TokType::Punctuator_Comma, .Value = "," },
+        { .Type = TokType::Identifier, .Value = "z" },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+    });
+    auto stream = MakeStream(toks);
+    auto result = ep.Parse<void>("expression", stream);
+    if (!result.has_value())
+    {
+        UNSCOPED_INFO("Parse failed: " << result.error().Message);
+    }
+    REQUIRE(result.has_value());
+    CHECK(result->Name == "Punctuator_LeftParen-expression");
+    CHECK(ChildIsNode(*result, 2));
+    auto const& args = ChildNode(*result, 2);
+    CHECK(args.Name == "args");
+    CHECK(args.Children.size() == 3);
+    CHECK(args.ChildSymbols[0] == "arg-0");
+    CHECK(args.ChildSymbols[1] == "arg-1");
+    CHECK(args.ChildSymbols[2] == "arg-2");
+    CHECK(stream.Index == 7);
+}
+
+TEST_CASE("ExpressionParser - Postfix: function call with assignment expression argument", "[expression-parser][function-call]")
+{
+    // f(x = 1) => Punctuator_LeftParen-expression [atom(f), args(arg-0: Punctuator_Assign-expression)]
+    ExpressionParser ep;
+    auto toks = MakeTokens({
+        { .Type = TokType::Identifier, .Value = "f" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::Identifier, .Value = "x" },
+        { .Type = TokType::Punctuator_Assign, .Value = "=" },
+        { .Type = TokType::IntegerConstant, .Value = "1" },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+    });
+    auto stream = MakeStream(toks);
+    auto result = ep.Parse<void>("expression", stream);
+    REQUIRE(result.has_value());
+    CHECK(result->Name == "Punctuator_LeftParen-expression");
+    CHECK(ChildIsNode(*result, 2));
+    auto const& args = ChildNode(*result, 2);
+    CHECK(args.Name == "args");
+    CHECK(args.Children.size() == 1);
+    CHECK(args.ChildSymbols[0] == "arg-0");
+    // The argument should be an assignment expression
+    auto const& arg0 = get<NodeType>(args.Children[0]);
+    CHECK(arg0.Name == "Punctuator_Assign-expression");
+    CHECK(stream.Index == 5);
+}
+
+TEST_CASE("ExpressionParser - Postfix: function call with complex expression arguments", "[expression-parser][function-call]")
+{
+    // f(a + b, c * d) => Punctuator_LeftParen-expression [atom(f), args(arg-0: Plus-expr, arg-1: Star-expr)]
+    ExpressionParser ep;
+    auto toks = MakeTokens({
+        { .Type = TokType::Identifier, .Value = "f" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::Identifier, .Value = "a" },
+        { .Type = TokType::Punctuator_Plus, .Value = "+" },
+        { .Type = TokType::Identifier, .Value = "b" },
+        { .Type = TokType::Punctuator_Comma, .Value = "," },
+        { .Type = TokType::Identifier, .Value = "c" },
+        { .Type = TokType::Punctuator_Star, .Value = "*" },
+        { .Type = TokType::Identifier, .Value = "d" },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+    });
+    auto stream = MakeStream(toks);
+    auto result = ep.Parse<void>("expression", stream);
+    if (!result.has_value())
+    {
+        UNSCOPED_INFO("Parse failed: " << result.error().Message);
+    }
+    REQUIRE(result.has_value());
+    CHECK(result->Name == "Punctuator_LeftParen-expression");
+    CHECK(ChildIsNode(*result, 2));
+    auto const& args = ChildNode(*result, 2);
+    CHECK(args.Name == "args");
+    CHECK(args.Children.size() == 2);
+    CHECK(args.ChildSymbols[0] == "arg-0");
+    CHECK(args.ChildSymbols[1] == "arg-1");
+    // First argument: a + b
+    auto const& arg0 = get<NodeType>(args.Children[0]);
+    CHECK(arg0.Name == "Punctuator_Plus-expression");
+    // Second argument: c * d
+    auto const& arg1 = get<NodeType>(args.Children[1]);
+    CHECK(arg1.Name == "Punctuator_Star-expression");
+    CHECK(stream.Index == 9);
+}
+
+TEST_CASE("ExpressionParser - Postfix: chained function calls", "[expression-parser][function-call]")
+{
+    // f()() => (f())() => Punctuator_LeftParen-expression [Punctuator_LeftParen-expression [f, args], args]
+    ExpressionParser ep;
+    auto toks = MakeTokens({
+        { .Type = TokType::Identifier, .Value = "f" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+    });
+    auto stream = MakeStream(toks);
+    auto result = ep.Parse<void>("expression", stream);
+    REQUIRE(result.has_value());
+    CHECK(result->Name == "Punctuator_LeftParen-expression");
+    CHECK(ChildIsNode(*result, 1));
+    // inner call: f()
+    auto const& inner = ChildNode(*result, 1);
+    CHECK(inner.Name == "Punctuator_LeftParen-expression");
+    CHECK(ChildTokenType(inner, 1) == TokType::Identifier);
+    CHECK(ChildTokenValue(inner, 1) == "f");
+    CHECK(stream.Index == 4);
+}
+
+TEST_CASE("ExpressionParser - Postfix: function call with nested call as argument", "[expression-parser][function-call]")
+{
+    // f(g(x)) => f( g(x) )
+    ExpressionParser ep;
+    auto toks = MakeTokens({
+        { .Type = TokType::Identifier, .Value = "f" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::Identifier, .Value = "g" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::Identifier, .Value = "x" },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+    });
+    auto stream = MakeStream(toks);
+    auto result = ep.Parse<void>("expression", stream);
+    REQUIRE(result.has_value());
+    CHECK(result->Name == "Punctuator_LeftParen-expression");
+    CHECK(ChildIsNode(*result, 2));
+    auto const& args = ChildNode(*result, 2);
+    CHECK(args.Name == "args");
+    CHECK(args.Children.size() == 1);
+    // The argument should be g(x)
+    auto const& arg0 = get<NodeType>(args.Children[0]);
+    CHECK(arg0.Name == "Punctuator_LeftParen-expression");
+    CHECK(stream.Index == 6);
+}
+
+TEST_CASE("ExpressionParser - Postfix: member access then function call", "[expression-parser][function-call]")
+{
+    // obj.method() => (obj.method)()
+    ExpressionParser ep;
+    auto toks = MakeTokens({
+        { .Type = TokType::Identifier, .Value = "obj" },
+        { .Type = TokType::Punctuator_Dot, .Value = "." },
+        { .Type = TokType::Identifier, .Value = "method" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+    });
+    auto stream = MakeStream(toks);
+    auto result = ep.Parse<void>("expression", stream);
+    REQUIRE(result.has_value());
+    // outer: function call
+    CHECK(result->Name == "Punctuator_LeftParen-expression");
+    CHECK(ChildIsNode(*result, 1));
+    // inner: dot access
+    auto const& inner = ChildNode(*result, 1);
+    CHECK(inner.Name == "Punctuator_Dot-expression");
+    CHECK(stream.Index == 4);
+}
+
+TEST_CASE("ExpressionParser - Postfix: arrow then function call", "[expression-parser][function-call]")
+{
+    // ptr->func() => (ptr->func)()
+    ExpressionParser ep;
+    auto toks = MakeTokens({
+        { .Type = TokType::Identifier, .Value = "ptr" },
+        { .Type = TokType::Punctuator_Arrow, .Value = "->" },
+        { .Type = TokType::Identifier, .Value = "func" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+    });
+    auto stream = MakeStream(toks);
+    auto result = ep.Parse<void>("expression", stream);
+    REQUIRE(result.has_value());
+    CHECK(result->Name == "Punctuator_LeftParen-expression");
+    CHECK(ChildIsNode(*result, 1));
+    auto const& inner = ChildNode(*result, 1);
+    CHECK(inner.Name == "Punctuator_Arrow-expression");
+    CHECK(stream.Index == 4);
+}
+
+TEST_CASE("ExpressionParser - Postfix: function call with ternary argument", "[expression-parser][function-call]")
+{
+    // f(a ? b : c) => Punctuator_LeftParen-expression [atom(f), args(arg-0: Question-expr)]
+    ExpressionParser ep;
+    auto toks = MakeTokens({
+        { .Type = TokType::Identifier, .Value = "f" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::Identifier, .Value = "a" },
+        { .Type = TokType::Punctuator_Question, .Value = "?" },
+        { .Type = TokType::Identifier, .Value = "b" },
+        { .Type = TokType::Punctuator_Colon, .Value = ":" },
+        { .Type = TokType::Identifier, .Value = "c" },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+    });
+    auto stream = MakeStream(toks);
+    auto result = ep.Parse<void>("expression", stream);
+    REQUIRE(result.has_value());
+    CHECK(result->Name == "Punctuator_LeftParen-expression");
+    CHECK(ChildIsNode(*result, 2));
+    auto const& args = ChildNode(*result, 2);
+    CHECK(args.Name == "args");
+    CHECK(args.Children.size() == 1);
+    auto const& arg0 = get<NodeType>(args.Children[0]);
+    CHECK(arg0.Name == "Punctuator_Question-expression");
+    CHECK(stream.Index == 7);
+}
+
+TEST_CASE("ExpressionParser - Postfix: function call with integer constant arguments", "[expression-parser][function-call]")
+{
+    // f(1, 2, 3) => Punctuator_LeftParen-expression [atom(f), args(arg-0: 1, arg-1: 2, arg-2: 3)]
+    ExpressionParser ep;
+    auto toks = MakeTokens({
+        { .Type = TokType::Identifier, .Value = "f" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::IntegerConstant, .Value = "1" },
+        { .Type = TokType::Punctuator_Comma, .Value = "," },
+        { .Type = TokType::IntegerConstant, .Value = "2" },
+        { .Type = TokType::Punctuator_Comma, .Value = "," },
+        { .Type = TokType::IntegerConstant, .Value = "3" },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+    });
+    auto stream = MakeStream(toks);
+    auto result = ep.Parse<void>("expression", stream);
+    REQUIRE(result.has_value());
+    CHECK(result->Name == "Punctuator_LeftParen-expression");
+    CHECK(ChildIsNode(*result, 2));
+    auto const& args = ChildNode(*result, 2);
+    CHECK(args.Name == "args");
+    CHECK(args.Children.size() == 3);
+    CHECK(stream.Index == 7);
+}
+
+TEST_CASE("ExpressionParser - Postfix: function call with string literal argument", "[expression-parser][function-call]")
+{
+    // f("hello") => Punctuator_LeftParen-expression [atom(f), args(arg-0: "hello")]
+    ExpressionParser ep;
+    auto toks = MakeTokens({
+        { .Type = TokType::Identifier, .Value = "f" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::StringLiteral, .Value = "\"hello\"" },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+    });
+    auto stream = MakeStream(toks);
+    auto result = ep.Parse<void>("expression", stream);
+    REQUIRE(result.has_value());
+    CHECK(result->Name == "Punctuator_LeftParen-expression");
+    CHECK(ChildIsNode(*result, 2));
+    auto const& args = ChildNode(*result, 2);
+    CHECK(args.Name == "args");
+    CHECK(args.Children.size() == 1);
+    CHECK(stream.Index == 3);
+}
+
+TEST_CASE("ExpressionParser - Postfix: function call after infix operator", "[expression-parser][function-call]")
+{
+    // a + f(x) => Punctuator_Plus-expression [atom(a), Punctuator_LeftParen-expression [f, args]]
+    ExpressionParser ep;
+    auto toks = MakeTokens({
+        { .Type = TokType::Identifier, .Value = "a" },
+        { .Type = TokType::Punctuator_Plus, .Value = "+" },
+        { .Type = TokType::Identifier, .Value = "f" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::Identifier, .Value = "x" },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+    });
+    auto stream = MakeStream(toks);
+    auto result = ep.Parse<void>("expression", stream);
+    REQUIRE(result.has_value());
+    // top: addition
+    CHECK(result->Name == "Punctuator_Plus-expression");
+    CHECK(ChildIsToken(*result, 1));
+    CHECK(ChildTokenType(*result, 1) == TokType::Identifier);
+    CHECK(ChildTokenValue(*result, 1) == "a");
+    // rhs: function call
+    CHECK(ChildIsNode(*result, 2));
+    CHECK(ChildName(*result, 2) == "Punctuator_LeftParen-expression");
+    CHECK(stream.Index == 5);
+}
+
+TEST_CASE("ExpressionParser - Postfix: function call precedence vs postfix increment", "[expression-parser][function-call]")
+{
+    // f(x)++ should parse as (f(x))++ because both are postfix at Level15, left-to-right
+    ExpressionParser ep;
+    auto toks = MakeTokens({
+        { .Type = TokType::Identifier, .Value = "f" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::Identifier, .Value = "x" },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+        { .Type = TokType::Punctuator_Increment, .Value = "++" },
+    });
+    auto stream = MakeStream(toks);
+    auto result = ep.Parse<void>("expression", stream);
+    REQUIRE(result.has_value());
+    // outer: increment
+    CHECK(result->Name == "Punctuator_Increment-expression");
+    CHECK(ChildIsNode(*result, 1));
+    // inner: function call
+    CHECK(ChildName(*result, 1) == "Punctuator_LeftParen-expression");
+    CHECK(stream.Index == 4);
+}
+
+TEST_CASE("ExpressionParser - Postfix: missing right paren in function call", "[expression-parser][function-call]")
+{
+    // f(x => error: stream empty after parsing argument expression list
+    ExpressionParser ep;
+    auto toks = MakeTokens({
+        { .Type = TokType::Identifier, .Value = "f" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::Identifier, .Value = "x" },
+    });
+    auto stream = MakeStream(toks);
+    auto result = ep.Parse<void>("expression", stream);
+    REQUIRE_FALSE(result.has_value());
+}
+
+TEST_CASE("ExpressionParser - Postfix: missing argument after comma in function call", "[expression-parser][function-call]")
+{
+    // f(x, ) => error: unexpected token when parse prefix expression
+    ExpressionParser ep;
+    auto toks = MakeTokens({
+        { .Type = TokType::Identifier, .Value = "f" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::Identifier, .Value = "x" },
+        { .Type = TokType::Punctuator_Comma, .Value = "," },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+    });
+    auto stream = MakeStream(toks);
+    auto result = ep.Parse<void>("expression", stream);
+    REQUIRE_FALSE(result.has_value());
+}
+
+TEST_CASE("ExpressionParser - Postfix: function call with mixed argument types", "[expression-parser][function-call]")
+{
+    // f(a, b + c, d * e, f ? g : h)
+    ExpressionParser ep;
+    auto toks = MakeTokens({
+        { .Type = TokType::Identifier, .Value = "f" },
+        { .Type = TokType::Punctuator_LeftParen, .Value = "(" },
+        { .Type = TokType::Identifier, .Value = "a" },
+        { .Type = TokType::Punctuator_Comma, .Value = "," },
+        { .Type = TokType::Identifier, .Value = "b" },
+        { .Type = TokType::Punctuator_Plus, .Value = "+" },
+        { .Type = TokType::Identifier, .Value = "c" },
+        { .Type = TokType::Punctuator_Comma, .Value = "," },
+        { .Type = TokType::Identifier, .Value = "d" },
+        { .Type = TokType::Punctuator_Star, .Value = "*" },
+        { .Type = TokType::Identifier, .Value = "e" },
+        { .Type = TokType::Punctuator_Comma, .Value = "," },
+        { .Type = TokType::Identifier, .Value = "f" },
+        { .Type = TokType::Punctuator_Question, .Value = "?" },
+        { .Type = TokType::Identifier, .Value = "g" },
+        { .Type = TokType::Punctuator_Colon, .Value = ":" },
+        { .Type = TokType::Identifier, .Value = "h" },
+        { .Type = TokType::Punctuator_RightParen, .Value = ")" },
+    });
+    auto stream = MakeStream(toks);
+    auto result = ep.Parse<void>("expression", stream);
+    REQUIRE(result.has_value());
+    CHECK(result->Name == "Punctuator_LeftParen-expression");
+    CHECK(ChildIsNode(*result, 2));
+    auto const& args = ChildNode(*result, 2);
+    CHECK(args.Name == "args");
+    CHECK(args.Children.size() == 4);
+    CHECK(args.ChildSymbols[0] == "arg-0");
+    CHECK(args.ChildSymbols[1] == "arg-1");
+    CHECK(args.ChildSymbols[2] == "arg-2");
+    CHECK(args.ChildSymbols[3] == "arg-3");
+    // arg0: atom a
+    auto const& arg0 = get<NodeType>(args.Children[0]);
+    CHECK(arg0.Name == "atom");
+    // arg1: b + c
+    auto const& arg1 = get<NodeType>(args.Children[1]);
+    CHECK(arg1.Name == "Punctuator_Plus-expression");
+    // arg2: d * e
+    auto const& arg2 = get<NodeType>(args.Children[2]);
+    CHECK(arg2.Name == "Punctuator_Star-expression");
+    // arg3: f ? g : h
+    auto const& arg3 = get<NodeType>(args.Children[3]);
+    CHECK(arg3.Name == "Punctuator_Question-expression");
+    CHECK(stream.Index == 17);
+}

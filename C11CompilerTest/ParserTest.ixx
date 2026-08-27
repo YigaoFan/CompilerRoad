@@ -544,3 +544,35 @@ TEST_CASE("C11 ConflictResolver - _Alignas type-name vs constant-expression", "[
     SECTION("alignas with constant") { ExpectParses("declaration", "_Alignas(4) int x;"); }
     SECTION("alignas with expression") { ExpectParses("declaration", "_Alignas(2 + 2) int x;"); }
 }
+
+// ===== function call expressions =====
+TEST_CASE("C11 - function call expressions", "[parser][function-call]")
+{
+    SECTION("function call with no arguments") { ExpectParses("expression", "f()"); }
+    SECTION("function call with one argument") { ExpectParses("expression", "f(x)"); }
+    SECTION("function call with multiple arguments") { ExpectParses("expression", "f(x, y, z)"); }
+    SECTION("function call with integer constants") { ExpectParses("expression", "f(1, 2, 3)"); }
+    SECTION("function call with string literal") { ExpectParses("expression", "f(\"hello\")"); }
+    SECTION("function call with expression arguments") { ExpectParses("expression", "f(a + b, c * d)"); }
+    SECTION("function call with assignment expression argument") { ExpectParses("expression", "f(x = 1)"); }
+    SECTION("function call with ternary argument") { ExpectParses("expression", "f(a ? b : c)"); }
+    SECTION("function call with mixed argument types") { ExpectParses("expression", "f(a, b + c, d * e, f ? g : h)"); }
+    SECTION("nested function calls") { ExpectParses("expression", "f(g(x))"); }
+    SECTION("chained function calls") { ExpectParses("expression", "f()()"); }
+    SECTION("function call with nested and chained") { ExpectParses("expression", "f(g(x))(y)"); }
+    SECTION("member access then function call") { ExpectParses("expression", "obj.method()"); }
+    SECTION("arrow then function call") { ExpectParses("expression", "ptr->func()"); }
+    SECTION("function call in assignment") { ExpectParses("expression", "x = f()"); }
+    SECTION("function call in arithmetic") { ExpectParses("expression", "f() + g()"); }
+    SECTION("function call with parenthesized argument") { ExpectParses("expression", "f((a + b))"); }
+    SECTION("function call result used in comparison") { ExpectParses("expression", "f() > g()"); }
+    SECTION("function call with comma expression argument") { ExpectParses("expression", "f((a, b))"); }
+    SECTION("function call with prefix operator argument") { ExpectParses("expression", "f(-x, ++y)"); }
+    SECTION("function call with postfix operator argument") { ExpectParses("expression", "f(x++, y--)"); }
+    SECTION("function call with sizeof argument") { ExpectParses("expression", "f(sizeof(int))"); }
+    SECTION("function call with address-of argument") { ExpectParses("expression", "f(&x)"); }
+    SECTION("function call with dereference argument") { ExpectParses("expression", "f(*ptr)"); }
+    SECTION("complex: f(a, g(b, h(c)))") { ExpectParses("expression", "f(a, g(b, h(c)))"); }
+    SECTION("complex: a + f(b) * g(c)") { ExpectParses("expression", "a + f(b) * g(c)"); }
+    SECTION("complex: f(a) ? g(b) : h(c)") { ExpectParses("expression", "f(a) ? g(b) : h(c)"); }
+}

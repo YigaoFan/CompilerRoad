@@ -11,6 +11,7 @@ using std::array;
 using std::pair;
 using std::map;
 using std::set;
+using std::vector;
 using std::format;
 using std::move;
 
@@ -114,7 +115,7 @@ private:
 	{
 		{ TokType::Punctuator_Increment,   {.LeftBindingPower = Power::Level15, }},
 		{ TokType::Punctuator_Decrement,   {.LeftBindingPower = Power::Level15, }},
-		//{ TokType::Punctuator_LeftParen,   {.LeftBindingPower = Power::Level15, }}, // function call
+		{ TokType::Punctuator_LeftParen,   {.LeftBindingPower = Power::Level15, }},
 		{ TokType::Punctuator_LeftBracket, {.LeftBindingPower = Power::Level15, }},
 		{ TokType::Punctuator_Dot,         {.LeftBindingPower = Power::Level15, }},
 		{ TokType::Punctuator_Arrow,       {.LeftBindingPower = Power::Level15, }},
@@ -226,7 +227,7 @@ private:
 			if (PostfixOperators.contains(op.Type))
 			{
 				auto lbp = PostfixBindingPower(op.Type);
-				if (lbp < minBindingPower)
+				if (lbp <= minBindingPower)
 				{
 					// rollback to let the remain expression parser can read this operator
 					stream.Rollback();
@@ -246,6 +247,28 @@ private:
 					}
 					lhs = Cons(op, array{ move(lhs.value()), ConsAtom<Result>(stream.Current())});
 					break;
+				case TokType::Punctuator_LeftParen:
+				{
+					if (not stream.MoveNext())
+					{
+						return unexpected(ParseFailResult{ .Message = format("input stream is empty after postfix operator({})", op) });
+					}
+					auto args = ParseArgumentList<Result>(stream);
+					if (not args.has_value())
+					{
+						return args;
+					}
+					if (not stream.MoveNext())
+					{
+						return unexpected(ParseFailResult{ .Message = format("input stream is empty after parsing argument expression list") });
+					}
+					if (stream.Current().Type != TokType::Punctuator_RightParen)
+					{
+						return unexpected(ParseFailResult{ .Message = format("expect right parenthesis after parsing argument expression list, but got {}", stream.Current()) });
+					}
+					lhs = Cons(op, array{ move(lhs.value()), move(args.value()) });
+					break;
+				}
 				default:
 					lhs = Cons(op, array{ move(lhs.value()) });
 					break;
@@ -374,6 +397,47 @@ private:
 				return atom;
 			}
 			return unexpected(ParseFailResult{ .Message = format("unexpected token({}) when parse prefix expression", op) });
+		}
+	}
+
+	template <typename Result, template <typename> class ActualStream, typename Tok>
+	auto ParseArgumentList(ActualStream<Tok>& stream) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
+	{
+		auto args = SyntaxTreeNode<Tok, Result>("args", {});
+		// for empty args function call
+		if (stream.Current().Type == TokType::Punctuator_RightParen)
+		{
+			stream.Rollback();
+			return args;
+		}
+		for (auto i = 0;; ++i)
+		{
+			auto arg = Parse<Result>("assignment-expression", stream);
+			if (not arg.has_value())
+			{
+				return arg;
+			}
+			args.ChildSymbols.push_back(String(format("arg-{}", i)));
+			args.Children.push_back(move(arg.value()));
+			if (not stream.MoveNext())
+			{
+				return unexpected(ParseFailResult{ .Message = format("input stream is empty after parsing argument expression") });
+			}
+			auto const& next = stream.Current();
+			switch (next.Type)
+			{
+			case TokType::Punctuator_Comma:
+				if (not stream.MoveNext())
+				{
+					return unexpected(ParseFailResult{ .Message = format("input stream is empty after parsing comma of argument list") });
+				}
+				continue;
+			case TokType::Punctuator_RightParen:
+				stream.Rollback();
+				return args;
+			default:
+				return unexpected(ParseFailResult{ .Message = format("expect comma or right parenthesis after parsing argument expression, but got {}", next) });
+			}
 		}
 	}
 

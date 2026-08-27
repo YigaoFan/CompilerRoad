@@ -77,3 +77,6 @@ Tabby 的 UI 比较好看。但是 emacs -nw 有个界面刷新的问题：类�
 ***** 更高层级的语法单元解析：statement、function、translation unit——我觉得难度应该不大
 ***** 由 abnf 和其中的注解生成 AST 节点类定义和 Visitor 接口
 ***** 符号表和类型推导
+*** <2026-08-27 Thu>
+**** 决定不实现_Generic 特性
+**** ExpressionParser 实现函数调用解析
