@@ -10,6 +10,7 @@ enum class TokType : int
     PipeMark,
     Newline,
     StartKeyword,
+    EofKeyword,
     LexRuleHeader,
     ParseRuleHeader,
     Arrow,
@@ -118,6 +119,9 @@ struct std::formatter<TokType, char> : NoSpecialProcessParse
             break;
         case TokType::StartKeyword:
             s = "StartKeyword";
+            break;
+        case TokType::EofKeyword:
+            s = "EofKeyword";
             break;
         }
         return std::format_to(fc.out(), "{}", s);

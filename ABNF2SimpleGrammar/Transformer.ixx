@@ -232,7 +232,6 @@ struct formatter<TokType, char>
 
         format_to(fc.out(), "export map<string_view, int> terminal2IntTokenType =\n");
         format_to(fc.out(), "{{\n");
-        format_to(fc.out(), "    {{ eof, static_cast<int>(TokType::EOF) }},\n");
         format_to(fc.out(), "    {{ \"Expression\", static_cast<int>(TokType::Expression) }},\n");
         for (auto const& x : t.Value.Symbol2EnumNameRegExp)
         {

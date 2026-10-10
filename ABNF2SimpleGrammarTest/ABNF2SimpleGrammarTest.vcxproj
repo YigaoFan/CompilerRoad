@@ -89,6 +89,7 @@
     <ClCompile Include="..\ABNF2SimpleGrammar\Checker.ixx" />
     <ClCompile Include="..\ABNF2SimpleGrammar\CodeEmitter.ixx" />
     <ClCompile Include="..\ABNF2SimpleGrammar\TokType.ixx" />
+    <ClCompile Include="..\ABNF2SimpleGrammar\GrammarSetup.ixx" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Base\Base.vcxproj">

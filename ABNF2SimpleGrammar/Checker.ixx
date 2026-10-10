@@ -79,7 +79,7 @@ struct StarArrowChecker
                     for (auto c : literal)
                     {
                         // only allow English letters, digits and '_'
-                        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_')
+                        if (!std::isalnum(static_cast<unsigned char>(c)) and c != '_')
                         {
                             throw std::invalid_argument(format("star arrow rule '{}' literal \"{}\" contains invalid character '{}', only English letters, digits and '_' are allowed (or provide a @name)", g->Left, literal, c));
                         }

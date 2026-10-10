@@ -584,9 +584,7 @@ struct AllGrammars : public AstNode
     {
         switch (node->ChildSymbols.size())
         {
-        case 0:
-            return ApplyVisitor(make_shared<AllGrammars>(nullptr, String::EmptyString(), nullptr), visitor);
-        case 5:
+        case 6:
         {
             auto& startInfoNode = GetSyntaxNodeChild(node, 3);
             auto const& startSymbolName = GetTokChild(&startInfoNode, 2).Value;

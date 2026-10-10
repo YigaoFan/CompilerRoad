@@ -33,5 +33,8 @@
     <ClCompile Include="CodeEmitter.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="GrammarSetup.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
