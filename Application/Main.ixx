@@ -154,7 +154,7 @@ auto TestRollBack() -> void
 {
     std::array rules =
     {
-        pair<string, TokType>{ "ab|(ab)*c", TokType::Id },
+        pair<TokType, string>{ TokType::Id, "ab|(ab)*c" },
     };
     string rollbackStr = "abababab";
     auto l = Lexer<TokType>::New(rules);
