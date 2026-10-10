@@ -24,10 +24,6 @@ struct Token
 {
     T Type;
     string Value;
-    auto IsEof() const -> bool
-    {
-        return Value.empty(); // TODO: maybe change in the future
-    }
 };
 
 template <typename T>
@@ -214,21 +210,8 @@ public:
 
 
 template<typename T>
-struct std::formatter<Token<T>, char>
+struct std::formatter<Token<T>, char> : NoSpecialProcessParse
 {
-    constexpr auto parse(std::format_parse_context& ctx)
-    {
-        // not implement
-        auto it = ctx.begin();
-        if (it == ctx.end())
-            return it;
-
-        if (it != ctx.end() && *it != '}')
-            throw std::format_error("Invalid format args for QuotableString.");
-
-        return it;
-    }
-
     template<class FormatContext>
     constexpr auto format(Token<T> const& t, FormatContext& fc) const
     {
