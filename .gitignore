@@ -32,8 +32,23 @@
 *.app
 .vs/
 **/x64/
+**/Debug/
+**/Release/
 
 # AI related files
 .claude/
 _bmad/
 _bmad-output/
+
+# logs
+parse-log-*.html
+
+# generated files
+*-ast.ixx
+*-spec.ixx
+
+# Emacs temp files
+*~
+
+# VS project files
+*.user
