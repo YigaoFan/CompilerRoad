@@ -8,7 +8,7 @@ Newline -> "\r\n" | "\r" | "\n"
 Comment -> "//" *(non-line-termination-character) ;only support single line comment
 non-line-termination-character -> r"[^\r\n]"
 
-Keyword -*-> "alignof" | "auto" | "break" | "case" | "char" | "const" | "continue" | "default" | "do" | "double" | "else" | "enum" | "extern" | "float" | "for" | "Semantics" | "goto" | "if" | "inline" | "int" | "long" | "register" | "restrict" | "return" | "short" | "signed" | "sizeof" | "static" | "struct" | "switch" | "typedef" | "union" | "unsigned" | "void" | "volatile" | "while" | "_Alignas" | "_Atomic" | "_Bool" | "_Complex" | "_Generic" | "_Imaginary" | "_Noreturn" | "_Static_assert" | "_Thread_local"
+Keyword -*-> "alignof" | "auto" | "break" | "case" | "char" | "const" | "continue" | "default" | "do" | "double" | "else" | "enum" | "extern" | "float" | "for" | "goto" | "if" | "inline" | "int" | "long" | "register" | "restrict" | "return" | "short" | "signed" | "sizeof" | "static" | "struct" | "switch" | "typedef" | "union" | "unsigned" | "void" | "volatile" | "while" | "_Alignas" | "_Atomic" | "_Bool" | "_Complex" | "_Generic" | "_Imaginary" | "_Noreturn" | "_Static_assert" | "_Thread_local"
 
 Identifier -> r"[a-zA-Z_][a-zA-Z0-9_]*" ;no support for universal character
 
@@ -67,7 +67,7 @@ Punctuator -*-> "[" @LeftBracket | "]" @RightBracket | "(" @LeftParen | ")" @Rig
     | "%:" @HashDigraph | "%:%:" @HashHashDigraph
 
 - Parse -
-@start declaration
+@start declaration EOF
 declaration -> declaration-specifiers [init-declarator-list] ";" | static_assert-declaration
 ;may come from current symbol, also come from init-declarator-list, the follow set or start set has issue
 declaration-specifiers -> (storage-class-specifier | type-specifier | type-qualifier | function-specifier | alignment-specifier) [declaration-specifiers]

@@ -27,6 +27,9 @@
     <ClCompile Include="ExpressionParserTest.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ExpressionParserTypeCastTest.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\C11Compiler\ExpressionParser.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -43,6 +46,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ParserTest.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ParserCombinatorTest.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\C11Compiler\ParserCombinator.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

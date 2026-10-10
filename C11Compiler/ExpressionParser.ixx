@@ -2,8 +2,10 @@ export module ExpressionParser;
 
 import std;
 import Base;
+import Lexer;
 import Parser;
 import C11Spec;
+import ParserCombinator;
 
 using std::map;
 using std::unexpected;
@@ -12,6 +14,8 @@ using std::pair;
 using std::map;
 using std::set;
 using std::vector;
+using std::string_view;
+using std::shared_ptr;
 using std::format;
 using std::move;
 
@@ -51,6 +55,18 @@ struct OperatorInfo
 	/// </summary>
 	int RightBindingPower = -1;
 };
+
+#define MoveOrReturnFailMsg(stream, msg, ...) \
+if (not stream.MoveNext()) { return unexpected(ParseFailResult{ .Message = format(msg __VA_OPT__(,) __VA_ARGS__) }); }
+
+#define ReturnFailMsg(logLevel, msg, ...) \
+do { Log(logLevel, msg __VA_OPT__(,) __VA_ARGS__); return unexpected(ParseFailResult{ .Message = format(msg __VA_OPT__(,) __VA_ARGS__) }); } while(0)
+
+#define ReturnWithLog(result, logLevel, msg) \
+do { Log(logLevel, msg" parse result: {}", result); return result; } while(0)
+
+#define MoveOrReturnFailMsgWithLog(stream, logLevel, msg, ...) \
+if (not stream.MoveNext()) { Log(logLevel, msg __VA_OPT__(,) __VA_ARGS__); return unexpected(ParseFailResult{ .Message = format(msg __VA_OPT__(,) __VA_ARGS__) }); }
 
 class ExpressionParser
 {
@@ -130,6 +146,7 @@ private:
 		{ "constant-expression",   {.MinInfixBindingPower = Power::Level1,/* same as assign op */ } }, 
 		{ "assignment-expression", {.MinInfixBindingPower = Power::Level0,/* same as comma op  */ } },
 	};
+	shared_ptr<HtmlLogger> logger = nullptr;
 public:
 	auto FirstSet() const -> map<String, set<String>>
 	{
@@ -138,7 +155,6 @@ public:
 			{ "expression", {} },
 			{ "constant-expression", {} },
 			{ "assignment-expression", {} },
-
 		};
 		// union of prefix operators and atoms that can start an expression
 		// prefix operators: -, +, ++, --, !, ~, *, &, sizeof, alignof, (
@@ -182,37 +198,69 @@ public:
 		return nontermin == "expression" or nontermin == "constant-expression" or nontermin == "assignment-expression";
 	}
 
+	auto Logger(shared_ptr<HtmlLogger> logger)
+	{
+		this->logger = move(logger);
+	}
+
 	template <typename Result, template <typename> class ActualStream, IToken Tok>
 		requires Stream<ActualStream, Tok>
-	auto Parse(String nontermin, ActualStream<Tok>& stream) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
+	auto Parse(String nontermin, ActualStream<Tok>& stream, auto parse) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
 	{
 		if (not Parsable(nontermin))
 		{
 			return unexpected(ParseFailResult{ .Message = format("nonterminal({}) isn't parsable by ExpressionParser", nontermin) });
 		}
-
+		auto parseWrapper = [this, &parse](String nontermin, ActualStream<Tok>& stream) -> ParserResult<SyntaxTreeNode<Tok, Result>>
+		{
+			auto r = parse(nontermin, stream);
+			if (r.has_value())
+			{
+				stream.Rollback(); // bugfix: stream pos should be move back one token
+				if (r->Name == "root")
+				{
+					return move(r->GetChildAsNode(0));
+				}
+			}
+			return r;
+		};
 		// pass the min binding power corresponding the nonterminal to ParseExpression
 		// so that the parser can stop at the right position when parsing infix operators
-		return ParseExpression<Result>(stream, ExpressionParseConfigs.at(nontermin).MinInfixBindingPower);
+		return ParseExpression<Result>(stream, ExpressionParseConfigs.at(nontermin).MinInfixBindingPower, parseWrapper);
 	}
 
-	template <typename Result, template <typename> class ActualStream, IToken Tok>
-		requires Stream<ActualStream, Tok>
-	auto Parse(String nontermin, ActualStream<Tok>& stream, HtmlLogger& logger) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
-	{
-		if (not Parsable(nontermin))
-		{
-			return unexpected(ParseFailResult{ .Message = format("nonterminal({}) isn't parsable by ExpressionParser", nontermin) });
-		}
-		return ParseExpression<Result>(stream, ExpressionParseConfigs.at(nontermin).MinInfixBindingPower);
-	}
+	 template <typename Result, template <typename> class ActualStream, IToken Tok>
+	 	requires Stream<ActualStream, Tok>
+	 auto Parse(String nontermin, ActualStream<Tok>& stream, auto parse, HtmlLogger& logger) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
+	 {
+	 	auto parseWrapper = [&parse, this](String nontermin, ActualStream<Tok>& stream) -> ParserResult<SyntaxTreeNode<Tok, Result>>
+	 	{
+			auto r = parse(nontermin, stream);
+			if (r.has_value())
+			{
+				stream.Rollback(); // bugfix: stream pos should be move back one token
+				if (r->Name == "root")
+				{
+					return move(r->GetChildAsNode(0));
+				}
+			}
+			return r;
+	 	};
+	 	if (not Parsable(nontermin))
+	 	{
+	 		return unexpected(ParseFailResult{ .Message = format("nonterminal({}) isn't parsable by ExpressionParser", nontermin) });
+	 	}
+	 	return ParseExpression<Result>(stream, ExpressionParseConfigs.at(nontermin).MinInfixBindingPower, parseWrapper);
+	 }
 private:
 	template <typename Result, template <typename> class ActualStream, typename Tok>
-	auto ParseExpression(ActualStream<Tok>& stream, int minBindingPower) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
+	auto ParseExpression(ActualStream<Tok>& stream, int minBindingPower, auto parse) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
 	{
-		auto lhs = ParsePrefix<Result>(stream);
+		Log(Level::In, "ParseExpression with minBindingPower: {}", minBindingPower);
+		auto lhs = ParsePrefix<Result>(stream, parse);
 		if (not lhs.has_value())
 		{
+			Log(Level::Out, "ParsePrefix failed: {}", lhs.error().Message);
 			return lhs;
 		}
 
@@ -237,36 +285,45 @@ private:
 				{
 				case TokType::Punctuator_Dot:
 				case TokType::Punctuator_Arrow:
-					if (not stream.MoveNext())
-					{
-						return unexpected(ParseFailResult{ .Message = format("input stream is empty after postfix operator({})", op) });
-					}
+					MoveOrReturnFailMsgWithLog(stream, Level::Out, "input stream is empty after postfix operator({})", op);
 					if (stream.Current().Type != TokType::Identifier)
 					{
-						return unexpected(ParseFailResult{ .Message = format("expect identifier after postfix operator({}), but got {}", op, stream.Current()) });
+						ReturnFailMsg(Level::Out, "expect identifier after postfix operator({}), but got {}", op, stream.Current());
 					}
-					lhs = Cons(op, array{ move(lhs.value()), ConsAtom<Result>(stream.Current())});
+					lhs = Cons(op, array{ move(lhs.value()), ConsAtom<Result>(stream.Current()) });
 					break;
 				case TokType::Punctuator_LeftParen:
 				{
-					if (not stream.MoveNext())
-					{
-						return unexpected(ParseFailResult{ .Message = format("input stream is empty after postfix operator({})", op) });
-					}
-					auto args = ParseArgumentList<Result>(stream);
+					MoveOrReturnFailMsgWithLog(stream, Level::Out, "input stream is empty after postfix operator({})", op);
+					auto args = ParseArgumentList<Result>(stream, parse);
 					if (not args.has_value())
 					{
+						Log(Level::Out, "ParseArgumentList failed: {}", args.error().Message);
 						return args;
 					}
-					if (not stream.MoveNext())
-					{
-						return unexpected(ParseFailResult{ .Message = format("input stream is empty after parsing argument expression list") });
-					}
+					MoveOrReturnFailMsgWithLog(stream, Level::Out,"input stream is empty after parsing argument expression list");
 					if (stream.Current().Type != TokType::Punctuator_RightParen)
 					{
-						return unexpected(ParseFailResult{ .Message = format("expect right parenthesis after parsing argument expression list, but got {}", stream.Current()) });
+						ReturnFailMsg(Level::Out, "expect right parenthesis after parsing argument expression list, but got {}", stream.Current());
 					}
 					lhs = Cons(op, array{ move(lhs.value()), move(args.value()) });
+					break;
+				}
+				case TokType::Punctuator_LeftBracket:
+				{
+					MoveOrReturnFailMsgWithLog(stream, Level::Out, "input stream is empty after postfix operator({})", op);
+					auto indexExp = ParseExpression<Result>(stream, Power::MinLevel, parse);
+					if (not indexExp.has_value())
+					{
+						Log(Level::Out, "ParseExpression for index failed: {}", indexExp.error().Message);
+						return indexExp;
+					}
+					MoveOrReturnFailMsgWithLog(stream, Level::Out,"input stream is empty after parsing index expression");
+					if (stream.Current().Type != TokType::Punctuator_RightBracket)
+					{
+						ReturnFailMsg(Level::Out, "expect right bracket after parsing index expression, but got {}", stream.Current());
+					}
+					lhs = Cons(op, array{ move(lhs.value()), move(indexExp.value()) });
 					break;
 				}
 				default:
@@ -288,44 +345,36 @@ private:
 				{
 				case TokType::Punctuator_Question:
 				{
-					if (not stream.MoveNext())
-					{
-						return unexpected(ParseFailResult{ .Message = format("input stream is empty after question operator({})", op) });
-					}
-					auto leftExp = ParseExpression<Result>(stream, Power::MinLevel);
+					MoveOrReturnFailMsgWithLog(stream, Level::Out, "input stream is empty after question operator({})", op);
+					auto leftExp = ParseExpression<Result>(stream, Power::MinLevel, parse);
 					if (not leftExp.has_value())
 					{
+						Log(Level::Out, "parse left value of 3-operands expression failed: {}", leftExp.error().Message);
 						return leftExp;
 					}
-					if (not stream.MoveNext())
-					{
-						return unexpected(ParseFailResult{ .Message = format("input stream is empty after parsing question mark of 'expression?'") });
-					}
+					MoveOrReturnFailMsgWithLog(stream, Level::Out, "input stream is empty after parsing question mark of 'expression?'")
 					auto const& colon = stream.Current();
 					if (colon.Type != TokType::Punctuator_Colon)
 					{
-						return unexpected(ParseFailResult{ .Message = format("expect colon after parsing 'a?b', but got {}", colon) });
+						ReturnFailMsg(Level::Out, "expect colon after parsing 'a?b', but got {}", colon);
 					}
-					if (not stream.MoveNext())
-					{
-						return unexpected(ParseFailResult{ .Message = format("input stream is empty after parsing 'a?b:'") });
-					}
-					auto rightExp = ParseExpression<Result>(stream, rbp);
+					MoveOrReturnFailMsgWithLog(stream, Level::Out, "input stream is empty after parsing 'a?b:'");
+					auto rightExp = ParseExpression<Result>(stream, rbp, parse);
 					if (not rightExp.has_value())
 					{
+						Log(Level::Out, "parse right value of 3-operands expression failed: {}", rightExp.error().Message);
 						return rightExp;
 					}
-					return Cons(op, array{ move(lhs.value()), move(leftExp.value()), move(rightExp.value()) });
+					lhs = Cons(op, array{ move(lhs.value()), move(leftExp.value()), move(rightExp.value()) });
+					continue;
 				}
 				default:
 				{
-					if (not stream.MoveNext())
-					{
-						return unexpected(ParseFailResult{ .Message = format("input stream is empty after infix operator({})", op) });
-					}
-					auto rhs = ParseExpression<Result>(stream, rbp);
+					MoveOrReturnFailMsgWithLog(stream, Level::Out, "input stream is empty after infix operator({})", op);
+					auto rhs = ParseExpression<Result>(stream, rbp, parse);
 					if (not rhs.has_value())
 					{
+						Log(Level::Out, "parse right value of infix expression failed: {}", rhs.error().Message);
 						return rhs;
 					}
 					lhs = Cons(op, array{ move(lhs.value()), move(rhs.value()) });
@@ -336,72 +385,118 @@ private:
 			stream.Rollback();
 			break;
 		}
-		return lhs;
+		ReturnWithLog(lhs, Level::Out, "expression");
 	}
 
 	template <typename Result, template <typename> class ActualStream, typename Tok>
-	auto ParsePrefix(ActualStream<Tok>& stream) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
+	auto ParsePrefix(ActualStream<Tok>& stream, auto parse) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
 	{
+		using ParserCombinator::SelectRight;
+		using ParserCombinator::SelectLeft;
+		using ParserCombinator::Concat;
+		using ParserCombinator::Or;
+		using ParserCombinator::Nullize;
+		using ParserCombinator::ParseWord;
+		using ParserCombinator::From;
+		using ParserCombinator::Id;
+
+		Log(Level::In, "ParsePrefix");
 		auto const& op = stream.Current();
 		if (PrefixOperators.contains(op.Type))
 		{
-			if (op.Type == TokType::Punctuator_LeftParen)
+			auto leftParen = ParseWord(TokType::Punctuator_LeftParen, Nullize);
+			auto rightParen = ParseWord(TokType::Punctuator_RightParen, Nullize);
+			auto typeName = [&](auto& stream) -> ParserResult<SyntaxTreeNode<Tok, Result>>
 			{
-				if (not stream.MoveNext())
+				MoveOrReturnFailMsg(stream, "input stream is empty after prefix operator({})", op);
+				auto typeNode = parse("type-name", stream);
+				// add fail log, add branch support of HtmlLogger for Or
+				Log(Level::Here, "stream pos: {}, call external parser parsing type-name: {}", stream.CurrentPosition(), typeNode);
+				return typeNode;
+			};
+			auto ExpOf = [&](int bindingPower)
+			{
+				return [bindingPower, this, &parse](auto& stream) -> ParserResult<SyntaxTreeNode<Tok, Result>>
 				{
-					return unexpected(ParseFailResult{ .Message = format("input stream is empty after prefix operator({})", op) });
-				}
-				auto subExp = ParseExpression<Result>(stream, Power::MinLevel);
-				if (not stream.MoveNext())
-				{
-					return unexpected(ParseFailResult{ .Message = format("input stream is empty after parsing '(expression'", op) });
-				}
-				auto const& rightParen = stream.Current();
-				if (rightParen.Type != TokType::Punctuator_RightParen)
-				{
-					return unexpected(ParseFailResult{ .Message = format("expect right parenthesis after parsing '(expression', but got {}", rightParen) });
-				}
-				return subExp;
+					MoveOrReturnFailMsg(stream, "input stream is empty before parsing expression");
+					return ParseExpression<Result>(stream, bindingPower, parse);
+				};
+			};
+			auto BindOpCons = [](Tok op)
+			{
+				return [op](auto node) { return Cons(move(op), array{ move(node) }); };
+			};
+
+			switch (op.Type)
+			{
+			case TokType::Keyword_Sizeof:
+			case TokType::Keyword_Alignof:
+			{
+				auto typeNameOrExpression = Or(
+					BindOpCons(op),
+					From(leftParen).RightWith(Or(Id, typeName, ExpOf(Power::MinLevel)), SelectRight).RightWith(rightParen, SelectLeft),
+					ExpOf(PrefixBindingPower(op.Type))
+				);
+				auto exp = typeNameOrExpression(stream);
+				ReturnWithLog(exp, Level::Out, "sizeof/alignof");
 			}
-			else
+			case TokType::Punctuator_LeftParen:
+			{
+				auto typeCastExp = From(typeName)
+					.RightWith(rightParen, SelectLeft)
+					.RightWith(ExpOf(PrefixBindingPower(op.Type)), ConsTypeCastExp<Result, Tok>);
+				auto parenExp = From(ExpOf(Power::MinLevel)).RightWith(rightParen, SelectLeft);
+				auto typeCastOrParenExp = Or(Id, typeCastExp, parenExp);
+				auto exp = typeCastOrParenExp(stream);
+				ReturnWithLog(exp, Level::Out, "type-cast/paren-expression");
+			}
+			default:
 			{
 				auto rbp = PrefixBindingPower(op.Type);
-				if (not stream.MoveNext())
-				{
-					return unexpected(ParseFailResult{ .Message = format("input stream is empty after prefix operator({})", op) });
-				}
-				auto rhs = ParseExpression<Result>(stream, rbp);
+				MoveOrReturnFailMsgWithLog(stream, Level::Out, "input stream is empty after prefix operator({})", op);
+				auto rhs = ParseExpression<Result>(stream, rbp, parse);
 				if (not rhs.has_value())
 				{
-					return rhs;
+					ReturnWithLog(rhs, Level::Out, "prefix-expression fail");
 				}
-				return Cons(op, array{ move(rhs.value()) });
+				auto prefix = Cons(op, array{ move(rhs.value()) });
+				ReturnWithLog(prefix, Level::Out, "prefix-expression");
+			}
 			}
 		}
 
 		switch (op.Type)
 		{
 		case TokType::Identifier:
+			if (IsTypeName(op.Value))
+			{
+				auto atom = ConsAtom<Result>(op, "type-name");
+				ReturnWithLog(atom, Level::Out, "identifier as type-name of prefix");
+			}
+			[[fallthrough]];
 		case TokType::IntegerConstant:
 		case TokType::FloatingConstant:
 		case TokType::CharacterConstant:
 		case TokType::StringLiteral:
 		{
 			auto atom = ConsAtom<Result>(op);
-			return atom;
+			ReturnWithLog(atom, Level::Out, "literal of prefix");
 		}
+		case TokType::Keyword_Struct:
+			// sometimes, its form like "struct X" TODO
+			// TODO
 		default:
 			if (IsBuiltinTypeName(op.Type))
 			{
-				auto atom = ConsAtom<Result>(op, "type-name");
-				return atom;
+				auto atom = ConsAtom<Result>(op, "builtin-type-name");
+				ReturnWithLog(atom, Level::Out, "builtin-type-name");
 			}
-			return unexpected(ParseFailResult{ .Message = format("unexpected token({}) when parse prefix expression", op) });
+			ReturnFailMsg(Level::Out, "unexpected token({}) when parse prefix expression", op);
 		}
 	}
 
 	template <typename Result, template <typename> class ActualStream, typename Tok>
-	auto ParseArgumentList(ActualStream<Tok>& stream) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
+	auto ParseArgumentList(ActualStream<Tok>& stream, auto parse) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
 	{
 		auto args = SyntaxTreeNode<Tok, Result>("args", {});
 		// for empty args function call
@@ -412,25 +507,20 @@ private:
 		}
 		for (auto i = 0;; ++i)
 		{
-			auto arg = Parse<Result>("assignment-expression", stream);
+			// don't call Parse method here which will pack the parse callback, it will compile time recursive
+			auto arg = ParseExpression<Result>(stream, ExpressionParseConfigs.at("assignment-expression").MinInfixBindingPower, parse);
 			if (not arg.has_value())
 			{
 				return arg;
 			}
 			args.ChildSymbols.push_back(String(format("arg-{}", i)));
 			args.Children.push_back(move(arg.value()));
-			if (not stream.MoveNext())
-			{
-				return unexpected(ParseFailResult{ .Message = format("input stream is empty after parsing argument expression") });
-			}
+			MoveOrReturnFailMsg(stream, "input stream is empty after parsing argument expression");
 			auto const& next = stream.Current();
 			switch (next.Type)
 			{
 			case TokType::Punctuator_Comma:
-				if (not stream.MoveNext())
-				{
-					return unexpected(ParseFailResult{ .Message = format("input stream is empty after parsing comma of argument list") });
-				}
+				MoveOrReturnFailMsg(stream, "input stream is empty after parsing comma of argument list");
 				continue;
 			case TokType::Punctuator_RightParen:
 				stream.Rollback();
@@ -490,6 +580,18 @@ private:
 		}
 	}
 
+	static auto IsTypeName(std::string const& typeStr) -> bool
+	{
+		// TODO
+		return false;/*from context it's a type*/
+	}
+
+	template <typename Tok, typename Result>
+	static auto IsTypeCastHeader(SyntaxTreeNode<Tok, Result> const& node)
+	{
+		return node.Name == "type-name";
+	}
+
 	template <typename Tok, typename Result, size_t Size>
 	static auto Cons(Tok op, array<SyntaxTreeNode<Tok, Result>, Size> items) -> SyntaxTreeNode<Tok, Result>
 	{
@@ -499,7 +601,7 @@ private:
 		for (auto i = 0; auto& x : items)
 		{
 			n.ChildSymbols.push_back(String(format("{}-operand", i++)));
-			if (x.Name == "atom" || x.Name == "type-name")
+			if (x.Name == "atom" or x.Name == "builtin-type-name")
 			{
 				n.Children.push_back(move(x.GetChildAsToken(0)));
 				continue;
@@ -515,6 +617,24 @@ private:
 		auto n = SyntaxTreeNode<Tok, Result>(name, { "value" });
 		n.Children.push_back(move(atom));
 		return n;
+	}
+
+	template <typename Result, typename Tok>
+	static auto ConsTypeCastExp(SyntaxTreeNode<Tok, Result> type, SyntaxTreeNode<Tok, Result> value) -> SyntaxTreeNode<Tok, Result>
+	{
+		auto n = SyntaxTreeNode<Tok, Result>("type-cast-expression", { "type", "value" });
+		n.Children.push_back(move(type));
+		n.Children.push_back(move(value));
+		return n;
+	}
+
+	template <typename... Args>
+	auto Log(Level indent, std::format_string<Args...> format, Args&&... args) const -> void
+	{
+		if (logger != nullptr)
+		{
+			logger->Log(indent, format, std::forward<Args>(args)...);
+		}
 	}
 };
 

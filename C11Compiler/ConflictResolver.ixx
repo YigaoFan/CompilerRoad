@@ -288,7 +288,7 @@ public:
         requires Stream<ActualStream, Tok>
     auto ResolveEnumSpecifierEnumSuffix(stack<SyntaxTreeNode<Tok, Context>*>&, vector<SimpleRightSide> const& options, ActualStream<Tok>& stream) const -> expected<int, ParseFailResult>
     {
-        if (!stream.MoveNext())
+        if (not stream.MoveNext())
         {
             return unexpected(ParseFailResult{ .Message = "input stream is empty when resolve enum-specifier-enum-suffix" });
         }
@@ -306,7 +306,7 @@ public:
         requires Stream<ActualStream, Tok>
     auto ResolveEnumeratorListComma(stack<SyntaxTreeNode<Tok, Context>*>&, vector<SimpleRightSide> const& options, ActualStream<Tok>& stream) const -> expected<int, ParseFailResult>
     {
-        if (!stream.MoveNext())
+        if (not stream.MoveNext())
         {
             return FindEmptyOptionIndex(options);
         }
@@ -323,7 +323,7 @@ public:
         requires Stream<ActualStream, Tok>
     auto ResolveEnumeratorListRrComma(stack<SyntaxTreeNode<Tok, Context>*>&, vector<SimpleRightSide> const& options, ActualStream<Tok>& stream) const -> expected<int, ParseFailResult>
     {
-        if (!stream.MoveNext())
+        if (not stream.MoveNext())
         {
             return FindEmptyOptionIndex(options);
         }
@@ -363,7 +363,7 @@ public:
         requires Stream<ActualStream, Tok>
     auto ResolveParameterListComma(stack<SyntaxTreeNode<Tok, Context>*>&, vector<SimpleRightSide> const& options, ActualStream<Tok>& stream) const -> expected<int, ParseFailResult>
     {
-        if (!stream.MoveNext())
+        if (not stream.MoveNext())
         {
             return FindEmptyOptionIndex(options);
         }
@@ -389,7 +389,7 @@ public:
         requires Stream<ActualStream, Tok>
     auto ResolveParameterListRrComma(stack<SyntaxTreeNode<Tok, Context>*>&, vector<SimpleRightSide> const& options, ActualStream<Tok>& stream) const -> expected<int, ParseFailResult>
     {
-        if (!stream.MoveNext())
+        if (not stream.MoveNext())
         {
             return FindEmptyOptionIndex(options);
         }
@@ -416,7 +416,7 @@ public:
         requires Stream<ActualStream, Tok>
     auto ResolveSpecifierQualifierListAtomic(stack<SyntaxTreeNode<Tok, Context>*>&, vector<SimpleRightSide> const& options, ActualStream<Tok>& stream) const -> expected<int, ParseFailResult>
     {
-        if (!stream.MoveNext())
+        if (not stream.MoveNext())
         {
             return unexpected(ParseFailResult{ .Message = "input stream is empty when resolve specifier-qualifier-list _Atomic conflict" });
         }

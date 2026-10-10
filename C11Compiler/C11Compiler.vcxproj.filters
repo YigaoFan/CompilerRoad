@@ -39,6 +39,9 @@
     <ClCompile Include="ExpressionParser.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ParserCombinator.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="C11.abnf" />

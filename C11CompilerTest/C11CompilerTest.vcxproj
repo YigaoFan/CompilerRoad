@@ -51,6 +51,9 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <BuildStlModules>true</BuildStlModules>
+      <UseStandardPreprocessor>true</UseStandardPreprocessor>
+      <AdditionalOptions>
+      </AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -73,6 +76,9 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <BuildStlModules>true</BuildStlModules>
+      <UseStandardPreprocessor>true</UseStandardPreprocessor>
+      <AdditionalOptions>
+      </AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -97,7 +103,10 @@
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="LexerTest.ixx" />
     <ClCompile Include="ExpressionParserTest.ixx" />
+    <ClCompile Include="ExpressionParserTypeCastTest.ixx" />
+    <ClCompile Include="ParserCombinatorTest.ixx" />
     <ClCompile Include="..\C11Compiler\ExpressionParser.ixx" />
+    <ClCompile Include="..\C11Compiler\ParserCombinator.ixx" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Base\Base.vcxproj">

@@ -32,7 +32,6 @@ static auto ParseRule(string startSymbol, string code) -> ParseResult
     auto toks = l.Lex(code)
         | filter([](auto& x) { return x.Type != TokType::Whitespace && x.Type != TokType::Newline && x.Type != TokType::Comment; })
         | to<vector<Token<TokType>>>();
-    toks.push_back({ .Type = TokType::EOF, .Value = "" });
 
     auto resolver = C11ConflictResolver();
     ExpressionParser expParser;
@@ -408,6 +407,88 @@ TEST_CASE("C11 - expression (conditional-expression)", "[parser]")
 {
     ExpectParses("expression", "a ? b : c");
     ExpectParses("expression", "a ? b ? c : d : e");
+}
+
+// ===== expression (type-name via ExpressionParser) =====
+// ExpressionParser handles type-name as prefix atom, enabling sizeof(type) and (type)cast
+TEST_CASE("C11 - expression: sizeof with builtin types (type-name)", "[parser][type-name]")
+{
+    // single built-in type keywords with parens
+    SECTION("sizeof(int)") { ExpectParses("expression", "sizeof(int)"); }
+    SECTION("sizeof(char)") { ExpectParses("expression", "sizeof(char)"); }
+    SECTION("sizeof(short)") { ExpectParses("expression", "sizeof(short)"); }
+    SECTION("sizeof(long)") { ExpectParses("expression", "sizeof(long)"); }
+    SECTION("sizeof(float)") { ExpectParses("expression", "sizeof(float)"); }
+    SECTION("sizeof(double)") { ExpectParses("expression", "sizeof(double)"); }
+    SECTION("sizeof(signed)") { ExpectParses("expression", "sizeof(signed)"); }
+    SECTION("sizeof(unsigned)") { ExpectParses("expression", "sizeof(unsigned)"); }
+    SECTION("sizeof(void)") { ExpectParses("expression", "sizeof(void)"); }
+}
+
+TEST_CASE("C11 - expression: sizeof builtin types without parens", "[parser][type-name]")
+{
+    SECTION("sizeof int") { ExpectParses("expression", "sizeof int"); }
+    SECTION("sizeof char") { ExpectParses("expression", "sizeof char"); }
+    SECTION("sizeof short") { ExpectParses("expression", "sizeof short"); }
+    SECTION("sizeof long") { ExpectParses("expression", "sizeof long"); }
+    SECTION("sizeof float") { ExpectParses("expression", "sizeof float"); }
+    SECTION("sizeof double") { ExpectParses("expression", "sizeof double"); }
+    SECTION("sizeof signed") { ExpectParses("expression", "sizeof signed"); }
+    SECTION("sizeof unsigned") { ExpectParses("expression", "sizeof unsigned"); }
+    SECTION("sizeof void") { ExpectParses("expression", "sizeof void"); }
+}
+
+TEST_CASE("C11 - expression: type cast with builtin types", "[parser][type-name]")
+{
+    SECTION("(int)x") { ExpectParses("expression", "(int)x"); }
+    SECTION("(char)x") { ExpectParses("expression", "(char)x"); }
+    SECTION("(short)x") { ExpectParses("expression", "(short)x"); }
+    SECTION("(long)x") { ExpectParses("expression", "(long)x"); }
+    SECTION("(float)x") { ExpectParses("expression", "(float)x"); }
+    SECTION("(double)x") { ExpectParses("expression", "(double)x"); }
+    SECTION("(signed)x") { ExpectParses("expression", "(signed)x"); }
+    SECTION("(unsigned)x") { ExpectParses("expression", "(unsigned)x"); }
+    SECTION("(void)x") { ExpectParses("expression", "(void)x"); }
+}
+
+TEST_CASE("C11 - expression: type cast used in larger expressions", "[parser][type-name]")
+{
+    SECTION("(int)x + y") { ExpectParses("expression", "(int)x + y"); }
+    SECTION("(double)a * b") { ExpectParses("expression", "(double)a * b"); }
+    SECTION("(int)(a + b)") { ExpectParses("expression", "(int)(a + b)"); }
+    SECTION("(char)*ptr") { ExpectParses("expression", "(char)*ptr"); }
+    SECTION("(int)a + (int)b") { ExpectParses("expression", "(int)a + (int)b"); }
+    SECTION("(double)(a + b) * c") { ExpectParses("expression", "(double)(a + b) * c"); }
+}
+
+TEST_CASE("C11 - expression: sizeof(type) used in larger expressions", "[parser][type-name]")
+{
+    SECTION("sizeof(int) + 1") { ExpectParses("expression", "sizeof(int) + 1"); }
+    SECTION("sizeof(char) * n") { ExpectParses("expression", "sizeof(char) * n"); }
+    SECTION("sizeof(int) + sizeof(char)") { ExpectParses("expression", "sizeof(int) + sizeof(char)"); }
+    SECTION("sizeof(double) > sizeof(float)") { ExpectParses("expression", "sizeof(double) > sizeof(float)"); }
+}
+
+TEST_CASE("C11 - expression: alignof with builtin types", "[parser][type-name]")
+{
+    SECTION("alignof(int)") { ExpectParses("expression", "alignof(int)"); }
+    SECTION("alignof(char)") { ExpectParses("expression", "alignof(char)"); }
+    SECTION("alignof(double)") { ExpectParses("expression", "alignof(double)"); }
+    SECTION("alignof(long)") { ExpectParses("expression", "alignof(long)"); }
+}
+
+TEST_CASE("C11 - expression: type-name in compound expressions", "[parser][type-name]")
+{
+    // type cast as function call argument
+    SECTION("f((int)x)") { ExpectParses("expression", "f((int)x)"); }
+    // sizeof in ternary condition
+    SECTION("sizeof(int) > 4 ? 1 : 0") { ExpectParses("expression", "sizeof(int) > 4 ? 1 : 0"); }
+    // type cast then postfix
+    SECTION("(int)f()") { ExpectParses("expression", "(int)f()"); }
+    // chained type casts
+    SECTION("(int)(double)x") { ExpectParses("expression", "(int)(double)x"); }
+    // sizeof of parenthesized expression
+    SECTION("sizeof(a + b)") { ExpectParses("expression", "sizeof(a + b)"); }
 }
 
 // ===================================================================
