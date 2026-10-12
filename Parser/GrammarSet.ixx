@@ -172,9 +172,8 @@ auto FollowSets(String startSymbol, SimpleGrammars const& grammars, map<String, 
     map<String, MergeSet<Terminal>> followSets;
     for (auto const& nt : keys(firstSets))
     {
-        followSets.insert({ nt, {} });
+        followSets.insert({ nt, { Terminal{ String(format("{}_EOF_", nt)), Coordinate("", -1, -1) } } });
     }
-    followSets.at(startSymbol) = { Terminal{ String(eof), Coordinate("", -1, -1) } };
 
     for (auto changing = true; changing; )
     {
@@ -192,7 +191,7 @@ auto FollowSets(String startSymbol, SimpleGrammars const& grammars, map<String, 
                 for (int i = static_cast<int>(rule.size() - 1); i >= 0; --i)
                 {
                     auto& b = rule[i];
-                    if (firstSets.contains(b))
+                    if (firstSets.contains(b)) // nonterminal
                     {
                         bool itemChanged = false;
                         if (auto newFollows = SetUnion(followSets[b], trailer, itemChanged); newFollows.Count() > followSets[b].Count())
@@ -203,7 +202,6 @@ auto FollowSets(String startSymbol, SimpleGrammars const& grammars, map<String, 
                         if (auto const& fs = firstSets.at(b); fs.Contains(epsilon))
                         {
                             trailer = SetUnion(move(trailer), MarkWith(RemoveEpsilon(fs), Coordinate(g.first, ruleIndex, i)));
-                            trailer = SetUnion(trailer, fs);
                         }
                         else
                         {
@@ -231,7 +229,7 @@ auto StartSet(SimpleGrammar const& grammar, map<String, MergeSet<Terminal>> cons
     auto FirstsOf = GenAllSymbolFirstSetGetter<true>(firstSets);
     auto FollowsOf = [&followSets](String const& symbol, Coordinate currentLocation) -> MergeSet<Terminal>
     {
-        if (followSets.contains(symbol))
+        if (followSets.contains(symbol)) // nonterminal
         {
             auto s = followSets.at(symbol);
             for (auto& x : s)

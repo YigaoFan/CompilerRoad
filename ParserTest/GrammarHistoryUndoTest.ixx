@@ -21,7 +21,6 @@ struct MockToken
 {
     TokType Type;
     string Value;
-    auto IsEof() const -> bool { return false; }
 };
 
 using Node = SyntaxTreeNode<MockToken, void>;

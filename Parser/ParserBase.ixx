@@ -43,7 +43,6 @@ export
 {
     constexpr string_view epsilon = "";
     /// \0 in string means eof, note only work in grammar representation
-    constexpr string_view eof = "\0";
     //using Input = string; // TODO change
 
     struct ParseFailResult
@@ -70,7 +69,6 @@ export
     {
         { t.Type } -> ExplicitConvertibleTo<int>; // when lex comes with conflict, it will chose the one with lower int value
         { t.Value } -> std::convertible_to<string>;
-        { t.IsEof() } -> std::same_as<bool>;
     };
 
     template <IToken Token, typename ChildSyntaxNode>
@@ -184,23 +182,8 @@ export
     };
 
     template <IToken Token, typename Result>
-    struct std::formatter<SyntaxTreeNode<Token, Result>, char>
+    struct std::formatter<SyntaxTreeNode<Token, Result>, char> : NoSpecialProcessParse
     {
-        constexpr auto parse(std::format_parse_context& ctx)
-        {
-            auto it = ctx.begin();
-            if (it == ctx.end())
-                return it;
-
-            if (it != ctx.end() && *it != '}')
-                throw std::format_error("Invalid format args for QuotableString.");
-
-            return it;
-        }
-
-        template<class... Ts>
-        struct overloads : Ts... { using Ts::operator()...; };
-
         template <class FormatContext>
         constexpr auto format(SyntaxTreeNode<Token, Result> const& t, FormatContext& fc) const
         {
@@ -272,6 +255,23 @@ export
     };
 
     template <typename T>
+    struct std::formatter<ParserResult<T>, char> : NoSpecialProcessParse
+    {
+        template <typename FormatContext>
+        constexpr auto format(ParserResult<T> const& result, FormatContext& ctx) const
+        {
+            if (result.has_value())
+            {
+                return std::format_to(ctx.out(), "{}", result.value());
+            }
+            else
+            {
+                return std::format_to(ctx.out(), "{}", result.error().Message);
+            }
+        }
+    };
+
+    template <typename T>
     concept IConflictResolvable = requires (T t, String nontermin, int tokType)
     {
         { t.Resolvable(nontermin, tokType) } -> std::same_as<bool>;
@@ -283,14 +283,28 @@ export
         { t.template Resolve<ActualStream, Tok>(workingNodes, nontermin, tok.Type, options, stream) } -> std::same_as<expected<int, ParseFailResult>>;
     };
 
+    template <template <typename> class ActualStream, typename Tok, typename Result>
+    constexpr auto fakeParseLambda = [](String nontermin, ActualStream<Tok>& stream)
+    {
+
+    };
     template <typename T, template <typename> class ActualStream, typename Tok, typename Result>
-    concept ICustomParser = requires (T t, String nontermin, String termin, ActualStream<Tok> stream, HtmlLogger& logger)
+    concept ICustomParser = requires (T t, String nontermin, ActualStream<Tok> stream)
     {
 		requires Stream<ActualStream, Tok>;
-
         //requires std::invocable<decltype(parse), String, decltype(stream)>; // maybe cannot deduce the Stream concept and Tok in concept type here, should use other way
 	    { t.Parsable(nontermin) } -> std::same_as<bool>;
-        { t.template Parse<Result>(nontermin, stream, logger) } -> std::same_as<ParserResult<SyntaxTreeNode<Tok, Result>>>; // error here, also cannot deduce the type arg for Parse
+
+        // Parse with optional logger: accepts either (nontermin, stream, logger) or (nontermin, stream)
+        requires 
+            requires (HtmlLogger& logger) 
+            {
+                { t.template Parse<Result>(nontermin, stream, fakeParseLambda<ActualStream, Tok, Result>, logger) } -> std::same_as<ParserResult<SyntaxTreeNode<Tok, Result>>>;
+            } or 
+            requires
+			{
+				{ t.template Parse<Result>(nontermin, stream, fakeParseLambda<ActualStream, Tok, Result>) } -> std::same_as<ParserResult<SyntaxTreeNode<Tok, Result>>>;
+			};
     };
 
     template <size_t N1>

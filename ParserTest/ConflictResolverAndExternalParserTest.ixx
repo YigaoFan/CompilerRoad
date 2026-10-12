@@ -25,13 +25,12 @@ using std::ranges::to;
 // Mock token types & token
 // ============================================================================
 
-enum class MockTokType { Int, Char, Id, Plus, Star, LPar, RPar, Semicolon, Eof };
+enum class MockTokType { Int, Char, Id, Plus, Star, LPar, RPar, Semicolon };
 
 struct MockToken
 {
     MockTokType Type;
     string Value;
-    auto IsEof() const -> bool { return Type == MockTokType::Eof; }
 };
 
 template<>
@@ -80,7 +79,7 @@ struct NoExternalParser
 
     template <typename Result, template <typename> class ActualStream, typename Tok>
         requires Stream<ActualStream, Tok>
-    auto Parse(String, ActualStream<Tok>&) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
+    auto Parse(String, ActualStream<Tok>&, auto) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
         return unexpected(ParseFailResult{ .Message = "NoExternalParser: not implemented" });
     }
@@ -157,9 +156,8 @@ public:
 
     template <typename Result, template <typename> class ActualStream, typename Tok>
         requires Stream<ActualStream, Tok>
-    auto Parse(String nontermin, ActualStream<Tok>& stream) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
+    auto Parse(String nontermin, ActualStream<Tok>& stream, auto) const -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
-        // TODO pass logger into here
         if (not Parsable(nontermin))
         {
             return unexpected(ParseFailResult{ .Message = format("nonterminal({}) isn't parsable by MockExternalParser", nontermin) });
@@ -291,7 +289,6 @@ TEST_CASE("ConflictResolver - without resolver, grammar is not LL(1)", "[conflic
 
     map<string_view, int> terminal2IntTokenType
     {
-        { "\0",   static_cast<int>(MockTokType::Eof) },
         { "int",  static_cast<int>(MockTokType::Int) },
         { "char", static_cast<int>(MockTokType::Char) },
         { "id",   static_cast<int>(MockTokType::Id) },
@@ -319,7 +316,6 @@ TEST_CASE("ConflictResolver - typedef-like declaration", "[conflict]")
 
     map<string_view, int> terminal2IntTokenType
     {
-        { "\0",   static_cast<int>(MockTokType::Eof) },
         { "int",  static_cast<int>(MockTokType::Int) },
         { "char", static_cast<int>(MockTokType::Char) },
         { "id",   static_cast<int>(MockTokType::Id) },
@@ -335,7 +331,6 @@ TEST_CASE("ConflictResolver - typedef-like declaration", "[conflict]")
         { MockTokType::Id,  "MyType" },
         { MockTokType::Id,  "x" },
         { MockTokType::Semicolon, ";" },
-        { MockTokType::Eof, "" },
     });
 
     auto result = p.Parse<void>(VectorStream{ .Tokens = move(toks) }, [](auto){}, {}, resolver, noExtParser);
@@ -372,7 +367,6 @@ TEST_CASE("ConflictResolver - expression statement", "[conflict]")
 
     map<string_view, int> terminal2IntTokenType
     {
-        { "\0",   static_cast<int>(MockTokType::Eof) },
         { "int",  static_cast<int>(MockTokType::Int) },
         { "char", static_cast<int>(MockTokType::Char) },
         { "id",   static_cast<int>(MockTokType::Id) },
@@ -387,7 +381,6 @@ TEST_CASE("ConflictResolver - expression statement", "[conflict]")
     auto toks = MakeMockTokens({
         { MockTokType::Id,  "x" },
         { MockTokType::Semicolon, ";" },
-        { MockTokType::Eof, "" },
     });
 
     auto result = p.Parse<void>(VectorStream{ .Tokens = move(toks) }, [](auto){}, {}, resolver, noExtParser);
@@ -425,7 +418,6 @@ TEST_CASE("ExternalParser - single atom", "[external-parser]")
 
     map<string_view, int> terminal2IntTokenType
     {
-        { "\0",  static_cast<int>(MockTokType::Eof) },
         { "id",  static_cast<int>(MockTokType::Id) },
         { "+",   static_cast<int>(MockTokType::Plus) },
         { "*",   static_cast<int>(MockTokType::Star) },
@@ -440,7 +432,6 @@ TEST_CASE("ExternalParser - single atom", "[external-parser]")
     auto toks = MakeMockTokens({
         { MockTokType::Id, "x" },
         { MockTokType::Semicolon, ";" },
-        { MockTokType::Eof, "" },
     });
 
     auto result = p.Parse<void>(VectorStream{ .Tokens = move(toks) }, [](auto){}, {}, noResolver, extParser);
@@ -472,7 +463,6 @@ TEST_CASE("ExternalParser - addition", "[external-parser]")
 
     map<string_view, int> terminal2IntTokenType
     {
-        { "\0",  static_cast<int>(MockTokType::Eof) },
         { "id",  static_cast<int>(MockTokType::Id) },
         { "+",   static_cast<int>(MockTokType::Plus) },
         { "*",   static_cast<int>(MockTokType::Star) },
@@ -489,7 +479,6 @@ TEST_CASE("ExternalParser - addition", "[external-parser]")
         { MockTokType::Plus, "+" },
         { MockTokType::Id, "b" },
         { MockTokType::Semicolon, ";" },
-        { MockTokType::Eof, "" },
     });
 
     auto result = p.Parse<void>(VectorStream{ .Tokens = move(toks) }, [](auto){}, {}, noResolver, extParser);
@@ -518,7 +507,6 @@ TEST_CASE("ExternalParser - precedence: a + b * c", "[external-parser]")
 
     map<string_view, int> terminal2IntTokenType
     {
-        { "\0",  static_cast<int>(MockTokType::Eof) },
         { "id",  static_cast<int>(MockTokType::Id) },
         { "+",   static_cast<int>(MockTokType::Plus) },
         { "*",   static_cast<int>(MockTokType::Star) },
@@ -537,7 +525,6 @@ TEST_CASE("ExternalParser - precedence: a + b * c", "[external-parser]")
         { MockTokType::Star, "*" },
         { MockTokType::Id, "c" },
         { MockTokType::Semicolon, ";" },
-        { MockTokType::Eof, "" },
     });
 
     auto result = p.Parse<void>(VectorStream{ .Tokens = move(toks) }, [](auto){}, {}, noResolver, extParser);
@@ -569,7 +556,6 @@ TEST_CASE("ExternalParser - precedence: a * b + c", "[external-parser]")
 
     map<string_view, int> terminal2IntTokenType
     {
-        { "\0",  static_cast<int>(MockTokType::Eof) },
         { "id",  static_cast<int>(MockTokType::Id) },
         { "+",   static_cast<int>(MockTokType::Plus) },
         { "*",   static_cast<int>(MockTokType::Star) },
@@ -588,7 +574,6 @@ TEST_CASE("ExternalParser - precedence: a * b + c", "[external-parser]")
         { MockTokType::Plus, "+" },
         { MockTokType::Id, "c" },
         { MockTokType::Semicolon, ";" },
-        { MockTokType::Eof, "" },
     });
 
     auto result = p.Parse<void>(VectorStream{ .Tokens = move(toks) }, [](auto){}, {}, noResolver, extParser);
@@ -639,7 +624,6 @@ TEST_CASE("ConflictResolver + ExternalParser - declaration then expression", "[c
 
     map<string_view, int> terminal2IntTokenType
     {
-        { "\0",   static_cast<int>(MockTokType::Eof) },
         { "int",  static_cast<int>(MockTokType::Int) },
         { "char", static_cast<int>(MockTokType::Char) },
         { "id",   static_cast<int>(MockTokType::Id) },
@@ -661,7 +645,6 @@ TEST_CASE("ConflictResolver + ExternalParser - declaration then expression", "[c
         { MockTokType::Plus, "+" },
         { MockTokType::Id, "b" },
         { MockTokType::Semicolon, ";" },
-        { MockTokType::Eof, "" },
     });
 
     auto result = p.Parse<void>(VectorStream{ .Tokens = move(toks) }, [](auto){}, {}, resolver, extParser);
@@ -715,7 +698,6 @@ TEST_CASE("ConflictResolver + ExternalParser - expression only (no decl)", "[con
 
     map<string_view, int> terminal2IntTokenType
     {
-        { "\0",   static_cast<int>(MockTokType::Eof) },
         { "int",  static_cast<int>(MockTokType::Int) },
         { "char", static_cast<int>(MockTokType::Char) },
         { "id",   static_cast<int>(MockTokType::Id) },
@@ -732,7 +714,6 @@ TEST_CASE("ConflictResolver + ExternalParser - expression only (no decl)", "[con
     auto toks = MakeMockTokens({
         { MockTokType::Id, "x" },
         { MockTokType::Semicolon, ";" },
-        { MockTokType::Eof, "" },
     });
 
     auto result = p.Parse<void>(VectorStream{ .Tokens = move(toks) }, [](auto){}, {}, resolver, extParser);

@@ -67,12 +67,13 @@ public:
 class HtmlLogger
 {
 private:
-	static const bool EnableHtmlLogger = true;
 	String filename;
 	vector<string> toks;
 	unique_ptr<HtmlDetail> rootDetail; // workingDetails will keep the address of rootDetail, so we use heap to keep address identical when move(HtmlLogger)
 	stack<HtmlDetail*> workingDetails;
 public:
+	bool EnableHtmlLogger = true;
+
 	static auto NewFromCurrentTime() -> HtmlLogger
 	{
 		auto now = std::chrono::system_clock::now();
@@ -110,6 +111,11 @@ public:
 		using std::ranges::views::join_with;
 		using std::ranges::to;
 		using namespace std::string_view_literals;
+
+		if (not EnableHtmlLogger)
+		{
+			return;
+		}
 
 		string msg = std::format(format, std::forward<Args>(args)...);
 		msg = msg | split("\n"sv) | join_with("<br>"sv) | to<string>();

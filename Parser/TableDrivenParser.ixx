@@ -46,11 +46,6 @@ struct Symbol
     Symbol(String symbol) : Value(move(symbol))
     {
     }
-
-    auto IsEof() const -> bool
-    {
-        return Value == eof;
-    }
 };
 
 struct Void
@@ -112,6 +107,7 @@ private:
     ConvertedGrammars const convertedGrammars;
     map<pair<String, int>, vector<int>> const parseTable;
     map<string_view, int> const terminal2IntTokenType;
+    map<pair<String, String>, int> acceptedEofPairs;
 
 	mutable HtmlLogger logger;
 public:
@@ -142,6 +138,7 @@ public:
         convertedGrammars.Grammars.insert_range(move(newAddGrammars));
 
         map<pair<String, int>, vector<int>> parseTable;
+        map<pair<String, String>, int> acceptedEofPairs;
         
         map<String, set<String>> externalFirstSet;
         if constexpr (optionalExternalParser)
@@ -161,6 +158,12 @@ public:
             {
                 for (Terminal const& termin : r.second)
                 {
+                    if (termin.Value.EndWith("_EOF_"))
+                    {
+                        // (parsing nontermin, root nontermin) -> rule index
+                        acceptedEofPairs.insert({ { nontermin, termin.Value.Substring(0, termin.Value.Length() - 5) }, j });
+                        continue;
+					}
                     if (not terminal2IntTokenType.contains(static_cast<String>(termin)))
                     {
                         throw logic_error(format("terminal2IntTokenType not contain termin item: {}", termin));
@@ -220,11 +223,11 @@ public:
 
         //std::println("parse table: {}", parseTable);
         auto logger = HtmlLogger::NewFromCurrentTime();
-        return LLParser(move(startSymbol), move(convertedGrammars), move(parseTable), move(terminal2IntTokenType), move(logger));
+        return LLParser(move(startSymbol), move(convertedGrammars), move(parseTable), move(terminal2IntTokenType), move(acceptedEofPairs), move(logger));
     }
 
-    LLParser(String startSymbol, ConvertedGrammars grammars, map<pair<String, int>, vector<int>> parseTable, map<string_view, int> terminal2IntTokenType, HtmlLogger logger)
-		: startSymbol(move(startSymbol)), convertedGrammars(move(grammars)), parseTable(move(parseTable)), terminal2IntTokenType(move(terminal2IntTokenType)), logger(move(logger))
+    LLParser(String startSymbol, ConvertedGrammars grammars, map<pair<String, int>, vector<int>> parseTable, map<string_view, int> terminal2IntTokenType, map<pair<String, String>, int> acceptedEofPairs, HtmlLogger logger)
+		: startSymbol(move(startSymbol)), convertedGrammars(move(grammars)), parseTable(move(parseTable)), terminal2IntTokenType(move(terminal2IntTokenType)), acceptedEofPairs(move(acceptedEofPairs)), logger(move(logger))
     { }
 
     LLParser(LLParser const&) = delete;
@@ -232,19 +235,27 @@ public:
     LLParser(LLParser&&) = default;
     auto operator= (LLParser&& that) -> LLParser& = default;
 
-    template <typename Result, template <typename> class ActualStream, IToken Tok, typename Callback, typename Arg0 = Void, typename Arg1 = Void>
-		requires Stream<ActualStream, Tok>
+    template <typename Result, template <typename> class ActualStream, IToken Tok, typename Callback, typename Arg0 = Void, typename Arg1 = Void, typename Arg2 = Void>
+        requires Stream<ActualStream, Tok>
             and INodeCallback<Callback, Tok, Result>
-	        and (std::is_same_v<Arg0, Void> or ICustomParser<Arg0, ActualStream, Tok, Result>)
-	        and (std::is_same_v<Arg1, Void> or IConflictResolve<Arg1, ActualStream, Tok, Result>)
-    auto Parse(ActualStream<Tok> stream, Callback callback, set<int> const& ignorableTokenTypes = {}, Arg1&& conflictResolver = Void{},
-        Arg0&& externalParser = Void{}) const
+            and (std::is_same_v<Arg0, Void> or ICustomParser<Arg0, ActualStream, Tok, Result>)
+            and (std::is_same_v<Arg1, Void> or IConflictResolve<Arg1, ActualStream, Tok, Result>)
+            and (std::is_same_v<Arg2, Void> or std::is_convertible_v<Arg2, String>)
+    auto Parse(ActualStream<Tok> stream, Callback callback, set<int> const& ignorableTokenTypes = {}, Arg1&& conflictResolver = {},
+            Arg0&& externalParser = {}, Arg2&& newStartSymbol = {}) const
+        -> ParserResult<SyntaxTreeNode<Tok, Result>>
+    {
+		logger.LogCode(stream);
+		return ParseWith<Result>(stream, callback, ignorableTokenTypes, std::forward<Arg1>(conflictResolver), std::forward<Arg0>(externalParser), std::forward<Arg2>(newStartSymbol));
+    }
+
+    template <typename Result, template <typename> class ActualStream, IToken Tok, typename Callback, typename Arg0 = Void, typename Arg1 = Void, typename Arg2 = Void>
+    auto ParseWith(ActualStream<Tok>& stream, Callback callback, set<int> const& ignorableTokenTypes, Arg1&& conflictResolver = Void{},
+        Arg0&& externalParser = {}, Arg2&& newStartSymbol = {}) const
         -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
         using std::ranges::views::reverse;
         using std::unexpected;
-
-        logger.LogCode(stream);
 
         /// <summary>
         /// Only work for terminal symbol or eof
@@ -259,8 +270,13 @@ public:
         };
         auto IsTerminal = [this](Symbol const& t) { return terminal2IntTokenType.contains(t.Value); };
         stack<Symbol> symbolStack;
-        symbolStack.push(String(eof));
-        symbolStack.push(startSymbol);
+		String rootSymbol { startSymbol };
+        if constexpr (auto optionalArg = OptionalArg(std::forward<Arg2>(newStartSymbol)); optionalArg)
+        {
+			rootSymbol = String(optionalArg.Value);
+        }
+		symbolStack.push(rootSymbol);
+
         auto word = stream.Current();
         SyntaxTreeNode<Tok, Result> root{ "root", { startSymbol } }; // TODO why "root" is shown as "???" in VS debugger
         stack<SyntaxTreeNode<Tok, Result>*> workingNodes;
@@ -304,6 +320,23 @@ public:
                 }
             }
         };
+        auto TryMoveNext = [&stream, &word, this](string_view reason) -> void
+        {
+            if (stream.MoveNext())
+            {
+                word = stream.Current();
+                logger.Log(Level::Here, "stream move forward, got: {}", word);
+            }
+            else
+            {
+                // assume there exist a **EOF of start symbol** if a expand operation is not OK for parse when MoveNext() is false
+                // then use (nontermin, EOF of start symbol) to pair
+                // actually, not need let EOF appear, only use (nontermin, root symbol) to record this info
+				word.Type = static_cast<decltype(word.Type)>(-1); // -1 means an invalid value and MoveNext() is failed
+				word.Value = "_EOF_";
+                logger.Log(Level::Here, "{} stream try to move forward, but reach the end", reason);
+            }
+		};
         auto DoWhenGotChild = [&]<bool IsFulfilledChild, bool ConsumedWord>(variant<Tok, SyntaxTreeNode<Tok, Result>> child, bool_constant<IsFulfilledChild>, bool_constant<ConsumedWord>)
         {
 			symbolStack.pop();
@@ -316,9 +349,7 @@ public:
             PopAllFilledNodes();
             if constexpr (ConsumedWord) // if consumed word in parse this child's progress, we should update it
             {
-                stream.MoveNext();
-                word = stream.Current();
-                logger.Log(Level::Here, "stream move forward, got: {}", word);
+                TryMoveNext("DoWhenGotChild");
             }
         };
         auto ExpandRule = [&symbolStack, &DoWhenGotChild, this](Symbol const& focus, Tok const& tok, int expandRuleIndex, string_view reason)
@@ -336,13 +367,13 @@ public:
 		};
         while (true)
         {
-            auto const& focus = symbolStack.top();
-
-            if (focus.IsEof() and MatchTerminal(focus, word))
+            if (symbolStack.empty())
             {
                 return root;
             }
-            else if (IsTerminal(focus) or focus.IsEof())
+
+            auto const& focus = symbolStack.top();
+            if (IsTerminal(focus))
             {
                 if (MatchTerminal(focus, word))
                 {
@@ -350,9 +381,7 @@ public:
                 }
                 else if (ignorableTokenTypes.contains(static_cast<int>(word.Type)))
                 {
-                    stream.MoveNext();
-                    word = stream.Current();
-                    logger.Log(Level::Here, "ignore a token, stream move forward, got: {}", word);
+                    TryMoveNext("ignorableTokenTypes");
                 }
                 else
                 {
@@ -360,9 +389,20 @@ public:
                     return unexpected(ParseFailResult{ .Message = format("cannot found token for terminal symbol({}) when parse", focus.Value) });
                 }
             }
+            else if (static_cast<int>(word.Type) == -1 and word.Value == "_EOF_")
+            {
+				if (pair k{ focus.Value, rootSymbol }; acceptedEofPairs.contains(k))
+				{
+                    // expand empty rule i
+					// it means the focus symbol can accept the EOF of start symbol, so we can end the parse
+                    auto i = acceptedEofPairs.at(k);
+                    ExpandRule(focus, word, i, "got _EOF_");
+                    continue;
+				}
+            }
             else
             {
-				if (auto dest = pair{ focus.Value, static_cast<int>(word.Type) }; parseTable.contains(dest))
+				if (pair dest{ focus.Value, static_cast<int>(word.Type) }; parseTable.contains(dest))
 				{
 					if (parseTable.at(dest).size() == 1)
 					{
@@ -395,27 +435,41 @@ public:
 				{
 					if (optionalArg.Value.Parsable(focus.Value))
 					{
+                        auto internalParse = [this, &callback, &ignorableTokenTypes, &conflictResolver, &externalParser](String startSymbol, ActualStream<Tok>& stream) -> ParserResult<SyntaxTreeNode<Tok, Result>>
+                        {
+                            // use a sub logger? TODO
+                            // nested logger has bug, so disable now
+                            // maybe handle parent and children callback not very completely
+                            logger.EnableHtmlLogger = false;
+                            auto r = ParseWith<Result>(stream, callback, ignorableTokenTypes, conflictResolver, externalParser, startSymbol);
+                            logger.EnableHtmlLogger = true;
+                            return r;
+                        };
                         // let the stream position on the last consumed token
-						auto r = optionalArg.Value.Parse<Result>(focus.Value, stream, logger);
-						if (not r.has_value())
+						decltype(auto) result = [&]() 
+                        {
+							if constexpr (requires { optionalArg.Value.template Parse<Result>(focus.Value, stream, internalParse, logger); })
+								return optionalArg.Value.template Parse<Result>(focus.Value, stream, internalParse, logger);
+							else
+								return optionalArg.Value.template Parse<Result>(focus.Value, stream, internalParse);
+						}();
+						if (not result.has_value())
 						{
-							logger.Log(Level::Out, "use external parser parse ({}, {}) failed: {}", focus.Value, word, r.error().Message);
-							return unexpected(ParseFailResult{ .Message = format("use external parser parse ({}, {}) failed: {}", focus.Value, word, r.error().Message) });
+							logger.Log(Level::Out, "use external parser parse ({}, {}) failed: {}", focus.Value, word, result.error().Message);
+							return unexpected(ParseFailResult{ .Message = format("use external parser parse ({}, {}) failed: {}", focus.Value, word, result.error().Message) });
 						}
-                        if (r.value().ChildSymbols.size() != r.value().Children.size())
+                        if (result.value().ChildSymbols.size() != result.value().Children.size())
                         {
                             // warning
                         }
                         logger.Log(Level::Here, "use external parser parse ({}, {}) done", focus.Value, word);
-						DoWhenGotChild(move(r.value()), bool_constant<true>{}, bool_constant<true>{});
+						DoWhenGotChild(move(result.value()), bool_constant<true>{}, bool_constant<true>{});
 						continue;
 					}
 				}
 				if (ignorableTokenTypes.contains(static_cast<int>(word.Type)))
 				{
-					stream.MoveNext();
-					word = stream.Current();
-                    logger.Log(Level::Here, "ignore a token, stream move forward, got: {}", word);
+					TryMoveNext("ignorableTokenTypes");
 					continue;
 				}
 
@@ -507,7 +561,6 @@ public:
         -> ParserResult<SyntaxTreeNode<Tok, Result>>
     {
         stack<Symbol> symbolStack;
-        symbolStack.push(String(eof));
         symbolStack.push(startSymbol);
         SyntaxTreeNode<Tok, Result> root{ "root", { startSymbol } }; // TODO why "root" is shown as "???" in VS debugger
         //map<tuple<String, int, size_t>, int> tryMemory;
@@ -608,7 +661,7 @@ private:
                     auto const focus = SymbolStack.top();
                     //println("focus on {} at token {}", focus.Value, word);
 
-                    if (focus.IsEof() and MatchTerminal(focus, word))
+                    if (MatchTerminal(focus, word))
                     {
                         TokStream.MoveNext();
                         Assert(continuations.empty(), "continuations should be empty when encounter EOF");
@@ -625,7 +678,7 @@ private:
                         }
                         DoWhenGotChild(move(subResult.value()), bool_constant<true>{}, bool_constant<true>{}); // handle as terminal
                     }
-                    else if (IsTerminal(focus) or focus.IsEof())
+                    else if (IsTerminal(focus))
                     {
                         if (MatchTerminal(focus, word))
                         {
@@ -761,19 +814,6 @@ private:
             /// </summary>
             auto MatchTerminal(Symbol const& symbol, Tok const& token) -> bool
             {
-                if (symbol.IsEof())
-                {
-                    if (token.IsEof())
-                    {
-                        return true;
-                    }
-                    else
-                    {
-                        return false;
-                    }
-                }
-
-                // TODO compare the actual value, like the Keyword include multiple values
                 if (auto dest = TopParser->terminal2IntTokenType.at(symbol.Value); dest == static_cast<int>(token.Type))
                 {
                     return true;

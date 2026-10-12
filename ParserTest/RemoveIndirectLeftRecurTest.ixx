@@ -19,13 +19,12 @@ using std::size_t;
 // Mock token & helpers for syntax tree undo tests
 // ============================================================================
 
-enum class TokType { Ident, Comma, Eof };
+enum class TokType { Ident, Comma };
 
 struct MockToken
 {
     TokType Type;
     string Value;
-    auto IsEof() const -> bool { return Type == TokType::Eof; }
 };
 
 template<>
@@ -893,11 +892,6 @@ TEST_CASE("Left2RightRecur::Undo - single element no recursion", "[parser][undo]
 // left-recursive structure.
 // ============================================================================
 
-static auto MakeEof() -> MockToken
-{
-    return { TokType::Eof, "eof" };
-}
-
 /// <summary>
 /// Build an LLParser for the grammar L -> a | L "," a
 /// </summary>
@@ -909,7 +903,6 @@ static auto BuildListParser() -> LLParser
     map<string_view, int> terminal2IntTokenType;
     terminal2IntTokenType["a"] = static_cast<int>(TokType::Ident);
     terminal2IntTokenType[","] = static_cast<int>(TokType::Comma);
-    terminal2IntTokenType[eof] = static_cast<int>(TokType::Eof);
 
     return LLParser::ConstructFrom(S("L"), move(grammars), terminal2IntTokenType);
 }
@@ -918,18 +911,20 @@ TEST_CASE("LLParser integration - three elements left-recursive tree", "[parser]
 {
     auto parser = BuildListParser();
 
-    // Token stream: a , a , a , eof
+    // Token stream: a , a , a
     vector<MockToken> tokens;
     tokens.push_back(MakeToken(TokType::Ident, "a"));
     tokens.push_back(MakeToken(TokType::Comma, ","));
     tokens.push_back(MakeToken(TokType::Ident, "a"));
     tokens.push_back(MakeToken(TokType::Comma, ","));
     tokens.push_back(MakeToken(TokType::Ident, "a"));
-    tokens.push_back(MakeEof());
 
     auto result = parser.Parse<void>(VectorStream{ .Tokens = move(tokens) },
         [](Node*) {});
-
+    if (not result.has_value())
+    {
+        UNSCOPED_INFO("Parse failed: " << result.error().Message);
+    }
     REQUIRE(result.has_value());
 
     // Root wraps the start symbol; actual result is root's child
@@ -973,10 +968,9 @@ TEST_CASE("LLParser integration - single element", "[parser][integration]")
 {
     auto parser = BuildListParser();
 
-    // Token stream: a , eof
+    // Token stream: a
     vector<MockToken> tokens;
     tokens.push_back(MakeToken(TokType::Ident, "a"));
-    tokens.push_back(MakeEof());
 
     auto result = parser.Parse<void>(VectorStream{ .Tokens = move(tokens) },
         [](Node*) {});
@@ -999,12 +993,11 @@ TEST_CASE("LLParser integration - two elements", "[parser][integration]")
 {
     auto parser = BuildListParser();
 
-    // Token stream: a , a , eof
+    // Token stream: a , a
     vector<MockToken> tokens;
     tokens.push_back(MakeToken(TokType::Ident, "a"));
     tokens.push_back(MakeToken(TokType::Comma, ","));
     tokens.push_back(MakeToken(TokType::Ident, "a"));
-    tokens.push_back(MakeEof());
 
     auto result = parser.Parse<void>(VectorStream{ .Tokens = move(tokens) },
         [](Node*) {});
