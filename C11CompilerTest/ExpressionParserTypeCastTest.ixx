@@ -68,12 +68,7 @@ static auto FullTypeCastExternalParse = [](String const& nontermin, VectorStream
         ExpressionParser expParser; // TODO let ExpressionParser out from here
 
         auto p = LLParser::ConstructFrom(String(nontermin), grammars, terminal2IntTokenType, resolver, expParser);
-        // TODO add api to create minimal LLParser which without external parser version and can be passed stream
         auto r = p.ParseWith<Context>(stream, [](auto) {}, {});
-        if (not r.has_value())
-        {
-			std::println("FullTypeCastExternalParse failed to parse type-name: {}", r.error().Message);
-		}
 		return r;
     }
     return std::unexpected(ParseFailResult{ format("unsupported nonterminal: {}", nontermin) });

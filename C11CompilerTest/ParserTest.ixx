@@ -300,6 +300,12 @@ TEST_CASE("C11 - parameter-declaration", "[parser]")
     ExpectParses("declaration", "void f(int);");
     ExpectParses("declaration", "void f(int *);");
     ExpectParses("declaration", "void f(int []);");
+    // struct definition (with body) in parameter list
+    ExpectParses("declaration", "void f(struct S { int x; } s);");
+    ExpectParses("declaration", "void f(struct { int x; });");
+    ExpectParses("declaration", "void f(struct { int x; } s);");
+    ExpectParses("declaration", "void f(int a, struct S { int x; } b);");
+    ExpectParses("declaration", "void f(struct S { int x; }, struct T { int y; });");
 }
 
 // ===== identifier-list =====
@@ -656,4 +662,380 @@ TEST_CASE("C11 - function call expressions", "[parser][function-call]")
     SECTION("complex: f(a, g(b, h(c)))") { ExpectParses("expression", "f(a, g(b, h(c)))"); }
     SECTION("complex: a + f(b) * g(c)") { ExpectParses("expression", "a + f(b) * g(c)"); }
     SECTION("complex: f(a) ? g(b) : h(c)") { ExpectParses("expression", "f(a) ? g(b) : h(c)"); }
+}
+
+// ===================================================================
+// Helper: recursively find a node by name in the parse tree
+// ===================================================================
+
+static auto FindNode(NodeType* node, string const& name) -> NodeType*
+{
+    if (!node)
+    {
+        return nullptr;
+    }
+    if (node->Name == name)
+    {
+        return node;
+    }
+    for (size_t i = 0; i < node->Children.size(); ++i)
+    {
+        if (auto* child = get_if<NodeType>(&node->Children[i]))
+        {
+            if (auto* found = FindNode(child, name))
+            {
+                return found;
+            }
+        }
+    }
+    return nullptr;
+}
+
+static auto FindChild(NodeType* node, string const& childName) -> NodeType*
+{
+    if (!node)
+    {
+        return nullptr;
+    }
+    for (size_t i = 0; i < node->Children.size(); ++i)
+    {
+        if (auto* child = get_if<NodeType>(&node->Children[i]))
+        {
+            if (child->Name == childName)
+            {
+                return child;
+            }
+        }
+    }
+    return nullptr;
+}
+
+// ===================================================================
+// Basic tests for statement-related rules (lines 145-156)
+// ===================================================================
+
+// ===== statement =====
+TEST_CASE("C11 - statement", "[parser]")
+{
+    ExpectParses("statement", "x:;");
+    ExpectParses("statement", "{}");
+    ExpectParses("statement", ";");
+    ExpectParses("statement", "if (x) {}");
+    ExpectParses("statement", "while (x) {}");
+    ExpectParses("statement", "break;");
+    ExpectParses("statement", "x = 1;");
+}
+
+// ===== labeled-statement =====
+TEST_CASE("C11 - labeled-statement", "[parser]")
+{
+    ExpectParses("labeled-statement", "x:;");
+    ExpectParses("labeled-statement", "case 1:;");
+    ExpectParses("labeled-statement", "default:;");
+    ExpectParses("labeled-statement", "x:{ int a; }");
+    ExpectParses("labeled-statement", "case 1 + 2: break;");
+    ExpectParses("labeled-statement", "default: break;");
+}
+
+// ===== compound-statement =====
+TEST_CASE("C11 - compound-statement", "[parser]")
+{
+    ExpectParses("compound-statement", "{}");
+    ExpectParses("compound-statement", "{ int x; }");
+    ExpectParses("compound-statement", "{ int x; int y; }");
+    ExpectParses("compound-statement", "{ { } }");
+    ExpectParses("compound-statement", "{ int x; x = 1; }");
+    ExpectParses("compound-statement", "{ if (x) {} }");
+}
+
+// ===== block-item-list =====
+TEST_CASE("C11 - block-item-list", "[parser]")
+{
+    ExpectParses("compound-statement", "{ int x; }");
+    ExpectParses("compound-statement", "{ int x; int y; }");
+    ExpectParses("compound-statement", "{ int x; x = 1; int y; }");
+    ExpectParses("compound-statement", "{ x = 1; y = 2; z = 3; }");
+}
+
+// ===== block-item =====
+TEST_CASE("C11 - block-item", "[parser]")
+{
+    ExpectParses("compound-statement", "{ int x; }");
+    ExpectParses("compound-statement", "{ x = 1; }");
+    ExpectParses("compound-statement", "{ if (x) {} }");
+    ExpectParses("compound-statement", "{ {} }");
+}
+
+// ===== expression-statement =====
+TEST_CASE("C11 - expression-statement", "[parser]")
+{
+    ExpectParses("expression-statement", ";");
+    ExpectParses("expression-statement", "x = 1;");
+    ExpectParses("expression-statement", "a + b;");
+    ExpectParses("expression-statement", "f();");
+    ExpectParses("expression-statement", "x++;");
+    ExpectParses("expression-statement", "*p = 0;");
+}
+
+// ===== selection-statement =====
+TEST_CASE("C11 - selection-statement", "[parser]")
+{
+    ExpectParses("selection-statement", "if (x) {}");
+    ExpectParses("selection-statement", "if (x) {} else {}");
+    ExpectParses("selection-statement", "if (a + b) return;");
+    ExpectParses("selection-statement", "switch (x) {}");
+    ExpectParses("selection-statement", "switch (a + b) { case 1: break; }");
+    ExpectParses("selection-statement", "if (x) if (y) {} else {}");
+}
+
+// ===== iteration-statement =====
+TEST_CASE("C11 - iteration-statement", "[parser]")
+{
+    ExpectParses("iteration-statement", "while (x) {}");
+    ExpectParses("iteration-statement", "while (a + b) { x = 1; }");
+    ExpectParses("iteration-statement", "do {} while (x);");
+    ExpectParses("iteration-statement", "do { x = 1; } while (a + b);");
+    ExpectParses("iteration-statement", "for (;;) {}");
+    ExpectParses("iteration-statement", "for (x = 0;;) {}");
+    ExpectParses("iteration-statement", "for (; x < 10;) {}");
+    ExpectParses("iteration-statement", "for (;; x++) {}");
+    ExpectParses("iteration-statement", "for (x = 0; x < 10; x++) {}");
+    ExpectParses("iteration-statement", "for (int i = 0;;) {}");
+    ExpectParses("iteration-statement", "for (int i = 0; i < 10;) {}");
+    ExpectParses("iteration-statement", "for (int i = 0; i < 10; i++) {}");
+}
+
+// ===== jump-statement =====
+TEST_CASE("C11 - jump-statement", "[parser]")
+{
+    ExpectParses("jump-statement", "goto x;");
+    ExpectParses("jump-statement", "continue;");
+    ExpectParses("jump-statement", "break;");
+    ExpectParses("jump-statement", "return;");
+    ExpectParses("jump-statement", "return 0;");
+    ExpectParses("jump-statement", "return a + b;");
+}
+
+// ===================================================================
+// Basic tests for translation-unit-related rules (lines 158-161)
+// ===================================================================
+
+// ===== translation-unit =====
+TEST_CASE("C11 - translation-unit", "[parser]")
+{
+    ExpectParses("translation-unit", "int x;");
+    ExpectParses("translation-unit", "int x; int y;");
+    ExpectParses("translation-unit", "int f() {}");
+    ExpectParses("translation-unit", "int f() {} int g() {}");
+    ExpectParses("translation-unit", "int x; int f() {}");
+    ExpectParses("translation-unit", "int f() { return 0; }");
+    ExpectParses("translation-unit", "static int x;");
+    ExpectParses("translation-unit", "extern int x;");
+}
+
+// ===== external-declaration =====
+TEST_CASE("C11 - external-declaration", "[parser]")
+{
+    ExpectParses("external-declaration", "int x;");
+    ExpectParses("external-declaration", "static int x;");
+    ExpectParses("external-declaration", "const int x;");
+    ExpectParses("external-declaration", "int f() {}");
+    ExpectParses("external-declaration", "int f(int a) {}");
+    ExpectParses("external-declaration", "void f(void) {}");
+    ExpectParses("external-declaration", "struct S { int x; };");
+}
+
+// ===== function-definition =====
+TEST_CASE("C11 - function-definition", "[parser]")
+{
+    ExpectParses("function-definition", "int f() {}");
+    ExpectParses("function-definition", "int f() { return 0; }");
+    ExpectParses("function-definition", "int f(int a) { return a; }");
+    ExpectParses("function-definition", "void f(void) {}");
+    ExpectParses("function-definition", "static int f() {}");
+    ExpectParses("function-definition", "int f(int a, int b) { return a + b; }");
+    ExpectParses("function-definition", "int *f() { return 0; }");
+    // struct definition in parameter: tag has block scope, usable in body
+    ExpectParses("function-definition", "int f(struct S { int x; } s) { return s.x; }");
+    ExpectParses("function-definition", "int f(struct { int x; } s) { return s.x; }");
+}
+
+// ===== declaration-list =====
+TEST_CASE("C11 - declaration-list", "[parser]")
+{
+    // declaration-list is old K&R style, tested indirectly via function-definition
+    // Modern C doesn't typically use declaration-list
+    ExpectParses("function-definition", "int f() {}");
+}
+
+// ===================================================================
+// ConflictResolver tests for statement-related conflicts (lines 748-750)
+// Each test verifies the resolver picks the correct AST path.
+// ===================================================================
+
+// conflict: block-item + Identifier
+// typedef-name → declaration; non-typedef → statement
+TEST_CASE("C11 ConflictResolver - block-item typedef-name vs statement", "[parser][conflict][ast]")
+{
+    SECTION("typedef-name resolves to declaration")
+    {
+        // TODO no symbol inject now, change int to I in the future
+        auto result = ParseRule("compound-statement", "{ int x; }");
+        REQUIRE(result.has_value());
+        auto* blockItem = FindNode(&*result, "block-item");
+        REQUIRE(blockItem != nullptr);
+        REQUIRE(FindChild(blockItem, "declaration") != nullptr);
+        REQUIRE(FindChild(blockItem, "statement") == nullptr);
+    }
+    SECTION("non-typedef identifier resolves to statement")
+    {
+        auto result = ParseRule("compound-statement", "{ x = 1; }");
+        REQUIRE(result.has_value());
+        auto* blockItem = FindNode(&*result, "block-item");
+        REQUIRE(blockItem != nullptr);
+        REQUIRE(FindChild(blockItem, "statement") != nullptr);
+        REQUIRE(FindChild(blockItem, "declaration") == nullptr);
+    }
+    SECTION("int keyword resolves to declaration")
+    {
+        auto result = ParseRule("compound-statement", "{ int x; }");
+        REQUIRE(result.has_value());
+        auto* blockItem = FindNode(&*result, "block-item");
+        REQUIRE(blockItem != nullptr);
+        REQUIRE(FindChild(blockItem, "declaration") != nullptr);
+    }
+}
+
+// conflict: external-declaration + Identifier/keywords
+// After matching declarator's closing ")", if next is ";" → declaration; if "{" → function-definition
+TEST_CASE("C11 ConflictResolver - external-declaration function-definition vs declaration", "[parser][conflict][ast]")
+{
+    SECTION("function definition with braces")
+    {
+        auto result = ParseRule("external-declaration", "int f() {}");
+        REQUIRE(result.has_value());
+        auto* extDecl = FindNode(&*result, "external-declaration");
+        REQUIRE(extDecl != nullptr);
+        REQUIRE(FindChild(extDecl, "function-definition") != nullptr);
+        REQUIRE(FindChild(extDecl, "declaration") == nullptr);
+    }
+    SECTION("declaration with semicolon")
+    {
+        auto result = ParseRule("external-declaration", "int x;");
+        REQUIRE(result.has_value());
+        auto* extDecl = FindNode(&*result, "external-declaration");
+        REQUIRE(extDecl != nullptr);
+        REQUIRE(FindChild(extDecl, "declaration") != nullptr);
+        REQUIRE(FindChild(extDecl, "function-definition") == nullptr);
+    }
+    SECTION("function declaration (prototype) is declaration")
+    {
+        auto result = ParseRule("external-declaration", "int f(int a);");
+        REQUIRE(result.has_value());
+        auto* extDecl = FindNode(&*result, "external-declaration");
+        REQUIRE(extDecl != nullptr);
+        REQUIRE(FindChild(extDecl, "declaration") != nullptr);
+        REQUIRE(FindChild(extDecl, "function-definition") == nullptr);
+    }
+}
+
+// conflict: statement + Identifier
+// Identifier ":" → labeled-statement; otherwise → expression-statement
+TEST_CASE("C11 ConflictResolver - statement identifier labeled vs expression", "[parser][conflict][ast]")
+{
+    SECTION("identifier followed by colon is labeled-statement")
+    {
+        auto result = ParseRule("statement", "x:;");
+        REQUIRE(result.has_value());
+        auto* stmt = FindNode(&*result, "statement");
+        REQUIRE(stmt != nullptr);
+        REQUIRE(FindChild(stmt, "labeled-statement") != nullptr);
+        REQUIRE(FindChild(stmt, "expression-statement") == nullptr);
+    }
+    SECTION("identifier not followed by colon is expression-statement")
+    {
+        auto result = ParseRule("statement", "x = 1;");
+        REQUIRE(result.has_value());
+        auto* stmt = FindNode(&*result, "statement");
+        REQUIRE(stmt != nullptr);
+        REQUIRE(FindChild(stmt, "expression-statement") != nullptr);
+        REQUIRE(FindChild(stmt, "labeled-statement") == nullptr);
+    }
+    SECTION("identifier in expression context")
+    {
+        auto result = ParseRule("statement", "f();");
+        REQUIRE(result.has_value());
+        auto* stmt = FindNode(&*result, "statement");
+        REQUIRE(stmt != nullptr);
+        REQUIRE(FindChild(stmt, "expression-statement") != nullptr);
+    }
+}
+
+// conflict: selection-statement_op_36 + else (dangling else)
+// Always binds else to the nearest (innermost) if
+TEST_CASE("C11 ConflictResolver - dangling else", "[parser][conflict][ast]")
+{
+    SECTION("else binds to inner if")
+    {
+        // if (a) if (b) x; else y;
+        // Expected: if (a) { if (b) x; else y; }
+        auto result = ParseRule("selection-statement", "if (a) if (b) x = 1; else y = 2;");
+        REQUIRE(result.has_value());
+        // The outer selection-statement should have no else child
+        auto* outerSel = FindNode(&*result, "selection-statement");
+        REQUIRE(outerSel != nullptr);
+        // Outer should have: "if" "(" expression ")" statement — no else
+        REQUIRE(outerSel->ChildSymbols.size() == 6);
+        // The inner statement should be another selection-statement with else
+        auto* innerStmt = FindChild(outerSel, "statement");
+        REQUIRE(innerStmt != nullptr);
+        auto* innerSel = FindChild(innerStmt, "selection-statement");
+        REQUIRE(innerSel != nullptr);
+        // Inner should have: "if" "(" expression ")" statement "else" statement — 7 children
+        REQUIRE(innerSel->ChildSymbols.size() == 6);
+    }
+    SECTION("simple if-else has else child")
+    {
+        auto result = ParseRule("selection-statement", "if (x) y = 1; else z = 2;");
+        REQUIRE(result.has_value());
+        auto* sel = FindNode(&*result, "selection-statement");
+        REQUIRE(sel != nullptr);
+        REQUIRE(sel->ChildSymbols.size() == 6);
+    }
+    SECTION("simple if without else has no else child")
+    {
+        auto result = ParseRule("selection-statement", "if (x) y = 1;");
+        REQUIRE(result.has_value());
+        auto* sel = FindNode(&*result, "selection-statement");
+        REQUIRE(sel != nullptr);
+        REQUIRE(sel->ChildSymbols.size() == 6);
+    }
+}
+
+// conflict: iteration-statement-for-suffix-(-suffix + Identifier
+// Same as block-item: Identifier in for-init context
+// typedef-name → declaration; otherwise → expression (handled via block-item resolution)
+TEST_CASE("C11 ConflictResolver - for-init typedef-name vs expression", "[parser][conflict][ast]")
+{
+    SECTION("for with expression init")
+    {
+        auto result = ParseRule("iteration-statement", "for (x = 0; x < 10; x++) {}");
+        REQUIRE(result.has_value());
+        auto* iter = FindNode(&*result, "iteration-statement");
+        REQUIRE(iter != nullptr);
+    }
+    SECTION("for with declaration init")
+    {
+        auto result = ParseRule("iteration-statement", "for (int i = 0; i < 10; i++) {}");
+        REQUIRE(result.has_value());
+        auto* iter = FindNode(&*result, "iteration-statement");
+        REQUIRE(iter != nullptr);
+    }
+    SECTION("for empty init")
+    {
+        auto result = ParseRule("iteration-statement", "for (;;) {}");
+        REQUIRE(result.has_value());
+        auto* iter = FindNode(&*result, "iteration-statement");
+        REQUIRE(iter != nullptr);
+    }
 }

@@ -80,3 +80,37 @@ Tabby 的 UI 比较好看。但是 emacs -nw 有个界面刷新的问题：类�
 *** <2026-08-27 Thu>
 **** 决定不实现_Generic 特性
 **** ExpressionParser 实现函数调用解析
+*** <2026-10-10 Sat>
+**** 去掉“在 LLParser 里强制要求 token type 定义 EOF”
+为什么有这个需求呢？因为 ExpressionParser 要调用 LLParser::Parse 来解析 type-name，但这种半道中途来解析完不会有 EOF 来结束，所以就需要 LLParser 可以在任意 nonterminal 结束。
+**** 完成 ExpressionParser，通过对应测试
+遇到个递归函数中无限生成匿名类型的编译时报错，经简化后的代码如下：
+auto ExpressionParser::Parse(auto parameters, auto externalParseCallback)
+{
+    auto parseWrapper = [&externalParseCallback]()
+    {
+        log(...);
+        externalParseCallback();
+    };
+    // some condition to recursive
+    FuncA(newParameters, parseWrapper);
+}
+只要我定义这个 parseWrapper 然后构建，编译器就会报：Compiler is out of heap space，但是实际一看编译器进程最高也就占 400MB。甚至也设成 64 位编译器，还是报这个错。
+开始我以为是传给 externalParseCallback 的外部函数里也调用了 ExpressionParser::Parse（LLParser::Parse 调用的————这个就是所谓的 externalParseCallback），也算是递归编译了：ExpressionParser::Parse->LLParser::Parse-编译路径->ExpressionParser::Parse————我猜想是不是传的这个 externalParseCallback 有问题，比如每次实例化 ExpressionParser::Parse 方法的时候，都会实例化一个新的 body，那这样递归下去确实爆了。但 AI 跟我说：同类型参数实例化后得到的是一个 body，而且经过我简化问题后（把传给 externalParseCallback 的函数体注释掉 body 后，也就是说没有上面说的编译链了），编译依然报同样的错。
+AI 说是你每次传新的 externalParseCallback，我想了下：是不是 ExpressionParser::Parse 自己有递归的地方。一搜果然有，解析函数调用参数的时候调用了 ExpressionParser::Parse(parseWrapper)。可想而知，ExpressionParser::Parse 里又给 parseWrapper wrap 了一层，编译无限递归了下去。
+后来我有句感叹：模板会让你认清程序里的类型设计，它会在编译时就报错告诉你。
+
+decltype()和 invoke_result_t 的区别
+涉及到模板求值的细节
+auto Or(auto resultProcess, auto parser, auto... parsers)
+{
+    return [=]<typename Stream>(Stream& stream) -> ParserResult<decltype(resultProcess(parser(stream).value()))>
+    {
+        ...
+ParserCombinator 写了如上的组合子，其中的 lambda 原来的返回类型不是像这样写的，外层的 ParserResult 就不重复写了，写里面：
+ParserResult<invoke_result_t<decltype(resultProcess), invoke_result_t<decltype(parser), Stream&>::value_type>> // 大概是这样，具体无法还原了，当时死活编译不过去
+上面的 decltype(exp)的求值是表达式级的，它等括号里的表达式编译完了，才去算类型。那第二种有什么不同呢？是第二个 invoke_result_t 前少了 typename 来表示 value_type 是个类型，而不是 static 变量。————这是刚 Gemini 告诉我的，试了之后发现可以编译过去。与我之前以为的 invoke_result_t 传的第一个参数的 operator ()是个模板函数，依赖外部的类型，比如 selectLeft，而 invoke_result_t 要求必须是全特化类型，所以 invoke_result_t 这块老过不了————这些都是我之前结合 AI 说的不清晰的联想，现在回过头看，是不对的，当时杂糅了各种错误，所以判断不清。
+*** <2026-10-19 Mon>
+**** 完成 statement 语法的开发和测试
+这部分就是在之前的框架（LLParser+ConflictResolver+ExternalParser）里，将 statement 的内容填进去，主要是 abnf 里填下语法和 ConflictResolver 里解决一些语法冲突。好在框架比较健壮，解决完冲突试了一个
+void f(struct S { int num; } s)这样的语法，居然测试通过了。本来以为这种是非法的语法，因为在 VS 里划红线报错，但后来跑去问 Gemini 是不是合法语法，它说 C 语言里是，C++里不是。后来发现这种函数局部的 struct 类型，在当前文件里不能创建变量（如 struct S x;）去调用————这个可以理解，但居然跨文件可以：只要两个类型的 field 一致（Compatiable type）就可以调用。奇葩的语法。

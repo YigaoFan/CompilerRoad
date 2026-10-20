@@ -264,19 +264,20 @@ public:
         while (stream.MoveNext())
         {
             auto t = stream.Current();
-            if (t.Type == TokType::Keyword_Static)
+            switch (t.Type)
             {
-                return FindOptionIndex(options, "static");
-            }
-            if (t.Type == TokType::Punctuator_RightBracket)
-            {
-                return FindOptionIndex(options, "direct-declarator_op_12");
-            }
-            if (t.Type == TokType::Punctuator_Comma or t.Type == TokType::Punctuator_Semicolon or t.Type == TokType::Punctuator_RightParen)
-            {
+            case TokType::Keyword_Static:
+				return FindOptionIndex(options, "static");
+			case TokType::Punctuator_RightBracket:
+				return FindOptionIndex(options, "direct-declarator_op_12");
+			case TokType::Punctuator_Comma:
+            case TokType::Punctuator_Semicolon:
+			case TokType::Punctuator_RightParen:
                 return unexpected(ParseFailResult{ .Message = "unexpected token when resolve direct-declarator' bracket suffix" });
+            default:
+                // else: another type-qualifier, continue loop
+                break;
             }
-            // else: another type-qualifier, continue loop
         }
         return unexpected(ParseFailResult{ .Message = "input stream is empty when resolve direct-declarator' bracket suffix" });
     }
@@ -583,6 +584,98 @@ public:
         // Not a typedef-name, parse as constant-expression
         return FindOptionIndex(options, "constant-expression");
     }
+
+    // conflict: block-item + Identifier
+    // options: {declaration} vs {statement}
+	// If the identifier is a typedef-name, it's a declaration (type specifier). Otherwise, it's a statement (non-typedef Identifier).
+    template <template <typename> class ActualStream, typename Tok>
+        requires Stream<ActualStream, Tok>
+    auto ResolveBlockItemIdentifier(stack<SyntaxTreeNode<Tok, Context>*>& workingNodes, vector<SimpleRightSide> const& options, ActualStream<Tok>& stream) const -> expected<int, ParseFailResult>
+    {
+		auto t = stream.Current();
+		auto context = FindContextFromWorkingNodes(workingNodes);
+		if (IsTypedefName(context, t.Value))
+		{
+			return FindOptionIndex(options, "declaration");
+		}
+		return FindOptionIndex(options, "statement");
+    }
+
+    // conflict: external-declaration + Identifier
+    // options: {function-definition} vs {declaration}
+	// After the paired right parenthesis of a function declarator, if the next token is a semicolon, it's a declaration (typedef-name or variable declaration).
+    template <template <typename> class ActualStream, typename Tok>
+        requires Stream<ActualStream, Tok>
+    auto ResolveExternalDeclarationIdentifier(stack<SyntaxTreeNode<Tok, Context>*>&, vector<SimpleRightSide> const& options, ActualStream<Tok>& stream) const -> expected<int, ParseFailResult>
+    {
+        // attention: not handle the [declaration-list] in function-definition which is very old C style
+		auto parenDepth = 0;
+		auto activated = false;
+        while (stream.MoveNext())
+        {
+            auto t = stream.Current();
+            switch (t.Type)
+            {
+			case TokType::Punctuator_LeftParen:
+				++parenDepth;
+				break;
+			case TokType::Punctuator_RightParen:
+				--parenDepth;
+                if (parenDepth == 0)
+                {
+                    activated = true;
+                }
+                break;
+            case TokType::Punctuator_Semicolon:
+                if (activated)
+                {
+                    return FindOptionIndex(options, "declaration");
+                }
+                else if (parenDepth == 0) // like 'int x'
+                {
+                    return FindOptionIndex(options, "declaration");
+				}
+                break;
+			case TokType::Punctuator_LeftBrace:
+                if (activated)
+                {
+                    return FindOptionIndex(options, "function-definition");
+                }
+				break;
+            default:
+                break;            
+            }
+		}
+		return unexpected(ParseFailResult{ .Message = "input stream is empty when resolve external-declaration + Identifier conflict" });
+    }
+
+	// conflict: statement + Identifier
+    // options: {labeled-statement} vs {expression-statement}
+	// If next token is ":", it's a labeled statement (e.g., label:), else it's an expression statement (e.g., x = 5;).
+    template <template <typename> class ActualStream, typename Tok>
+        requires Stream<ActualStream, Tok>
+    auto ResolveStatementIdentifier(stack<SyntaxTreeNode<Tok, Context>*>&, vector<SimpleRightSide> const& options, ActualStream<Tok>& stream) const -> expected<int, ParseFailResult>
+    {
+        if (stream.MoveNext())
+        {
+            if (stream.Current().Type == TokType::Punctuator_Colon)
+            {
+                return FindOptionIndex(options, "labeled-statement");
+			}
+			return FindOptionIndex(options, "expression-statement");
+		}
+		return unexpected(ParseFailResult{ .Message = "input stream is empty when resolve statement + Identifier conflict" });
+    }
+
+    // conflict: selection-statement_op_36 + Else
+    // options: {else, statement} vs {}
+    // See else branch, always select the option with else, and the else will be matched to the nearest if
+    template <template <typename> class ActualStream, typename Tok>
+        requires Stream<ActualStream, Tok>
+    auto ResolveDanglingElse(stack<SyntaxTreeNode<Tok, Context>*>&, vector<SimpleRightSide> const& options, ActualStream<Tok>& stream) const -> expected<int, ParseFailResult>
+    {
+        return FindOptionIndex(options, "else");
+    }
 };
 
 template <template <typename> class Stream, typename Token>
@@ -625,6 +718,40 @@ map<pair<String, TokType>, C11ConflictResolver::ResolveFunc<Stream, Token>> cons
     { { "struct-declarator",                                    TokType::Punctuator_Star },       &C11ConflictResolver::ResolveStructDeclarator<Stream, Token> },
     { { "struct-declarator",                                    TokType::Identifier },            &C11ConflictResolver::ResolveStructDeclarator<Stream, Token> },
     { { "alignment-specifier-_Alignas-suffix-(-suffix",         TokType::Identifier },            &C11ConflictResolver::ResolveAlignmentSpecifierTypeNameAndConstantExpression<Stream, Token> },
+    { { "block-item",                                           TokType::Identifier },            &C11ConflictResolver::ResolveBlockItemIdentifier<Stream, Token> },
+    // below token type from head of declaration-specifiers rule
+    { { "external-declaration",                                 TokType::Identifier },            &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword__Alignas },      &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword__Noreturn },     &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Inline },        &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword__Atomic },       &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Volatile },      &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Restrict },      &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Const },         &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Struct },        &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Union },         &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Enum },          &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword__Bool },         &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword__Complex },      &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Signed },        &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Unsigned },      &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Int   },         &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Long },          &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Float },         &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Double },        &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Void },          &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Char },          &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Short },         &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Register },      &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Auto },          &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword__Thread_Local }, &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Static },        &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Extern },        &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+    { { "external-declaration",                                 TokType::Keyword_Typedef },       &C11ConflictResolver::ResolveExternalDeclarationIdentifier<Stream, Token> },
+
+    { { "iteration-statement-for-suffix-(-suffix",              TokType::Identifier },            &C11ConflictResolver::ResolveBlockItemIdentifier<Stream, Token> },
+    { { "selection-statement_op_36",                            TokType::Keyword_Else },          &C11ConflictResolver::ResolveDanglingElse<Stream, Token> },
+    { { "statement",                                            TokType::Identifier },            &C11ConflictResolver::ResolveStatementIdentifier<Stream, Token> },
 };
 
 export

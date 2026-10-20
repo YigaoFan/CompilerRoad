@@ -77,7 +77,7 @@ export namespace ParserCombinator
 
 	auto Concat(auto resultProcess, auto parser0, auto parser1)
 	{
-		return [=]<typename Stream>(Stream& stream) -> ParserResult<decltype(resultProcess(move(parser0(stream).value()), move(parser1(stream).value())))>
+		return [=]<typename Stream>(Stream& stream) -> ParserResult<invoke_result_t<decltype(resultProcess), typename invoke_result_t<decltype(parser0), Stream&>::value_type, typename invoke_result_t<decltype(parser1), Stream&>::value_type>>
 		{
 			auto r0 = parser0(stream);
 			if (not r0.has_value())
@@ -96,7 +96,7 @@ export namespace ParserCombinator
 	auto Or(auto resultProcess, auto parser, auto... parsers)
 	{
 		// call back the resultProcess to get the return type TODO check
-		return [=]<typename Stream>(Stream& stream) -> ParserResult<decltype(resultProcess(parser(stream).value()))>
+		return[=]<typename Stream>(Stream & stream) -> ParserResult<invoke_result_t<decltype(resultProcess), typename invoke_result_t<decltype(parser), Stream&>::value_type>>
 		{
 			auto initPos = stream.CurrentPosition();
 			vector<decltype(parser(stream))> results;

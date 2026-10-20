@@ -119,7 +119,6 @@ parameter-declaration -> declaration-specifiers declarator | declaration-specifi
 identifier-list -> Identifier | identifier-list "," Identifier
 
 type-name -> specifier-qualifier-list [abstract-declarator]
-; support multiple lines for alternativess
 abstract-declarator -> pointer | pointer direct-abstract-declarator | direct-abstract-declarator
 direct-abstract-declarator -> "(" abstract-declarator ")"
   | "[" [type-qualifier-list] [assignment-expression] "]"
@@ -143,4 +142,22 @@ designator -> "[" constant-expression "]" | "." Identifier
 
 static_assert-declaration -> "_Static_assert" "(" constant-expression "," StringLiteral ")" ";"
 
-;expression constant-expression  assignment-expression
+statement -> labeled-statement | compound-statement | expression-statement | selection-statement | iteration-statement | jump-statement
+labeled-statement -> Identifier ":" statement | "case" constant-expression ":" statement | "default" ":" statement
+compound-statement -> "{" [block-item-list] "}"
+block-item-list -> block-item | block-item-list block-item
+block-item -> declaration | statement
+expression-statement -> [expression] ";"
+selection-statement -> "if" "(" expression ")" statement ["else" statement] | "switch" "(" expression ")" statement
+iteration-statement -> "while" "(" expression ")" statement 
+  | "do" statement "while" "(" expression ")" ";" 
+  | "for" "(" [expression] ";" [expression] ";" [expression] ")" statement
+  | "for" "(" declaration [expression] ";" [expression] ")" statement
+jump-statement -> "goto" Identifier ";" | "continue" ";" | "break" ";" | "return" [expression] ";"
+
+translation-unit -> external-declaration | translation-unit external-declaration
+external-declaration -> function-definition | declaration
+function-definition -> declaration-specifiers declarator [declaration-list] compound-statement
+declaration-list -> declaration | declaration-list declaration
+
+
