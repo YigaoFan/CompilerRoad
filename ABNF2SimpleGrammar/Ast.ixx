@@ -86,7 +86,7 @@ struct AstNode
 };
 
 template <typename T>
-auto GetAstOfChildAs(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, int i) -> shared_ptr<T>
+auto GetResultOfChildAs(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, int i) -> shared_ptr<T>
 {
     return dynamic_pointer_cast<T>(std::get<1>(node->Children[i]).Result);
 }
@@ -101,6 +101,20 @@ auto GetSyntaxNodeChild(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* nod
     return std::get<1>(node->Children[i]);
 }
 
+template <typename T>
+auto LoopCollectResult(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, int moveDeepIndex, size_t selectedRuleSize, int collectChildResultIndex) -> vector<shared_ptr<T>>
+{
+    vector<shared_ptr<T>> results;
+    for (auto baseNode = &node->GetChildAsNode(moveDeepIndex); 
+        baseNode->ChildSymbols.size() == selectedRuleSize;
+        baseNode = &baseNode->GetChildAsNode(moveDeepIndex))
+    {
+        results.push_back(GetResultOfChildAs<T>(baseNode, collectChildResultIndex));
+    }
+    return results;
+}
+
+struct Annotation;
 struct Grammar;
 struct Grammars;
 struct AllGrammars;
@@ -116,6 +130,7 @@ struct Production;
 struct IVisitor
 {
     // not support Visit Item and BasicItem now
+    virtual auto Visit(Annotation*) -> void = 0;
     virtual auto Visit(Grammar*) -> void = 0;
     virtual auto Visit(Grammars*) -> void = 0;
     virtual auto Visit(AllGrammars*) -> void = 0;
@@ -168,6 +183,10 @@ struct DefaultVisitor<void> : IVisitor
     {
     }
 
+    auto Visit(Annotation* object) -> void override
+    {
+	}
+
     auto Visit(Grammar*) -> void override
     {
     }
@@ -207,35 +226,6 @@ struct Item : public AstNode
     static auto Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, IVisitor* visitor) -> shared_ptr<Item>;
 };
 
-struct MoreItems : public AstNode
-{
-    vector<shared_ptr<Item>> Items;
-
-    static auto Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, IVisitor*) -> shared_ptr<MoreItems>
-    {
-        switch (node->ChildSymbols.size())
-        {
-        case 0:
-            return make_shared<MoreItems>(vector<shared_ptr<Item>>{});
-        case 2:
-        {
-            vector is{ GetAstOfChildAs<Item>(node, 0) };
-            is.append_range(GetAstOfChildAs<MoreItems>(node, 1)->Items);
-            return make_shared<MoreItems>(move(is));
-        }
-        default:
-            throw logic_error(format("not handled MoreItems Item symbols {}", node->ChildSymbols));
-        }
-    }
-
-    MoreItems(vector<shared_ptr<Item>> items) : Items(move(items))
-    { }
-
-    auto Visit(IVisitor* visitor) -> void override
-    {
-    }
-};
-
 struct Production : public AstNode
 {
     vector<shared_ptr<Item>> Items;
@@ -248,8 +238,8 @@ struct Production : public AstNode
             return ApplyVisitor(make_shared<Production>(vector<shared_ptr<Item>>{}), visitor);
         case 2:
         {
-            vector is{ GetAstOfChildAs<Item>(node, 0) };
-            is.append_range(GetAstOfChildAs<MoreItems>(node, 1)->Items);
+            vector is{ GetResultOfChildAs<Item>(node, 0) };
+            is.append_range(LoopCollectResult<Item>(node, 1, 2, 0));
             return ApplyVisitor(make_shared<Production>(move(is)), visitor);
         }
         default:
@@ -266,36 +256,7 @@ struct Production : public AstNode
     }
 };
 
-struct Productions;
-struct MoreProductions : public AstNode
-{
-    /// <summary>
-    /// Attention: it's possible nullptr
-    /// </summary>
-    shared_ptr<Productions> Productions;
-
-    static auto Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, IVisitor*) -> shared_ptr<MoreProductions>
-    {
-        switch (node->ChildSymbols.size())
-        {
-        case 0:
-            return make_shared<MoreProductions>(nullptr);
-        case 2:
-            return make_shared<MoreProductions>(GetAstOfChildAs<::Productions>(node, 1)); // handle here to support | [end]
-        default:
-            throw logic_error(format("not handled MoreProductions Item symbols {}", node->ChildSymbols));
-        }
-    }
-
-    MoreProductions(shared_ptr<::Productions> productions) : Productions(move(productions))
-    {
-    }
-
-    auto Visit(IVisitor* visitor) -> void override
-    {
-    }
-};
-
+// TODO remove?
 struct Productions : public AstNode
 {
     vector<shared_ptr<Production>> Items;
@@ -308,10 +269,11 @@ struct Productions : public AstNode
             return ApplyVisitor(make_shared<Productions>(vector{ make_shared<Production>(Production({})) }), visitor);
         case 2:
         {
-            vector ps{ GetAstOfChildAs<Production>(node, 0) };
-            if (auto mps = GetAstOfChildAs<MoreProductions>(node, 1)->Productions; mps != nullptr)
+            vector ps{ GetResultOfChildAs<Production>(node, 0) };
+            if (auto& moreProductions = node->GetChildAsNode(1); moreProductions.ChildSymbols.size() == 2)
             {
-                ps.append_range(mps->Items);
+                auto innerProductions = GetResultOfChildAs<Productions>(&moreProductions, 1);
+				ps.append_range(innerProductions->Items);
             }
             return ApplyVisitor(make_shared<Productions>(move(ps)), visitor);
         }
@@ -430,13 +392,13 @@ auto Item::Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, 
     switch (node->ChildSymbols.size())
     {
     case 1:
-        return GetAstOfChildAs<BasicItem>(node, 0); // not invoke now
+        return GetResultOfChildAs<BasicItem>(node, 0); // not invoke now
     case 2:
-        return ApplyVisitor(make_shared<Duplicate>(0, std::numeric_limits<unsigned>::max(), GetAstOfChildAs<BasicItem>(node, 1)), visitor);
+        return ApplyVisitor(make_shared<Duplicate>(0, std::numeric_limits<unsigned>::max(), GetResultOfChildAs<BasicItem>(node, 1)), visitor);
     case 3:
-        return ApplyVisitor(make_shared<Duplicate>(std::stoul(GetTokChild(node, 0).Value), std::numeric_limits<unsigned>::max(), GetAstOfChildAs<BasicItem>(node, 2)), visitor);
+        return ApplyVisitor(make_shared<Duplicate>(std::stoul(GetTokChild(node, 0).Value), std::numeric_limits<unsigned>::max(), GetResultOfChildAs<BasicItem>(node, 2)), visitor);
     case 4:
-        return ApplyVisitor(make_shared<Duplicate>(std::stoul(GetTokChild(node, 0).Value), std::stoul(GetTokChild(node, 2).Value), GetAstOfChildAs<BasicItem>(node, 3)), visitor);
+        return ApplyVisitor(make_shared<Duplicate>(std::stoul(GetTokChild(node, 0).Value), std::stoul(GetTokChild(node, 2).Value), GetResultOfChildAs<BasicItem>(node, 3)), visitor);
     default:
         throw logic_error(format("not handled BasicItem Item symbols {}", node->ChildSymbols));
     }
@@ -480,67 +442,73 @@ auto BasicItem::Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* n
         }
         else if (node->ChildSymbols.front() == "[")
         {
-            return ApplyVisitor(make_shared<Optional>(GetAstOfChildAs<Productions>(node, 1)), visitor);
+            return ApplyVisitor(make_shared<Optional>(GetResultOfChildAs<Productions>(node, 1)), visitor);
         }
         else if (node->ChildSymbols.front() == "(")
         {
-            return ApplyVisitor(make_shared<Combine>(GetAstOfChildAs<Productions>(node, 1)), visitor);
+            return ApplyVisitor(make_shared<Combine>(GetResultOfChildAs<Productions>(node, 1)), visitor);
         }
         break;
     }
     throw logic_error(format("not handled BasicItem child symbols {}", node->ChildSymbols));
 }
 
+struct Annotation : public AstNode
+{
+    String const Type;
+    String const Value;
+
+    static auto Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, IVisitor* visitor) -> shared_ptr<Annotation>
+    {
+        return ApplyVisitor(make_shared<Annotation>(String(GetTokChild(node, 1).Value), String(GetTokChild(node, 2).Value)), visitor);
+    }
+
+    Annotation(String type, String value) : Type(move(type)), Value(move(value))
+    {
+    }
+
+    auto Visit(IVisitor* visitor) -> void override
+    {
+		visitor->Visit(this);
+    }
+};
+
 struct Grammar : public AstNode
 {
+	vector<shared_ptr<Annotation>> Annotations;
     String Left;
     shared_ptr<Productions> Productions;
     bool IsStarArrow;
 
     static auto Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, IVisitor* visitor) -> shared_ptr<Grammar>
     {
-        auto& arrowSubtree = GetSyntaxNodeChild(node, 1);
+		vector<shared_ptr<Annotation>> annotations;
+        if (node->GetChildAsNode(0).ChildSymbols.size() == 3)
+        {
+			// grammar[0] -> optional-annotations
+            auto& optAnnotations = node->GetChildAsNode(0);
+            //     optional-annotations[0] -> annotation
+			annotations.push_back(GetResultOfChildAs<Annotation>(&optAnnotations, 0));
+			// base node is annotations node, loop to get all annotation(s)
+            //     optional-annotations[1] -> annotations
+			annotations.append_range(LoopCollectResult<Annotation>(&optAnnotations, 1, 2, 0));
+        }
+        auto& arrowSubtree = GetSyntaxNodeChild(node, 2);
         auto isStarArrow = GetTokChild(&arrowSubtree, 0).Type == TokType::StarArrow;
-        return ApplyVisitor(make_shared<Grammar>(String(GetTokChild(node, 0).Value), GetAstOfChildAs<::Productions>(node, 2), isStarArrow), visitor);
+        return ApplyVisitor(make_shared<Grammar>(annotations, String(GetTokChild(node, 1).Value), GetResultOfChildAs<::Productions>(node, 3), isStarArrow), visitor);
     }
 
-    Grammar(String left, shared_ptr<::Productions> productions, bool isStarArrow = false) : Left(move(left)), Productions(move(productions)), IsStarArrow(isStarArrow)
+    Grammar(String left, shared_ptr<::Productions> productions, bool isStarArrow = false)
+        : Grammar({}, move(left), move(productions), isStarArrow)
+    { }
+
+    Grammar(vector<shared_ptr<Annotation>> annotations, String left, shared_ptr<::Productions> productions, bool isStarArrow = false)
+        : Annotations(move(annotations)), Left(move(left)), Productions(move(productions)), IsStarArrow(isStarArrow)
     { }
 
     auto Visit(IVisitor* visitor) -> void override
     {
         visitor->Visit(this);
-    }
-};
-
-struct MoreGrammars : public AstNode
-{
-    vector<shared_ptr<Grammar>> Items;
-
-    static auto Construct(SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node, IVisitor*) -> shared_ptr<MoreGrammars>
-    {
-        switch (node->ChildSymbols.size())
-        {
-        case 0:
-        case 1:
-            return make_shared<MoreGrammars>(vector<shared_ptr<Grammar>>{});
-        case 3:
-        {
-            vector gs{ GetAstOfChildAs<Grammar>(node, 1) };
-            gs.append_range(GetAstOfChildAs<MoreGrammars>(node, 2)->Items);
-            return make_shared<MoreGrammars>(move(gs));
-        }
-        default:
-            throw std::logic_error(format("MoreGrammars not support {}", node->ChildSymbols.size()));
-        }
-    }
-
-    MoreGrammars(vector<shared_ptr<Grammar>> grammars) : Items(move(grammars))
-    {
-    }
-
-    auto Visit(IVisitor* visitor) -> void override
-    {
     }
 };
 
@@ -556,8 +524,8 @@ struct Grammars : public AstNode
             return ApplyVisitor(make_shared<Grammars>(vector<shared_ptr<Grammar>>{}), visitor);
         case 3:
         {
-            vector gs{ GetAstOfChildAs<Grammar>(node, 1) };
-            gs.append_range(GetAstOfChildAs<MoreGrammars>(node, 2)->Items);
+            vector gs{ GetResultOfChildAs<Grammar>(node, 1) };
+            gs.append_range(LoopCollectResult<Grammar>(node, 2, 3, 1));
             return ApplyVisitor(make_shared<Grammars>(move(gs)), visitor);
         }
         default:
@@ -572,6 +540,18 @@ struct Grammars : public AstNode
     {
         visitor->Visit(this);
     }
+
+    auto HaveGrammarOf(String const& left) const -> bool
+    {
+        for (auto const& g : Items)
+        {
+            if (g->Left == left)
+            {
+                return true;
+            }
+        }
+        return false;
+	}
 };
 
 struct AllGrammars : public AstNode
@@ -588,8 +568,8 @@ struct AllGrammars : public AstNode
         {
             auto& startInfoNode = GetSyntaxNodeChild(node, 3);
             auto const& startSymbolName = GetTokChild(&startInfoNode, 2).Value;
-            return ApplyVisitor(make_shared<AllGrammars>(GetAstOfChildAs<Grammars>(node, 1), String{ startSymbolName },
-                GetAstOfChildAs<Grammars>(node, 4)), visitor);
+            return ApplyVisitor(make_shared<AllGrammars>(GetResultOfChildAs<Grammars>(node, 1), String{ startSymbolName },
+                GetResultOfChildAs<Grammars>(node, 4)), visitor);
         }
         default:
             throw std::logic_error(format("Grammars not support {}", node->ChildSymbols.size()));
@@ -609,8 +589,8 @@ struct AllGrammars : public AstNode
 
 struct AstFactory
 {
-    using TypeConfigs = List<Pair<"all-grammars", AllGrammars>, Pair<"grammars", Grammars>, Pair<"more-grammars", MoreGrammars>, Pair<"grammar", Grammar>, Pair<"productions", Productions>, Pair<"production", Production>, Pair<"more-productions", MoreProductions>,
-        Pair<"production", Production>, Pair<"more-items", MoreItems>, Pair<"item", Item>, Pair<"item_0", BasicItem>>;
+    using TypeConfigs = List<Pair<"all-grammars", AllGrammars>, Pair<"grammars", Grammars>, Pair<"grammar", Grammar>, Pair<"annotation", Annotation>, Pair<"productions", Productions>, Pair<"production", Production>,
+        Pair<"production", Production>, Pair<"item", Item>, Pair<"item_0", BasicItem>>;
 
     static auto Create(IVisitor* visitor, SyntaxTreeNode<Token<TokType>, shared_ptr<AstNode>>* node) -> void
     {
